@@ -92,7 +92,7 @@ dns() {
 
 - `redaction_check ФАЙЛ...` — ищет в файлах публичный IPv4, IPv6, заголовок приватного ключа, учётные данные в URL и в строках `Upstream`, строку `BasicAuth` с логином и паролем, присвоение секрета, e-mail. `REDACTION OK` (код 0), `REDACTION FAIL` (код 1), отсутствующий или пустой файл — код 2.
 - `owner_leak_check ФАЙЛ...` — нужны `VPS_IP` и `VPS_HOST` в окружении (экспортированные); печатает только числа вхождений. `OWNER LEAK OK` или код 1; без переменных — код 2.
-- `safety_lint ФАЙЛ...` — проверка блоков, уходящих на VPS. `SAFETY OK` (код 0) или `SAFETY FAIL` (код 1).
+- `safety_lint ФАЙЛ...` — проверка блоков, уходящих на VPS: команды, меняющие состояние, опасные варианты `curl`, команды, печатающие хостнейм (`hostname`, `hostnamectl`, `uname -a`, `uname -n`, `/etc/hostname`), полные дампы (`env`, `printenv`, `docker inspect`, `tinyproxy.conf` целиком); в файле с именем `vps_audit.sh` дополнительно любые исходящие сетевые команды (`curl`, `wget`, `nc`, `ping`, `dig`, `host`, `getent hosts`). `SAFETY OK` (код 0) или `SAFETY FAIL` (код 1).
 - `getrun_guard_test ФАЙЛ_probe_lib.sh` — проверка `getrun_guard`, `probe` и `dns` с заглушками `curl` и `getent`. `GUARD OK` или `GUARD FAIL: <случай>`.
 - `getrun_gate ОТЧЁТ ФАЙЛ...` — сверяет блоки с решением `getrun_tos` из отчёта. `GETRUN GATE OK` или `GETRUN GATE FAIL`.
 - `selftest` — проверяет сами проверки на фикстурах (нужен загруженный `rd.sh`). `SELFTEST OK` или `SELFTEST FAIL: <случай>`.
@@ -270,8 +270,16 @@ my @R = (
   [qr/${\ cmd('bash|sh|zsh|dash')}\s+-c(?![\w-])/, 'bash -c: динамическое выполнение'],
   [cmd('nohup|parallel|setsid|disown|coproc'), 'фоновый или параллельный запуск'],
   [qr/\bxargs\b[^;&|]*?\s(?:-[A-Za-z]*P|--max-procs)/, 'xargs -P'],
+  [cmd('hostname|hostnamectl'), 'команда печатает хостнейм'],
+  [qr/(?:${\ cmd('uname')})[^;&|]*?\s-(?:[A-Za-z]*[an][A-Za-z]*|-(?:all|nodename))(?![\w-])/, 'uname печатает хостнейм (-a, -n)'],
+  [qr{/etc/hostname(?![\w-])|/proc/sys/kernel/hostname}, 'чтение файла с хостнеймом'],
+  [cmd('env|printenv'), 'полный дамп окружения (env, printenv)'],
+  [qr/$dck[^;&|]*?\sinspect(?![\w-])/, 'docker inspect печатает окружение контейнера'],
 );
 my $CURL = cmd('curl');
+my $DUMP = cmd('cat|less|more|head|tail|nl|tac|bat');
+my $NETC = cmd('curl|wget|nc|ncat|telnet|ping|ping6|dig|nslookup|host|traceroute|mtr');
+my $NETG = qr/${\ cmd('getent')}\s+a?hosts/;
 my @C = (
   [qr/\s(?:-X|--request)(?![\w-])/, 'curl: не простой GET (-X)'],
   [qr/\s(?:-[dFT]|--(?:data[\w-]*|form[\w-]*|upload-file|json))(?![\w-])/, 'curl: отправка тела (-d, -F, -T, --data*)'],
@@ -302,6 +310,10 @@ for my $f (@ARGV) {
     $r =~ s{\d*>>?\s*/dev/(?:null|stderr|stdout)(?![\w/])}{}g;
     $add->($ln, 'перенаправление вывода в файл') if $r =~ />/;
     $add->($ln, 'фоновый запуск (одиночный &)') if $k =~ /(?<![&>|<])&(?![&>])/;
+    $add->($ln, 'вывод tinyproxy.conf целиком (cat, less, head, tail без фильтра)') if $r =~ /(?:${DUMP})[^;&|]*tinyproxy\.conf[^;&|]*(?:\z|;|&&|\|\|)/;
+    if ($base eq 'vps_audit.sh' && ($k =~ $NETC || $k =~ $NETG || $k =~ m{/dev/(?:tcp|udp)/})) {
+      $add->($ln, 'vps_audit.sh: исходящая сетевая команда запрещена (curl, wget, ping, dig, host, getent hosts, /dev/tcp)');
+    }
     if ($k =~ /$CURL(.*)/s) {
       my $kr = $1; my $rr = ($raw =~ /\bcurl\b(.*)/s) ? $1 : '';
       s/(?:\d*>\s*>?\(|[|;]|&&).*//s for ($kr, $rr);
@@ -506,6 +518,27 @@ selftest() (
   lint_ok 'apt-cache policy docker-compose-v2'
   lint_ok 'dpkg -l'
   lint_ok 'systemctl is-enabled docker'
+  lint_bad 'uname -a'
+  lint_bad 'uname -n'
+  lint_bad 'hostname'
+  lint_bad 'hostnamectl'
+  lint_bad 'cat /etc/hostname'
+  lint_bad 'docker inspect x'
+  lint_bad 'printenv'
+  lint_bad 'env'
+  lint_bad 'cat /etc/tinyproxy/tinyproxy.conf'
+  lint_bad 'sudo cat /etc/tinyproxy/tinyproxy.conf 2>&1'
+  lint_ok 'uname -r'
+  lint_ok "grep -iE '^(Port|Listen)' /etc/tinyproxy/tinyproxy.conf"
+  lint_ok 'echo "hostname: не печатается"'
+  # правила по имени файла: сетевые команды запрещены только в vps_audit.sh
+  vlint_bad() { local o r; printf '%s\n' "$@" 'main </dev/null 2>&1 | rd' > "$T/vps_audit.sh"; o=$(safety_lint "$T/vps_audit.sh" 2>&1 </dev/null); r=$?; [ "$r" -eq 1 ] || fail "safety_lint не поймал в vps_audit.sh: $*"; case "$o" in *'vps_audit.sh: исходящая сетевая'*) ;; *) fail "safety_lint: нет сообщения о сети для: $*" ;; esac; }
+  vlint_bad 'curl -sS -m 10 -I https://www.google.com'
+  vlint_bad 'getent ahostsv4 example.com'
+  vlint_bad 'dig example.com'
+  vlint_bad 'echo x; ping -c1 example.com'
+  o=$(printf '%s\n' 'timedatectl' 'uname -r' 'main </dev/null 2>&1 | rd' > "$T/vps_audit.sh"; safety_lint "$T/vps_audit.sh" 2>&1 </dev/null) || fail "safety_lint ложно сработал на vps_audit.sh: $o"
+  o=$(printf '%s\n' 'curl -sS https://example.com/' > "$T/probe_lib.sh"; safety_lint "$T/probe_lib.sh" 2>&1 </dev/null) || fail "safety_lint: curl в probe_lib.sh должен проходить: $o"
   printf '%s\n' 'main() { echo x; }' 'main </dev/null 2>&1 | rd' > "$T/src_probe_fx.sh"
   o=$(safety_lint "$T/src_probe_fx.sh" 2>&1 </dev/null) || fail "safety_lint: прогонный блок с rd отклонён: $o"
   printf '%s\n' 'main() { echo x; }' 'main' > "$T/src_probe_fx.sh"
@@ -622,3 +655,271 @@ Baseline с рабочей машины (2026-09-25) для Марафонца: 
 - `сеть недоступна`: `curl: (6)`, `(7)`, `(28)`, `(35)`; `curl: (60)` записывается как проблема сертификатов на VPS, `-k` не использовать.
 
 Для URL без baseline вердикт только по коду и индикаторам. Итоговый вердикт источника — худший из вердиктов его URL. Шестой вердикт `не проверялся` допустим только у GET.RUN при `getrun_tos: reject`.
+
+## 4. Прогон 2: аудит VPS
+
+Порядок прогона 2, скрипты не запускать параллельно: сначала `vps_audit.sh` (этот раздел), затем `src_probe_rest.sh` (§5), затем `src_probe_getrun.sh` (§5, блок существует только при `getrun_tos` = ask-first или probe в §4.1 `01-SOURCES-REPORT.md`). Каждый скрипт запускается отдельной командой и завершается до начала следующего.
+
+`vps_audit.sh` только читает локальное состояние VPS: ничего не устанавливает, не перезапускает, не пишет файлы и не делает исходящих сетевых запросов (нет `curl`, DNS-запросов и обращений к внешним сайтам; время проверяется только локальными средствами). Хостнейм не печатается ни одной командой, IP клиентов tinyproxy не печатаются (только счётчики), `BasicAuth` и `Upstream` считаются, но не показываются. Если вход не под `root`, используется `sudo -n` (без запроса пароля; при отказе блок напишет ошибку и пойдёт дальше). Весь вывод проходит через `rd` на стороне VPS.
+
+```bash vps_audit.sh
+sec() { printf '\n===== %s =====\n' "$1"; }
+
+main() {
+  SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo -n"
+
+  sec "00 OS, ядро, аптайм"
+  sed -n 's/^PRETTY_NAME=//p' /etc/os-release
+  uname -r; uptime -p; systemd-detect-virt 2>/dev/null
+  [ -e /var/run/reboot-required ] && { echo "reboot-required: YES"; cat /var/run/reboot-required.pkgs 2>/dev/null | head -20; } || echo "reboot-required: no"
+
+  sec "01 tinyproxy: статус и происхождение"
+  systemctl show tinyproxy -p LoadState -p ActiveState -p SubState -p UnitFileState -p FragmentPath -p ActiveEnterTimestamp 2>&1
+  ps -o pid,user,etime,args -C tinyproxy 2>&1
+  dpkg -l 'tinyproxy*' 2>&1 | awk 'NR>5{print $1,$2,$3}'
+  apt-mark showmanual 2>/dev/null | grep -i '^tinyproxy' || echo "tinyproxy: не в списке manual (или не установлен)"
+  zgrep -h ' install tinyproxy' /var/log/dpkg.log* 2>/dev/null | head -3
+  stat -c '%n  изменён: %y  владелец: %U' /etc/tinyproxy /etc/tinyproxy/tinyproxy.conf 2>&1
+  for v in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy; do
+    if [ -n "${!v:-}" ]; then echo "переменная $v в этой ssh-сессии: задана"; else echo "переменная $v в этой ssh-сессии: не задана"; fi
+  done
+  echo "строк с proxy в /etc/environment (только счётчик): $(cat /etc/environment 2>/dev/null | grep -ci proxy)"
+
+  sec "02 tinyproxy: директивы конфигурации (только allowlist; пароли не печатаются)"
+  $SUDO grep -iE '^[[:space:]]*(Port|Listen|Bind|BindSame|Allow|Deny|MaxClients|Timeout|ConnectPort|DisableViaHeader|Anonymous|FilterURLs|ReversePath|LogLevel|Syslog|User|Group|StatHost)\b' /etc/tinyproxy/tinyproxy.conf 2>&1
+  echo "строк BasicAuth в конфиге (только счётчик): $($SUDO grep -ciE '^[[:space:]]*BasicAuth' /etc/tinyproxy/tinyproxy.conf 2>/dev/null)"
+  echo "строк Upstream в конфиге (только счётчик): $($SUDO grep -ciE '^[[:space:]]*Upstream' /etc/tinyproxy/tinyproxy.conf 2>/dev/null)"
+
+  sec "03 tinyproxy: сколько и кем используется (только агрегаты)"
+  LOG=$($SUDO grep -iE '^[[:space:]]*LogFile' /etc/tinyproxy/tinyproxy.conf 2>/dev/null | head -1 | sed -E 's/^[^"]*"([^"]+)".*/\1/')
+  echo "LogFile: ${LOG:-не задан}"
+  if [ -n "${LOG:-}" ] && $SUDO test -r "$LOG"; then
+    $SUDO stat -c 'размер=%s байт, последнее изменение=%y' "$LOG"
+    echo "соединений в логе: $($SUDO grep -c 'Connect (file descriptor' "$LOG")"
+    echo "разных клиентов: $($SUDO grep -oE 'Connect \(file descriptor [0-9]+\): [0-9a-fA-F.:]+' "$LOG" | awk '{print $NF}' | sort -u | wc -l)"
+    echo "из них вне RFC1918 и loopback: $($SUDO grep -oE 'Connect \(file descriptor [0-9]+\): [0-9.]+' "$LOG" | awk '{print $NF}' | sort -u | grep -vE '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.)' | wc -l)"
+  fi
+
+  sec "03b НЕОБЯЗАТЕЛЬНО (можно удалить эти строки перед запуском): топ-10 запрашиваемых хостов tinyproxy"
+  if [ -n "${LOG:-}" ] && $SUDO test -r "$LOG"; then
+    $SUDO grep -oE 'Request \(file descriptor [0-9]+\): (CONNECT|GET|POST|HEAD) [^ ]+' "$LOG" | awk '{print $NF}' | sed -E 's#^https?://##; s#[:/].*$##' | sort | uniq -c | sort -rn | head -10
+  fi
+
+  sec "04 слушающие порты (TCP/UDP)"
+  $SUDO ss -H -tulpn 2>&1
+
+  sec "05 фаервол: ufw и iptables"
+  $SUDO ufw status verbose 2>&1
+  $SUDO ufw status numbered 2>&1
+  grep -E '^(IPV6|DEFAULT_[A-Z_]+_POLICY)=' /etc/default/ufw 2>&1
+  $SUDO iptables -S 2>&1 | head -60
+  $SUDO ip6tables -S 2>&1 | head -30
+
+  sec "06 часы и синхронизация (только локальные средства)"
+  timedatectl 2>&1
+  timedatectl timesync-status 2>&1
+  for s in systemd-timesyncd chrony chronyd ntp ntpsec; do printf '%s: ' "$s"; systemctl is-active "$s" 2>&1 | head -1; done
+  command -v chronyc >/dev/null && chronyc tracking 2>&1
+  journalctl -u systemd-timesyncd -n 15 --no-pager -o cat 2>&1
+
+  sec "07 Docker и Compose"
+  command -v docker && docker --version 2>&1
+  docker compose version 2>&1 | head -2
+  command -v docker-compose && docker-compose --version 2>&1
+  dpkg -l 2>/dev/null | awk '/^ii +(docker|containerd|runc|podman)/{print $2,$3}'
+  systemctl is-active docker 2>&1; systemctl is-enabled docker 2>&1
+  apt-cache policy docker-compose-v2 2>&1 | head -4
+  $SUDO docker info --format 'server={{.ServerVersion}} driver={{.Driver}} cgroup={{.CgroupVersion}} containers={{.Containers}} running={{.ContainersRunning}}' 2>&1
+  $SUDO docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>&1
+  $SUDO docker system df 2>&1
+  ls -l /etc/docker 2>&1
+
+  sec "08 память, swap, диск, inodes"
+  free -m; swapon --show 2>&1; echo "swappiness=$(cat /proc/sys/vm/swappiness)"; grep -i swap /etc/fstab || echo "swap в fstab: нет"
+  nproc
+  df -hT -x tmpfs -x devtmpfs -x overlay -x squashfs 2>&1
+  df -i / 2>&1
+  lsblk -o NAME,SIZE,TYPE,MOUNTPOINT 2>&1
+
+  sec "09 обновления (без apt update и без установки)"
+  echo "кэш apt обновлён: $(stat -c %y /var/lib/apt/periodic/update-success-stamp 2>/dev/null || echo неизвестно)"
+  echo "доступно обновлений (по локальному кэшу): $(apt list --upgradable 2>/dev/null | tail -n +2 | wc -l)"
+  echo "из них security: $(apt list --upgradable 2>/dev/null | grep -c -i security)"
+  echo "unattended-upgrades: установлен=$(dpkg -l unattended-upgrades 2>/dev/null | grep -c '^ii'), enabled=$(systemctl is-enabled unattended-upgrades 2>&1 | head -1)"
+
+  sec "10 SSH: эффективные настройки входа (без ключей)"
+  $SUDO sshd -T 2>&1 | grep -iE '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication|permitemptypasswords|maxauthtries|allowusers|allowgroups) '
+  echo "uid текущего пользователя: $(id -u) (0 = root)"
+
+  sec "11 запущенные сервисы (имена юнитов)"
+  systemctl list-units --type=service --state=running --no-pager --no-legend 2>&1 | awk '{print $1}'
+  echo; echo "===== КОНЕЦ ====="
+}
+main </dev/null 2>&1 | rd
+```
+
+#### Перед запуском (обязательно)
+
+`safety_lint` не заменяет ручную проверку владельца. Перед запуском на VPS:
+
+1. Откройте `01-COMMANDS.md`.
+2. Прочитайте ПОЛНОСТЬЮ все блоки, которые уйдут на VPS: `blk rd.sh`, `blk vps_audit.sh` (выведите их в терминал и прочитайте).
+3. Запустите проверку ниже (она сама записывает блоки в файлы `rd.sh` и `vps_audit.sh` во временном каталоге и вызывает `safety_lint` и `getrun_gate` по этим именам; подстановку процесса `<(blk …)` не использовать) и прочитайте её вывод целиком.
+4. Убедитесь, что все команды только читают: нет установки пакетов, `apt update`, записи файлов, `systemctl`, `ufw`, `docker` в изменяющих режимах, а исходящих сетевых запросов в аудите нет.
+5. Только после этого самостоятельно запустите `ssh`.
+6. Если что-то непонятно, не запускайте и спросите. Необязательный подблок `03b` (топ хостов tinyproxy) можно удалить из блока до запуска.
+
+```bash
+X=$(mktemp -d); for b in rd.sh vps_audit.sh; do blk "$b" > "$X/$b"; done
+{ blk rd.sh; blk checks.sh; echo "safety_lint $X/rd.sh $X/vps_audit.sh; getrun_gate .planning/phases/01-source-discovery-vps-audit/01-SOURCES-REPORT.md $X/rd.sh $X/vps_audit.sh"; } | bash
+```
+
+Ожидаемо: `SAFETY OK` и `GETRUN GATE OK`.
+
+Команда запуска. Алиас вводится в этом терминале и нигде не записывается (если он уже задан в этом терминале в прогоне 1, повторный ввод пропускается):
+
+```bash
+[ -n "${VPS_ALIAS:-}" ] || { printf 'ssh-алиас VPS из ~/.ssh/config: '; read -r VPS_ALIAS; }
+{ blk rd.sh; blk vps_audit.sh; } \
+  | ssh "${VPS_ALIAS:?задайте ssh-алиас}" 'bash -s' \
+  | tee "$HOME/run-agg-phase1/vps_audit_out.txt"
+```
+
+Проверка вывода. `VPS_IP` и `VPS_HOST` вводятся без отображения и экспортируются только в этом терминале:
+
+```bash
+{ blk rd.sh; blk checks.sh; echo 'redaction_check "$HOME/run-agg-phase1/vps_audit_out.txt"'; } | bash
+[ -n "${VPS_IP:-}" ] && [ -n "${VPS_HOST:-}" ] || { printf 'IP VPS (не отображается): '; read -rs VPS_IP; echo; printf 'hostname VPS (не отображается): '; read -rs VPS_HOST; echo; export VPS_IP VPS_HOST; }
+{ blk rd.sh; blk checks.sh; echo 'owner_leak_check "$HOME/run-agg-phase1/vps_audit_out.txt"'; } | bash
+```
+
+Ожидаемо: `REDACTION OK` и `OWNER LEAK OK`. Если нет, вывод никому не передавать, заменить найденное на `<REDACTED>` вручную и проверить снова или сообщить.
+
+### Как читать блок tinyproxy
+
+`Listen` без значения означает все интерфейсы (`0.0.0.0`). Если строк `Allow` и `Deny` нет, действует «разрешить всем». Хотя бы одна запись `BasicAuth` включает обязательную аутентификацию (в выводе только счётчик строк). Без `ConnectPort` для `CONNECT` разрешены все порты. «Открытый прокси» = слушает не на loopback И нет ограничений `Allow` И `BasicAuth` = 0 И порт не закрыт фаерволом (`ufw`, `iptables`, облачный фаервол). Внешнюю достижимость с самого VPS проверить нельзя. Формат строк лога (`Connect (file descriptor N): …`, `Request (file descriptor N): …`) предполагается по памяти; если формат иной, счётчики покажут 0.
+
+## 5. Прогон 2: остальные источники
+
+Порядок и запрет параллельного запуска: см. начало §4. `src_probe_rest.sh` запрашивает только Runlist и ПроБЕГ; в нём нет ни одного обращения к GET.RUN (ни HTTP, ни DNS, ни в комментариях), Марафонец повторно не запрашивается (он уже проверен в прогоне 1). Паузы: 3 с между запросами к Runlist, 30 с между запросами к ПроБЕГ (Crawl-delay 30). Всего 5 GET к Runlist и 3 GET к ПроБЕГ, около 2–3 минут.
+
+```bash src_probe_rest.sh
+main() {
+  sec "C. Runlist (www.runlist.ru): robots Allow /"
+  dns www.runlist.ru
+  probe https://www.runlist.ru/robots.txt 'Allow' 'Sitemap'
+  sleep 3
+  probe https://www.runlist.ru/ '__next_f' 'beginDate' 'reg\.russiarunning\.com/event/'
+  sleep 3
+  probe https://www.runlist.ru/event/skazka26 'ld\+json' 'SportsEvent' 'addressCountry'
+  sleep 3
+  probe https://www.runlist.ru/events 'beginDate' 'reg\.russiarunning\.com/event/' 'page=[0-9]+'
+  sleep 3
+  probe https://www.runlist.ru/sitemap.xml '<loc>https://www\.runlist\.ru/event/[^<]+' '<lastmod>'
+
+  sec "D. ПроБЕГ (probeg.org): robots Crawl-delay 30"
+  dns probeg.org
+  probe https://probeg.org/robots.txt 'Crawl-delay' 'Disallow'
+  echo "(пауза 30 с: соблюдаем Crawl-delay)"; sleep 30
+  probe https://probeg.org/races/ 'href="/event/[0-9]+/"' 'href="/races/city/[0-9]+/"' '<tr'
+  echo "(пауза 30 с)"; sleep 30
+  probe https://probeg.org/races/city/2310/ 'href="/event/[0-9]+/"'
+  echo; echo "===== КОНЕЦ ====="
+}
+main </dev/null 2>&1 | rd
+```
+
+Baseline с рабочей машины (2026-09-25 и 2026-09-26) для сверки: `www.runlist.ru/` около 896–917 КБ, `__next_f` 11, `beginDate` около 178–183, `reg\.russiarunning\.com/event/` около 178; `/event/skazka26` около 182 КБ, `ld+json` 4, `SportsEvent` 2, `addressCountry` 2; `probeg.org/races/` 372 821 Б, около 1246 ссылок на события и 212 на города; `probeg.org/races/city/2310/` около 116 КБ, около 207 ссылок на события. Вердикты выносятся по порогам из §3 (для URL без baseline только по коду и индикаторам).
+
+#### Перед запуском (обязательно)
+
+`safety_lint` не заменяет ручную проверку владельца. Перед запуском на VPS:
+
+1. Откройте `01-COMMANDS.md`.
+2. Прочитайте ПОЛНОСТЬЮ все блоки, которые уйдут на VPS: `blk rd.sh`, `blk probe_lib.sh`, `blk src_probe_rest.sh` (выведите их в терминал и прочитайте).
+3. Запустите проверку ниже (она сама записывает блоки в файлы `rd.sh`, `probe_lib.sh`, `src_probe_rest.sh` во временном каталоге и вызывает `safety_lint`, `getrun_gate` и `getrun_guard_test` по этим именам; подстановку процесса `<(blk …)` не использовать) и прочитайте её вывод целиком.
+4. Убедитесь, что все команды только читают, а URL только из ожидаемого списка: пять страниц `www.runlist.ru` и три страницы `probeg.org`; обращений к GET.RUN нет.
+5. Только после этого самостоятельно запустите `ssh`.
+6. Если что-то непонятно, не запускайте и спросите.
+
+```bash
+X=$(mktemp -d); for b in rd.sh probe_lib.sh src_probe_rest.sh; do blk "$b" > "$X/$b"; done
+{ blk rd.sh; blk checks.sh; echo "safety_lint $X/rd.sh $X/probe_lib.sh $X/src_probe_rest.sh; getrun_gate .planning/phases/01-source-discovery-vps-audit/01-SOURCES-REPORT.md $X/rd.sh $X/probe_lib.sh $X/src_probe_rest.sh; getrun_guard_test $X/probe_lib.sh"; } | bash
+```
+
+Ожидаемо: `SAFETY OK`, `GETRUN GATE OK`, `GUARD OK`.
+
+Команда запуска. Контакт (допустимы только символы `A-Za-z0-9@._:/+-`) и алиас вводятся один раз в этом терминале и нигде не записываются (если они уже заданы в этом терминале, повторный ввод пропускается):
+
+```bash
+[ -n "${OWNER_CONTACT:-}" ] || { printf 'Контакт для User-Agent (e-mail или Telegram): '; read -r OWNER_CONTACT; }
+printf '%s' "$OWNER_CONTACT" | grep -Eq '^[A-Za-z0-9@._:/+-]+$' || echo "недопустимый контакт: запускать нельзя"
+export OWNER_CONTACT
+[ -n "${VPS_ALIAS:-}" ] || { printf 'ssh-алиас VPS из ~/.ssh/config: '; read -r VPS_ALIAS; }
+{ blk rd.sh; blk probe_lib.sh; blk src_probe_rest.sh; } \
+  | sed "s|<OWNER_CONTACT>|${OWNER_CONTACT}|g" \
+  | ssh "${VPS_ALIAS:?задайте ssh-алиас}" 'bash -s' \
+  | tee "$HOME/run-agg-phase1/src_probe_rest_out.txt"
+```
+
+Проверка вывода (`VPS_IP` и `VPS_HOST` задаются как в §4):
+
+```bash
+{ blk rd.sh; blk checks.sh; echo 'redaction_check "$HOME/run-agg-phase1/src_probe_rest_out.txt"'; } | bash
+[ -n "${VPS_IP:-}" ] && [ -n "${VPS_HOST:-}" ] || { printf 'IP VPS (не отображается): '; read -rs VPS_IP; echo; printf 'hostname VPS (не отображается): '; read -rs VPS_HOST; echo; export VPS_IP VPS_HOST; }
+{ blk rd.sh; blk checks.sh; echo 'owner_leak_check "$HOME/run-agg-phase1/src_probe_rest_out.txt"'; } | bash
+```
+
+Ожидаемо: `REDACTION OK` и `OWNER LEAK OK`.
+
+Страницы GET.RUN не запрашиваются до ответа GET.RUN: getrun_tos = ask-first (§4.1), с VPS выполняются только `dns get.run` и robots.txt. Это выполняет блок `src_probe_getrun.sh`, он запускается ТРЕТЬИМ, после `src_probe_rest.sh` и только после завершения предыдущих скриптов.
+
+```bash src_probe_getrun.sh
+# запускать только по решению getrun_tos в §4.1 01-SOURCES-REPORT.md
+GETRUN_ALLOW=robots
+main() {
+  sec "B. GET.RUN (get.run): ask-first, только robots.txt"
+  dns get.run
+  probe https://get.run/robots.txt 'Disallow' 'Sitemap'
+  echo; echo "===== КОНЕЦ ====="
+}
+main </dev/null 2>&1 | rd
+```
+
+Здесь `GETRUN_ALLOW=robots` задаётся единственный раз в этом блоке; `probe_lib.sh` без этой переменной отказывает на любом обращении к этому сайту. Запрос разрешения у GET.RUN (через t.me/agetrun) отправляет владелец сам.
+
+#### Перед запуском (обязательно)
+
+`safety_lint` не заменяет ручную проверку владельца. Перед запуском на VPS:
+
+1. Откройте `01-COMMANDS.md`.
+2. Прочитайте ПОЛНОСТЬЮ все блоки, которые уйдут на VPS: `blk rd.sh`, `blk probe_lib.sh`, `blk src_probe_getrun.sh` (выведите их в терминал и прочитайте).
+3. Запустите проверку ниже (она сама записывает блоки в файлы `rd.sh`, `probe_lib.sh`, `src_probe_getrun.sh` во временном каталоге и вызывает `safety_lint`, `getrun_gate` и `getrun_guard_test` по этим именам; подстановку процесса `<(blk …)` не использовать) и прочитайте её вывод целиком.
+4. Убедитесь, что блок делает ровно два обращения к этому сайту: `dns` имени и один GET `robots.txt`; других URL нет.
+5. Только после этого самостоятельно запустите `ssh`.
+6. Если что-то непонятно, не запускайте и спросите.
+
+```bash
+X=$(mktemp -d); for b in rd.sh probe_lib.sh src_probe_getrun.sh; do blk "$b" > "$X/$b"; done
+{ blk rd.sh; blk checks.sh; echo "safety_lint $X/rd.sh $X/probe_lib.sh $X/src_probe_getrun.sh; getrun_gate .planning/phases/01-source-discovery-vps-audit/01-SOURCES-REPORT.md $X/rd.sh $X/probe_lib.sh $X/src_probe_getrun.sh; getrun_guard_test $X/probe_lib.sh"; } | bash
+```
+
+Ожидаемо: `SAFETY OK`, `GETRUN GATE OK`, `GUARD OK`.
+
+Команда запуска (`OWNER_CONTACT` и `VPS_ALIAS` уже заданы в этом терминале; иначе введите их как выше):
+
+```bash
+{ blk rd.sh; blk probe_lib.sh; blk src_probe_getrun.sh; } \
+  | sed "s|<OWNER_CONTACT>|${OWNER_CONTACT:?задайте OWNER_CONTACT}|g" \
+  | ssh "${VPS_ALIAS:?задайте ssh-алиас}" 'bash -s' \
+  | tee "$HOME/run-agg-phase1/src_probe_getrun_out.txt"
+```
+
+Проверка вывода:
+
+```bash
+{ blk rd.sh; blk checks.sh; echo 'redaction_check "$HOME/run-agg-phase1/src_probe_getrun_out.txt"'; } | bash
+{ blk rd.sh; blk checks.sh; echo 'owner_leak_check "$HOME/run-agg-phase1/src_probe_getrun_out.txt"'; } | bash
+```
+
+Ожидаемо: `REDACTION OK` и `OWNER LEAK OK`.
