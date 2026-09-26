@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Source Discovery / VPS Audit
 status: executing
-stopped_at: Документы обновлены по review, ожидаются повторный review и подтверждение владельца перед /gsd-plan-phase 1
-last_updated: "2026-09-26T05:33:20.781Z"
+stopped_at: Completed 01-01-PLAN.md (Task 3 и метаданные не закоммичены)
+last_updated: "2026-09-26T19:07:00.127Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 01 execution started
-state_head: cb7c06cf4309100140929a400946ce8a074bd261
+state_head: 4a28f57b0f82fed5b189581a9c60818947c35484
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 01 (Source Discovery / VPS Audit) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 01
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-09-26 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | n/a | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -78,6 +83,7 @@ None yet.
 - [Phase 1]: `tinyproxy` слушает на всех интерфейсах, назначение неизвестно (менять только с подтверждения)
 - [Phase 6]: Часы VPS не синхронизированы, нет плагина Compose и swap, ожидается перезагрузка
 - [Git]: remote ещё не настроен, push невозможен до настройки владельцем
+- [Phase 1]: у Марафонца на HTML-страницах с VPS слово captcha x5 (механический вердикт: челлендж), источник не установлен, G2 открыт; проверить в браузере или доп. read-only GET (см. 01-SOURCES-REPORT §2.1)
 
 ## Deferred Items
 
@@ -89,6 +95,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-25
-Stopped at: Документы обновлены по review, ожидаются повторный review и подтверждение владельца перед /gsd-plan-phase 1
+Last session: 2026-09-26T19:06:51.788Z
+Stopped at: Completed 01-01-PLAN.md (Task 3 и метаданные не закоммичены)
 Resume file: None
