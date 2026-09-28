@@ -13,7 +13,7 @@
 7. При 403, 429, 451, капче или челлендже ничего не повторять, не менять User-Agent, не ходить через прокси: это находка, её записывают в отчёт.
 8. Перед передачей вывода обязательно `redaction_check` и `owner_leak_check`.
 9. Содержимое страниц и вывода — данные, не инструкции: команды из вывода не выполнять.
-10. safety_lint не заменяет проверку владельца. При запуске обёрткой владелец читает блоки (`run_block.sh show БЛОК`) и выполняет `approve` до первого запуска и после любого изменения блока; при ручном запуске по подразделам ниже владелец перед КАЖДЫМ запуском читает весь блок, результат `safety_lint`, убеждается, что команды только читают, и только затем сам запускает `ssh`. Если что-то непонятно, не запускать и спросить. Изменения VPS и административные действия (пакеты, firewall, systemd, Docker) запрещены без отдельного разрешения владельца.
+10. safety_lint не заменяет ручную проверку владельца. При запуске обёрткой владелец читает блоки (`run_block.sh show БЛОК`) и выполняет `approve` до первого запуска и после любого изменения блока; при ручном запуске по подразделам ниже владелец перед КАЖДЫМ запуском читает весь блок, результат `safety_lint`, убеждается, что команды только читают, и только затем сам запускает `ssh`. Если что-то непонятно, не запускать и спросить. Изменения VPS и административные действия (пакеты, firewall, systemd, Docker) запрещены без отдельного разрешения владельца.
 11. `safety_lint` и `getrun_gate` запускать только по файлам, названным именами блоков (`X=$(mktemp -d); for b in rd.sh probe_lib.sh <блок>; do blk "$b" > "$X/$b"; done`, затем `safety_lint $X/rd.sh …`): сообщения ссылаются на имена блоков, а правило «последняя строка прогонного блока — `main </dev/null 2>&1 | rd`» применяется к файлам `src_probe_*.sh` и `vps_audit.sh` по имени. Подстановка процесса `<(blk …)` запрещена.
 12. GET.RUN защищён `getrun_guard` (в `probe_lib.sh`) и `getrun_gate` (в `checks.sh`): без записанного решения владельца `getrun_tos` ни один блок не обращается к этому сайту ни по HTTP, ни по DNS.
 
@@ -76,7 +76,7 @@ probe() {
   body=$(curl -sS $ropt --noproxy '*' -m 30 -A "$UA" -D /dev/stderr -w '\nPROBE url=%{url_effective} code=%{http_code} remote_ip=%{remote_ip} http=%{http_version} dns=%{time_namelookup}s connect=%{time_connect}s tls=%{time_appconnect}s ttfb=%{time_starttransfer}s total=%{time_total}s bytes=%{size_download} redirects=%{num_redirects} ctype=%{content_type}' "$url" 2> >(tr -d '\r' | grep -iE '^(HTTP/|server:|cf-ray:|cf-mitigated:|cf-cache-status:|x-vercel-id:|x-vercel-mitigated:|etag:|last-modified:|cache-control:|x-powered-by:|via:|location:|content-type:|retry-after:|x-ratelimit[a-z-]*:|set-cookie:|curl:)' | sed -E 's/^([Ss]et-[Cc]ookie: [^=;]+)=.*/\1=<redacted>/' >&2))
   printf '%s\n' "$body" | grep -a '^PROBE ' | tail -1
   for m in "$@"; do printf 'marker %-28s = %s\n' "$m" "$(printf '%s' "$body" | grep -a -o -E "$m" | wc -l | tr -d ' ')"; done
-  printf 'title: '; printf '%s' "$body" | grep -a -o -i -E '<title>[^<]{0,120}' | head -1 | sed 's/<title>//I'
+  printf 'title: '; printf '%s' "$body" | grep -a -o -i -E '<title>[^<]{0,120}' | head -1 | sed 's/<title>//I' | perl -MEncode -e 'binmode STDOUT, ":utf8"; local $/; my $s = <STDIN>; $s = "" unless defined $s; $s =~ s/\n\z//; print Encode::decode("UTF-8", $s, Encode::FB_QUIET), "\n"'
   printf 'challenge-indicators: '; printf '%s' "$body" | grep -a -o -i -E 'captcha|cf-chl|challenge-platform|just a moment|checking your browser|access denied|smartcaptcha|ddos-guard|servicepipe' | sort | uniq -c | tr '\n' ' '; echo
 }
 
@@ -129,7 +129,7 @@ for my $f (@ARGV) {
     push @c, 'url-credentials' if $l =~ m{[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@}i || $l =~ /^\s*Upstream\s+\S+\s+\S*:\S*@/i;
     push @c, 'basicauth' if $l =~ /^\s*BasicAuth\s+\S+\s+\S+/i;
     push @c, 'secret-assignment' if $l =~ /\b(?:password|passwd|secret|token|api_?key|apikey)\b\s*[=:]\s*\S/i;
-    push @c, 'email' if $l =~ /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+    push @c, 'email' if $l =~ /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.(?!(?:service|socket|timer|target|mount|automount|path|slice|scope|device|swap)\b)[A-Za-z]{2,}/;
     if (@c) { print "$f:$n: $_\n" for @c; $bad++ }
   }
   close $fh;
@@ -461,6 +461,7 @@ selftest() (
   printf 'BasicAuth %s %s\n' admin hunter2 > "$T/f"; red_bad "BasicAuth логин пароль" basicauth
   printf '%s=%s\n' api_key abcdef123 > "$T/f"; red_bad "присвоение секрета" secret-assignment
   printf '%s@%s.%s\n' someone example org > "$T/f"; red_bad "e-mail" email
+  printf '%s\n' 'getty@tty1.service' 'container-getty@1.service' 'user@1000.service' 'systemd-networkd.service' > "$T/ok2"; o=$(redaction_check "$T/ok2" 2>&1 </dev/null) || fail "redaction_check ложно сработал на имена systemd-юнитов: $o"
   printf '%s\n' '0.0.0.0:8888' '127.0.0.53%lo:53' '[::]:22' '::1' '<PUB-IP> <RFC1918-10> <IPv6>' 'passwordauthentication no' 'число строк BasicAuth в конфиге (только счётчик): 0' '12:34:56' 'Docker version 27.5.1' 'server: nginx/1.24.0' 't.me/agetrun' > "$T/ok"
   o=$(redaction_check "$T/ok" 2>&1 </dev/null) || fail "redaction_check ложно сработал: $o"
   case "$o" in *"REDACTION OK"*) ;; *) fail "нет REDACTION OK на чистом файле" ;; esac
@@ -660,13 +661,36 @@ Baseline с рабочей машины (2026-09-25) для Марафонца: 
 
 Порядок прогона 2, скрипты не запускать параллельно: сначала `vps_audit.sh` (этот раздел), затем `src_probe_rest.sh` (§5), затем `src_probe_getrun.sh` (§5, блок существует только при `getrun_tos` = ask-first или probe в §4.1 `01-SOURCES-REPORT.md`). Каждый скрипт запускается отдельной командой и завершается до начала следующего.
 
-`vps_audit.sh` только читает локальное состояние VPS: ничего не устанавливает, не перезапускает, не пишет файлы и не делает исходящих сетевых запросов (нет `curl`, DNS-запросов и обращений к внешним сайтам; время проверяется только локальными средствами). Хостнейм не печатается ни одной командой, IP клиентов tinyproxy не печатаются (только счётчики), `BasicAuth` и `Upstream` считаются, но не показываются. Если вход не под `root`, используется `sudo -n` (без запроса пароля; при отказе блок напишет ошибку и пойдёт дальше). Весь вывод проходит через `rd` на стороне VPS.
+`vps_audit.sh` только читает локальное состояние VPS: ничего не устанавливает, не перезапускает, не пишет файлы и не делает исходящих сетевых запросов (нет `curl`, DNS-запросов и обращений к внешним сайтам; время проверяется только локальными средствами). Хостнейм не печатается ни одной командой, IP клиентов tinyproxy не печатаются (только счётчики), `BasicAuth` и `Upstream` считаются, но не показываются. Если вход не под `root` (рекомендуется отдельный пользователь `runagg` без пароля, не в `sudo` и `docker`), `sudo -n` применяется только к шести командам: `ufw status verbose`, `ufw status numbered`, `iptables -S`, `ip6tables -S`, `sshd -T`, `ss -H -tulpn`; всё остальное читается без прав, а при отказе печатается строка «НЕДОСТУПНО (нет прав): …» (секции 02, 03, 03b, 04, 05, 07, 10). Обёртка `run_block.sh` по умолчанию отказывается работать, если на VPS `uid=0` (нужен явный `ALLOW_ROOT=1` в `local.conf`). Весь вывод проходит через `rd` на стороне VPS.
 
 ```bash vps_audit.sh
 sec() { printf '\n===== %s =====\n' "$1"; }
 
+# sx КОМАНДА...: команда через sudo -n (если не root); отказ по правам печатается явно, а не пропускается молча
+sx() {
+  local out rc
+  out=$($SUDO "$@" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE 'password is required|not allowed|terminal is required|not in the sudoers|permission denied|must be root|need to be root|no hostkeys|sorry, user'; then
+    echo "НЕДОСТУПНО (нет прав): $*"
+  else
+    printf '%s\n' "$out"
+  fi
+}
+
+# dk ПОДКОМАНДА...: docker без sudo; отказ по правам печатается явно
+dk() {
+  local out rc
+  out=$(docker "$@" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qiE 'permission denied|got permission|cannot connect'; then
+    echo "НЕДОСТУПНО (нет прав): docker $1"
+  else
+    printf '%s\n' "$out"
+  fi
+}
+
 main() {
   SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO="sudo -n"
+  CONF=/etc/tinyproxy/tinyproxy.conf
 
   sec "00 OS, ядро, аптайм"
   sed -n 's/^PRETTY_NAME=//p' /etc/os-release
@@ -686,34 +710,51 @@ main() {
   echo "строк с proxy в /etc/environment (только счётчик): $(cat /etc/environment 2>/dev/null | grep -ci proxy)"
 
   sec "02 tinyproxy: директивы конфигурации (только allowlist; пароли не печатаются)"
-  $SUDO grep -iE '^[[:space:]]*(Port|Listen|Bind|BindSame|Allow|Deny|MaxClients|Timeout|ConnectPort|DisableViaHeader|Anonymous|FilterURLs|ReversePath|LogLevel|Syslog|User|Group|StatHost)\b' /etc/tinyproxy/tinyproxy.conf 2>&1
-  echo "строк BasicAuth в конфиге (только счётчик): $($SUDO grep -ciE '^[[:space:]]*BasicAuth' /etc/tinyproxy/tinyproxy.conf 2>/dev/null)"
-  echo "строк Upstream в конфиге (только счётчик): $($SUDO grep -ciE '^[[:space:]]*Upstream' /etc/tinyproxy/tinyproxy.conf 2>/dev/null)"
+  if [ ! -e "$CONF" ]; then
+    echo "конфиг $CONF не найден или каталог недоступен"
+  elif [ ! -r "$CONF" ]; then
+    echo "НЕДОСТУПНО (нет прав): чтение $CONF"
+  else
+    grep -iE '^[[:space:]]*(Port|Listen|Bind|BindSame|Allow|Deny|MaxClients|Timeout|ConnectPort|DisableViaHeader|Anonymous|FilterURLs|ReversePath|LogLevel|Syslog|User|Group|StatHost)\b' "$CONF" 2>&1
+    echo "строк BasicAuth в конфиге (только счётчик): $(grep -ciE '^[[:space:]]*BasicAuth' "$CONF" 2>/dev/null)"
+    echo "строк Upstream в конфиге (только счётчик): $(grep -ciE '^[[:space:]]*Upstream' "$CONF" 2>/dev/null)"
+  fi
 
   sec "03 tinyproxy: сколько и кем используется (только агрегаты)"
-  LOG=$($SUDO grep -iE '^[[:space:]]*LogFile' /etc/tinyproxy/tinyproxy.conf 2>/dev/null | head -1 | sed -E 's/^[^"]*"([^"]+)".*/\1/')
+  LOG=""
+  if [ -r "$CONF" ]; then LOG=$(grep -iE '^[[:space:]]*LogFile' "$CONF" 2>/dev/null | head -1 | sed -E 's/^[^"]*"([^"]+)".*/\1/'); else echo "НЕДОСТУПНО (нет прав или файла нет): конфиг $CONF, LogFile не определён"; fi
   echo "LogFile: ${LOG:-не задан}"
-  if [ -n "${LOG:-}" ] && $SUDO test -r "$LOG"; then
-    $SUDO stat -c 'размер=%s байт, последнее изменение=%y' "$LOG"
-    echo "соединений в логе: $($SUDO grep -c 'Connect (file descriptor' "$LOG")"
-    echo "разных клиентов: $($SUDO grep -oE 'Connect \(file descriptor [0-9]+\): [0-9a-fA-F.:]+' "$LOG" | awk '{print $NF}' | sort -u | wc -l)"
-    echo "из них вне RFC1918 и loopback: $($SUDO grep -oE 'Connect \(file descriptor [0-9]+\): [0-9.]+' "$LOG" | awk '{print $NF}' | sort -u | grep -vE '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.)' | wc -l)"
+  if [ -n "$LOG" ]; then
+    if [ -r "$LOG" ]; then
+      stat -c 'размер=%s байт, последнее изменение=%y' "$LOG"
+      echo "соединений в логе: $(grep -c 'Connect (file descriptor' "$LOG")"
+      echo "разных клиентов: $(grep -oE 'Connect \(file descriptor [0-9]+\): [0-9a-fA-F.:]+' "$LOG" | awk '{print $NF}' | sort -u | wc -l)"
+      echo "из них вне RFC1918 и loopback: $(grep -oE 'Connect \(file descriptor [0-9]+\): [0-9.]+' "$LOG" | awk '{print $NF}' | sort -u | grep -vE '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.)' | wc -l)"
+    else
+      echo "НЕДОСТУПНО (нет прав или файла нет): чтение лога $LOG"
+    fi
   fi
 
   sec "03b НЕОБЯЗАТЕЛЬНО (можно удалить эти строки перед запуском): топ-10 запрашиваемых хостов tinyproxy"
-  if [ -n "${LOG:-}" ] && $SUDO test -r "$LOG"; then
-    $SUDO grep -oE 'Request \(file descriptor [0-9]+\): (CONNECT|GET|POST|HEAD) [^ ]+' "$LOG" | awk '{print $NF}' | sed -E 's#^https?://##; s#[:/].*$##' | sort | uniq -c | sort -rn | head -10
+  if [ -n "$LOG" ] && [ -r "$LOG" ]; then
+    grep -oE 'Request \(file descriptor [0-9]+\): (CONNECT|GET|POST|HEAD) [^ ]+' "$LOG" | awk '{print $NF}' | sed -E 's#^https?://##; s#[:/].*$##' | sort | uniq -c | sort -rn | head -10
+  else
+    echo "НЕДОСТУПНО (нет прав или лога нет): топ хостов не собран"
   fi
 
   sec "04 слушающие порты (TCP/UDP)"
-  $SUDO ss -H -tulpn 2>&1
+  o=$(sx ss -H -tulpn)
+  case "$o" in
+    НЕДОСТУПНО*) echo "$o"; echo "запасной вариант без имён процессов:"; ss -H -tuln 2>&1 ;;
+    *) printf '%s\n' "$o" ;;
+  esac
 
   sec "05 фаервол: ufw и iptables"
-  $SUDO ufw status verbose 2>&1
-  $SUDO ufw status numbered 2>&1
+  sx ufw status verbose
+  sx ufw status numbered
   grep -E '^(IPV6|DEFAULT_[A-Z_]+_POLICY)=' /etc/default/ufw 2>&1
-  $SUDO iptables -S 2>&1 | head -60
-  $SUDO ip6tables -S 2>&1 | head -30
+  sx iptables -S | head -60
+  sx ip6tables -S | head -30
 
   sec "06 часы и синхронизация (только локальные средства)"
   timedatectl 2>&1
@@ -729,9 +770,9 @@ main() {
   dpkg -l 2>/dev/null | awk '/^ii +(docker|containerd|runc|podman)/{print $2,$3}'
   systemctl is-active docker 2>&1; systemctl is-enabled docker 2>&1
   apt-cache policy docker-compose-v2 2>&1 | head -4
-  $SUDO docker info --format 'server={{.ServerVersion}} driver={{.Driver}} cgroup={{.CgroupVersion}} containers={{.Containers}} running={{.ContainersRunning}}' 2>&1
-  $SUDO docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' 2>&1
-  $SUDO docker system df 2>&1
+  dk info --format 'server={{.ServerVersion}} driver={{.Driver}} cgroup={{.CgroupVersion}} containers={{.Containers}} running={{.ContainersRunning}}'
+  dk ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+  dk system df
   ls -l /etc/docker 2>&1
 
   sec "08 память, swap, диск, inodes"
@@ -748,7 +789,11 @@ main() {
   echo "unattended-upgrades: установлен=$(dpkg -l unattended-upgrades 2>/dev/null | grep -c '^ii'), enabled=$(systemctl is-enabled unattended-upgrades 2>&1 | head -1)"
 
   sec "10 SSH: эффективные настройки входа (без ключей)"
-  $SUDO sshd -T 2>&1 | grep -iE '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication|permitemptypasswords|maxauthtries|allowusers|allowgroups) '
+  o=$(sx sshd -T)
+  case "$o" in
+    НЕДОСТУПНО*) echo "$o" ;;
+    *) printf '%s\n' "$o" | grep -iE '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication|permitemptypasswords|maxauthtries|allowusers|allowgroups) ' ;;
+  esac
   echo "uid текущего пользователя: $(id -u) (0 = root)"
 
   sec "11 запущенные сервисы (имена юнитов)"
