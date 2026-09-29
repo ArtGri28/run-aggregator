@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-09-29T16:28:15.723Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-09-29T16:44:00.008Z"
 last_activity: 2026-09-29
-last_activity_desc: 03-03 complete (RF subjects reference, full Prepare, Evaluate)
-state_head: 9a7a5880ec241b49650e2a1c7b326bf253aff27f
+last_activity_desc: 03-04 complete (ingest_runs lifecycle, observation, Runner with quality gate and Accept)
+state_head: 06f2785f098f97db20d4df540befae741e701ceb
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 8
+  completed_plans: 9
   percent: 33
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 3 (First Source) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
-Last activity: 2026-09-29 — 03-03 complete: справочник 89 субъектов РФ, Prepare по D-07/D-09/D-11/D-14, Evaluate (D-05), golden prepared (133 в каталоге при RU-fallback, 0 при NoFallback, 0 нераспознанных областей)
+Last activity: 2026-09-29 — 03-04 complete: миграция 00002 (accepted_at, metrics, snapshot, ux_ingest_runs_running), жизненный цикл прогона и наблюдение active/missing/gone в store, Runner «Evaluate до записи» + Accept (D-06), guard _test (LO-11)
 
 Progress: [███░░░░░░░] 33%
 
@@ -67,6 +67,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P01 | ~7min (+ действие владельца) | 2 tasks | 2 files |
 | Phase 03 P02 | ~15min | 2 tasks | 14 files |
 | Phase 03 P03 | ~14min | 2 tasks | 14 files |
+| Phase 03 P04 | ~13min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -95,11 +96,15 @@ Recent decisions affecting current work:
 - [Phase 3]: [03-02] D-14: SourceEvent.RegionSlugs/Regions (все области строки), Region = название из data-filters при одной области, пусто при нескольких; нет словаря областей → ErrStructureNotFound
 - [Phase 3]: [03-03] D-14: составные «Москва и Московская область»/«СПБ и Ленинградская область» — синонимы областей, ClassifyPlace уточняет до города федерального значения по городу; многообластные записи — Stats.MultiRegion, вне порога D-09
 - [Phase 3]: [03-03] Distances распознаёт мили (реальная строка фикстуры 68272); K/К слитно, склейка 100 200 400 м, MaxPlausibleDistanceM = 1000 км
+- [Phase 3]: [03-04] StartRun получил startedAt: started_at = часы Runner.Now, Accept повторяет Prepare с этим моментом (детерминизм тестов, точное совпадение Run/Accept)
+- [Phase 3]: [03-04] Окно базы — ok с id ≥ последнего принятого (≤ 7); снимок suspect в ingest_runs.snapshot живёт до принятия или следующего завершённого прогона
+- [Phase 3]: [03-04] Observe: gone-записи больше не трогаются; Missing = ненайденные и оставшиеся missing; events.status наблюдением не меняется
 
 ### Pending Todos
 
 - [Phase 1 cleanup, не позже Phase 6, только с отдельного разрешения владельца]: удалить строку `run-agg-phase1` из `authorized_keys` на VPS, решить судьбу пользователя `runagg` и `/etc/sudoers.d/run-agg`, удалить локальные `~/.ssh/run_agg_*`, `~/run-agg-phase1/local.conf` и `approved.sha256` (MVP §7.4 п.1; 01-SECURITY.md T-01-07)
 - [Phase 3]: отложенные находки ревью Phase 2 — ME-04 «Russian Federation», ME-05 `5K`/`10K`, правило римских цифр («MIX RUN»), проверка правдоподобия дистанции в Validate (склейка «100 200 400 м»), low-находки 02-REVIEW.md
+- [Phase 5+]: часовой пояс по субъекту РФ (сейчас timezone пуст у 118 из 133 событий Марафонца; известны только Москва и СПб) — справочник «субъект → IANA-зона» в normalize/regions.go
 
 ### Blockers/Concerns
 
@@ -118,6 +123,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T16:28:15.700Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-09-29T16:43:59.987Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
