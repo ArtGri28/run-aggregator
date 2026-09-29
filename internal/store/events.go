@@ -286,6 +286,18 @@ func (s *Store) SaveEvent(ctx context.Context, e *event.Event) (bool, error) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	changed, err := saveEventTx(ctx, tx, e)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("save event: commit: %w", err)
+	}
+	return changed, nil
+}
+
+// saveEventTx is SaveEvent's body inside the caller's transaction.
+func saveEventTx(ctx context.Context, tx pgx.Tx, e *event.Event) (bool, error) {
 	if err := canonicalize(e); err != nil {
 		return false, fmt.Errorf("save event: %w", err)
 	}
@@ -299,9 +311,6 @@ func (s *Store) SaveEvent(ctx context.Context, e *event.Event) (bool, error) {
 		}
 		if err := replaceDistances(ctx, tx, e.ID, distances); err != nil {
 			return false, err
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return false, fmt.Errorf("save event: commit: %w", err)
 		}
 		e.IsListed = true
 		e.Distances = distances
@@ -347,15 +356,63 @@ func (s *Store) SaveEvent(ctx context.Context, e *event.Event) (bool, error) {
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("save event: commit: %w", err)
-	}
-
 	e.CreatedAt = old.CreatedAt
 	e.IsListed = old.IsListed
 	e.MergedIntoID = old.MergedIntoID
 	e.Distances = distances
 	return changed, nil
+}
+
+// SaveEventFor saves the event built from one source_events row in a
+// single transaction, so a crash can't leave an event without its link
+// (T-03-10). An unlinked row (event_id NULL — new, or formerly
+// out_of_scope) gets a new event and match_state = 'auto'; a linked row
+// updates its event, keeping the status stored in the database, because
+// a source without an explicit status must not reset cancelled/postponed.
+// Choosing fields by source priority when an event has several
+// source_events is Phase 5's job. A missing sourceEventID is ErrNotFound.
+func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.Event) (created, changed bool, err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, false, fmt.Errorf("save event for: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var eventID *int64
+	err = tx.QueryRow(ctx, "SELECT event_id FROM source_events WHERE id = $1 FOR UPDATE", sourceEventID).Scan(&eventID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, fmt.Errorf("save event for %d: %w", sourceEventID, ErrNotFound)
+	}
+	if err != nil {
+		return false, false, fmt.Errorf("save event for: select source event: %w", err)
+	}
+
+	if eventID == nil {
+		e.ID = 0
+		if _, err := saveEventTx(ctx, tx, e); err != nil {
+			return false, false, err
+		}
+		const link = "UPDATE source_events SET event_id = $2, match_state = 'auto' WHERE id = $1"
+		if _, err := tx.Exec(ctx, link, sourceEventID, e.ID); err != nil {
+			return false, false, fmt.Errorf("save event for: link: %w", err)
+		}
+		created = true
+	} else {
+		e.ID = *eventID
+		var status string
+		if err := tx.QueryRow(ctx, "SELECT status FROM events WHERE id = $1 FOR UPDATE", e.ID).Scan(&status); err != nil {
+			return false, false, fmt.Errorf("save event for: select status: %w", err)
+		}
+		e.Status = event.Status(status)
+		if changed, err = saveEventTx(ctx, tx, e); err != nil {
+			return false, false, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, false, fmt.Errorf("save event for: commit: %w", err)
+	}
+	return created, changed, nil
 }
 
 // SetMatch updates a single source_events row's event_id/match_state
