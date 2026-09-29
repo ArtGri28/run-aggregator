@@ -62,7 +62,7 @@ Plans:
   4. Интеграционный тест на реальной PostgreSQL проходит upsert `source_events` и `events`
   5. Секреты берутся из окружения и не попадают в репозиторий
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
@@ -71,7 +71,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Пакет normalize: город/регион/city_key (словарь D-03 + транслитерация), часовой пояс, country_code, дистанции, title_norm, описание, тип, дата и время
+- [x] 02-02-PLAN.md — Пакет normalize: город/регион/city_key (словарь D-03 + транслитерация), часовой пояс, country_code, дистанции, title_norm, описание, тип, дата и время
 
 ### Phase 3: First Source
 
@@ -141,7 +141,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Source Discovery / VPS Audit | 3/3 | In Progress|  |
-| 2. Foundation | 1/2 | In Progress|  |
+| 2. Foundation | 2/2 | In Progress|  |
 | 3. First Source | 0/TBD | Not started | - |
 | 4. Telegram Search | 0/TBD | Not started | - |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |

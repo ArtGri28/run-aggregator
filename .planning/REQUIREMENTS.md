@@ -20,7 +20,7 @@
 - [x] **FND-01**: Go-модуль (Go 1.27.1) с одним бинарником и подкомандами `bot`, `worker`, `migrate`, `healthcheck`
 - [x] **FND-02**: Схема PostgreSQL 17 из `MVP.md` (раздел 4) применяется миграциями `goose`, встроенными в бинарник; созданы все таблицы и индексы MVP
 - [x] **FND-03**: Доменные типы `event` и слой `store` на `pgx/v5` + `pgxpool`; весь SQL находится только в `internal/store`
-- [ ] **FND-04**: Пакет `normalize`: `title_norm`, `city_key` (ASCII-slug, словарь синонимов), даты, время и часовой пояс (IANA), дистанции в метрах, отображение типа забега; `country_code` (ISO 3166-1 alpha-2; «Россия» и «Russia» → `RU`), `region` и `city` канонического события; `description` обрезается до 1000 символов по границе слова
+- [x] **FND-04**: Пакет `normalize`: `title_norm`, `city_key` (ASCII-slug, словарь синонимов), даты, время и часовой пояс (IANA), дистанции в метрах, отображение типа забега; `country_code` (ISO 3166-1 alpha-2; «Россия» и «Russia» → `RU`), `region` и `city` канонического события; `description` обрезается до 1000 символов по границе слова
 - [x] **FND-05**: Тестовая инфраструктура с реальной PostgreSQL 17: юнит-тесты `normalize` и интеграционный тест upsert
 - [x] **FND-06**: Конфигурация через переменные окружения; секреты не попадают в репозиторий (`.env` вне репозитория и в `.gitignore`)
 
@@ -145,7 +145,7 @@
 | FND-01 | Phase 2 | Complete |
 | FND-02 | Phase 2 | Complete |
 | FND-03 | Phase 2 | Complete |
-| FND-04 | Phase 2 | Pending |
+| FND-04 | Phase 2 | Complete |
 | FND-05 | Phase 2 | Complete |
 | FND-06 | Phase 2 | Complete |
 | ING-01 | Phase 3 | Pending |
