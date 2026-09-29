@@ -86,7 +86,36 @@ Plans:
   4. Исчезновение записи из источника скрывает событие через `is_listed` только по здоровым прогонам и не меняет `events.status`
   5. Реальные события первого источника лежат в БД с `country_code`, `region`, `city`, каждый запуск виден в `ingest_runs`; описание не длиннее 1000 символов, изображения не сохраняются; санити-проверка на этих данных окончательно подтверждает (или отклоняет) предварительный статус кандидата на fallback `RU` из Phase 1
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — D-01: владелец скачивает /calendar-beg/ с Mac; разбор структуры и вхождений captcha, очищенная golden-фикстура (D-12)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — Tracer: фикстура → Parse (x/net/html) → Prepare → store → PostgreSQL 17, идемпотентность; golden-тесты Parse
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-03-PLAN.md — Справочник субъектов РФ, правила normalize по фикстуре, полный Prepare (D-07, D-09, D-11) и оценка прогона Evaluate (D-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-04-PLAN.md — Миграция 00002, жизненный цикл прогона и наблюдение в store; Runner «оценка до записи» и accept-baseline (D-06)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 03-05-PLAN.md — Fetcher, конфигурация, сырые ответы, планировщик, санити-отчёт, подкоманды worker, dev-PostgreSQL (D-03)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 03-06-PLAN.md — Владелец: первый реальный прогон (suspect), санити-отчёт RU и решение по fallback (D-07)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 03-07-PLAN.md — Запись решения и политики источника, accept-baseline и второй прогон владельцем, проверка критериев ROADMAP
 
 ### Phase 4: Telegram Search
 
@@ -142,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
-| 3. First Source | 0/TBD | Not started | - |
+| 3. First Source | 0/7 | Planned | - |
 | 4. Telegram Search | 0/TBD | Not started | - |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
