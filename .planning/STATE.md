@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Source Discovery / VPS Audit
-status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-09-28T19:55:02.353Z"
+status: verifying
+stopped_at: Completed 01-03-PLAN.md (Phase 1 complete)
+last_updated: "2026-09-29T07:29:31.251Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 01 execution started
-state_head: 0c671bc950a115bd683f6ddecae94c2d6c318ca8
+state_head: dac4b5608b077b6eb364b9dbe8b0ea7d2e4113c3
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 3
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 
 Phase: 01 (Source Discovery / VPS Audit) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-26 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P01 | n/a | 3 tasks | 2 files |
 | Phase 01 P02 | n/a (ожидание владельца между сессиями) | 3 tasks | 2 files |
+| Phase 01 P03 | не измерялась | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - [Phase 01]: GET.RUN: getrun_tos = ask-first (§4.1), решение владельца от 2026-09-26; с VPS в этой фазе только dns get.run и robots.txt
 - [Phase 01]: Runlist: addressCountry в JSON-LD не показывает реальную страну события (иностранное событие 48IstanbulMarathon отдало RU) — вариант правила «страна из JSON-LD» ненадёжен, решение по country_policy остаётся за планом 01-03
 - [Phase 01]: tinyproxy: Allow ограничен 127.0.0.1/::1 (не открытый прокси по критерию плана), но порт 8888 слушает на 0.0.0.0/[::] при неактивном ufw — единственный барьер сетевого уровня отсутствует, судьба tinyproxy решается в Phase 6 (PRD-07)
+- [Phase 01]: DISC-02 — утверждён набор Марафонец (первый источник Phase 3) + ПроБЕГ; Runlist и GET.RUN не вошли (2026-09-29)
+- [Phase 01]: Марафонец включён в набор без подтверждения открытого вопроса G2 (captcha на HTML-страницах) — владелец принял это как риск, закрыть до/во время Phase 3
+- [Phase 01]: tinyproxy — вердикт «не открытый прокси» (Allow ограничивает доступ), но без сетевого барьера при неактивном ufw; закрытие — Phase 6 (PRD-07) с разрешения владельца
 
 ### Pending Todos
 
@@ -83,13 +87,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- [Phase 1]: Доступность российских источников с VPS в Варшаве неизвестна
-- [Phase 1]: `tinyproxy` слушает на всех интерфейсах, назначение неизвестно (менять только с подтверждения)
-- [Phase 6]: Часы VPS не синхронизированы, нет плагина Compose и swap, ожидается перезагрузка
 - [Git]: remote ещё не настроен, push невозможен до настройки владельцем
-- [Phase 1]: у Марафонца на HTML-страницах с VPS слово captcha x5 (механический вердикт: челлендж), источник не установлен, G2 открыт; проверить в браузере или доп. read-only GET (см. 01-SOURCES-REPORT §2.1)
-- Phase 1/3: Runlist /event/skazka26 с VPS 2026-09-28 весит ~30% от baseline 2026-09-25 (~182 КБ) при точном совпадении структурных маркеров (ld+json, SportsEvent, addressCountry) — G2 не закрыт, причина не установлена, см. 01-SOURCES-REPORT §2.3
-- Phase 6: VPS — reboot-required (новое ядро), 24 обновления apt (3 security), unattended-upgrades включён; SSH permitrootlogin=yes и passwordauthentication=yes; docker compose plugin не установлен
+- [Phase 1 → Phase 3]: у утверждённого источника Марафонец на HTML-страницах с VPS слово captcha x5 (механический вердикт: челлендж), источник не установлен; владелец включил Марафонец в набор 2026-09-29 БЕЗ подтверждения этого вопроса (принят как риск) — закрыть до/во время Phase 3 (view-source в браузере либо доп. read-only GET), см. 01-SOURCES-REPORT §2.1, §4.2, §8
+- [Phase 1, справочно, не блокирует]: Runlist (не утверждён) /event/skazka26 с VPS 2026-09-28 весит ~30% от baseline 2026-09-25 при точном совпадении структурных маркеров — G2 не закрыт, причина не установлена; не блокирует Phase 3, т.к. Runlist не входит в утверждённый набор (01-SOURCES-REPORT §2.3, §4.2)
+- [Phase 6]: VPS — reboot-required (новое ядро), 24 обновления apt (3 security), unattended-upgrades включён; SSH permitrootlogin=yes и passwordauthentication=yes; docker compose plugin не установлен; tinyproxy не открытый прокси по критерию плана, но без сетевого барьера на порт 8888 при неактивном ufw — все находки требуют отдельного разрешения владельца (01-VPS-AUDIT.md, PRD-02/PRD-07)
 
 ## Deferred Items
 
@@ -101,6 +102,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-28T19:55:02.342Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-09-29T07:29:31.229Z
+Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
 Resume file: None

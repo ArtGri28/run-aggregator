@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Аудит VPS (`tinyproxy`, часы, `ufw`, Docker и Compose, swap, порты) выполнен по подготовленным командам только на чтение (запуск обёрткой с отдельным ключом проекта после утверждения блоков владельцем), записан без секретов, и на VPS ничего не изменено
   4. Итоговый отчёт содержит способ получения данных, `external_id`, частоту и число запросов для каждого источника
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -47,7 +47,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Анализ прогона 2: 01-VPS-AUDIT.md, ворота G1–G6, решение владельца DISC-02, итоговый отчёт DISC-04
+- [x] 01-03-PLAN.md — Анализ прогона 2: 01-VPS-AUDIT.md, ворота G1–G6, решение владельца DISC-02, итоговый отчёт DISC-04
 
 ### Phase 2: Foundation
 
@@ -131,7 +131,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Source Discovery / VPS Audit | 2/3 | In Progress|  |
+| 1. Source Discovery / VPS Audit | 3/3 | In Progress|  |
 | 2. Foundation | 0/TBD | Not started | - |
 | 3. First Source | 0/TBD | Not started | - |
 | 4. Telegram Search | 0/TBD | Not started | - |
