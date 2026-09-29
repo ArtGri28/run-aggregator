@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-29T16:13:05.502Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-29T16:28:15.723Z"
 last_activity: 2026-09-29
-last_activity_desc: 03-02 complete (tracer fixture → PostgreSQL 17, golden Parse)
-state_head: c6545c6913a4e519b5480ccaa1d572dae1534077
+last_activity_desc: 03-03 complete (RF subjects reference, full Prepare, Evaluate)
+state_head: 9a7a5880ec241b49650e2a1c7b326bf253aff27f
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 7
+  completed_plans: 8
   percent: 33
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 3 (First Source) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
-Last activity: 2026-09-29 — 03-02 complete: tracer фикстура → PostgreSQL 17 (133 события, повтор без изменений), golden Parse
+Last activity: 2026-09-29 — 03-03 complete: справочник 89 субъектов РФ, Prepare по D-07/D-09/D-11/D-14, Evaluate (D-05), golden prepared (133 в каталоге при RU-fallback, 0 при NoFallback, 0 нераспознанных областей)
 
 Progress: [███░░░░░░░] 33%
 
@@ -66,6 +66,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P02 | ~25min | 2 tasks | 6 files |
 | Phase 03 P01 | ~7min (+ действие владельца) | 2 tasks | 2 files |
 | Phase 03 P02 | ~15min | 2 tasks | 14 files |
+| Phase 03 P03 | ~14min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 3]: [Phase 03/01]: область в строках Марафонца — слаг таксономии oblast (русские названия только в data-filters таблицы); у 105 из 133 строк ссылка названия внешняя (регистрация), страницы события на сайте в строке нет — решить в 03-02
 - [Phase 3]: [03-02] D-13: только ссылка названия; marathonec.ru → URL события, внешняя → registration_url, URL = страница календаря; #new_tab срезается
 - [Phase 3]: [03-02] D-14: SourceEvent.RegionSlugs/Regions (все области строки), Region = название из data-filters при одной области, пусто при нескольких; нет словаря областей → ErrStructureNotFound
+- [Phase 3]: [03-03] D-14: составные «Москва и Московская область»/«СПБ и Ленинградская область» — синонимы областей, ClassifyPlace уточняет до города федерального значения по городу; многообластные записи — Stats.MultiRegion, вне порога D-09
+- [Phase 3]: [03-03] Distances распознаёт мили (реальная строка фикстуры 68272); K/К слитно, склейка 100 200 400 м, MaxPlausibleDistanceM = 1000 км
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T16:13:05.480Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-09-29T16:28:15.700Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
