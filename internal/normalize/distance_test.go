@@ -37,6 +37,18 @@ func TestDistances(t *testing.T) {
 		{"5 км, 10 000 м", []int{5000, 10000}},
 		{"10 км, 10 км", []int{10000}},
 		{"Московская область, Химки, 10 км", []int{10000}},
+		{"5K", []int{5000}},
+		{"10К", []int{10000}}, // кириллическая К
+		{"Забег 10K", []int{10000}},
+		{"5 км, 10K", []int{5000, 10000}},
+		{"5 K", nil},
+		{"5кросс", nil},
+		{"100 200 400 м", []int{100, 200, 400}},
+		{"1 000 000 м", []int{1000000}},
+		{"50 миль", []int{80467}},
+		{"100 миль, 14 км, 50 миль, 55 км", []int{14000, 55000, 80467, 160934}}, // строка фикстуры
+		{"1 миля", []int{1609}},
+		{"2.5 км", []int{2500}},
 		{"1 час", nil},
 		{"марафонец", nil},
 		{"10 марафонов", nil},
@@ -44,6 +56,9 @@ func TestDistances(t *testing.T) {
 		{"0 км", nil},
 		{"99999999999 км", nil}, // does not fit event_distances.distance_m INTEGER
 		{"", nil},
+	}
+	if MaxPlausibleDistanceM != 1_000_000 {
+		t.Errorf("MaxPlausibleDistanceM = %d", MaxPlausibleDistanceM)
 	}
 	for _, tt := range tests {
 		if got := Distances(tt.in); !slices.Equal(got, tt.want) {

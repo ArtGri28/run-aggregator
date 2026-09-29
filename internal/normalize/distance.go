@@ -12,9 +12,15 @@ import (
 
 // distanceRe matches "number + optional spaces + unit": integer part with
 // optional space-separated thousands ("42 195"), then an optional decimal
-// point or comma. Go's \b is ASCII-only, so the "no letter after the unit"
-// check lives in distanceMatches.
-var distanceRe = regexp.MustCompile(`(?i)(\d{1,3}(?: \d{3})+|\d+)((?:[.,]\d+)?)\s*(км|km|м|m)`)
+// point or comma. Group 3 is a spaced or attached unit (longer ones first:
+// "миль" before "м"); group 4 is "k"/"к" attached to the number ("5K",
+// "10к"; "10 к старту" is a preposition) and means kilometres. Go's \b is
+// ASCII-only, so the "no letter after the unit" check lives in
+// distanceMatches.
+var distanceRe = regexp.MustCompile(`(?i)(\d{1,3}(?: \d{3})+|\d+)((?:[.,]\d+)?)(?:\s*(км|km|миль|мили|миля|м|m)|([kк]))`)
+
+// metersPerMile — международная миля.
+const metersPerMile = 1609.344
 
 // asciiSpaces turns every Unicode space (NBSP from &nbsp;, thin spaces)
 // into ' ': RE2's \s is ASCII-only.
@@ -48,25 +54,51 @@ var namedDistances = map[string]int{
 }
 
 // Distances extracts distances in whole meters from free text: "21,1 км",
-// "42.2 km", "42 195 м", "500 м", "полумарафон". Named distances count only
-// when there is no numeric one: in "Зелёный марафон 4,2 км" the word is
-// part of the name. Result is sorted and unique, nil if none; durations
-// like "1 час" are not distances (MVP.md §16).
+// "42.2 km", "42 195 м", "500 м", "5K", "50 миль", "полумарафон". Named
+// distances count only when there is no numeric one: in "Зелёный марафон
+// 4,2 км" the word is part of the name. Space-separated groups that as
+// one number exceed MaxPlausibleDistanceM are a list with a shared unit:
+// "100 200 400 м" is 100, 200 and 400 m, while "42 195 м" stays one
+// number. Result is sorted and unique, nil if none; durations like
+// "1 час" are not distances (MVP.md §16).
 func Distances(s string) []int {
 	s = asciiSpaces(s)
 	var out []int
-	for _, m := range distanceMatches(s) {
-		num := strings.ReplaceAll(s[m[2]:m[3]], " ", "") + strings.Replace(s[m[4]:m[5]], ",", ".", 1)
-		if unit := strings.ToLower(s[m[6]:m[7]]); unit == "км" || unit == "km" {
+	toMeters := func(num, unit string) float64 {
+		switch unit {
+		case "км", "km", "k", "к":
 			num += "e3" // exact decimal shift: 21.0975 km -> 21097.5 m
 		}
 		v, err := strconv.ParseFloat(num, 64)
 		if err != nil {
-			continue
+			return 0
+		}
+		if strings.HasPrefix(unit, "мил") {
+			v *= metersPerMile
+		}
+		return math.Round(v)
+	}
+	for _, m := range distanceMatches(s) {
+		intPart, frac := s[m[2]:m[3]], strings.Replace(s[m[4]:m[5]], ",", ".", 1)
+		var unit string
+		if m[6] >= 0 {
+			unit = strings.ToLower(s[m[6]:m[7]])
+		} else {
+			unit = strings.ToLower(s[m[8]:m[9]])
+		}
+		values := []float64{toMeters(strings.ReplaceAll(intPart, " ", "")+frac, unit)}
+		if groups := strings.Fields(intPart); len(groups) > 1 && values[0] > MaxPlausibleDistanceM {
+			values = values[:0]
+			groups[len(groups)-1] += frac
+			for _, g := range groups {
+				values = append(values, toMeters(g, unit))
+			}
 		}
 		// event_distances.distance_m is a positive INTEGER.
-		if meters := math.Round(v); meters > 0 && meters <= math.MaxInt32 {
-			out = append(out, int(meters))
+		for _, meters := range values {
+			if meters > 0 && meters <= math.MaxInt32 {
+				out = append(out, int(meters))
+			}
 		}
 	}
 	if len(out) == 0 {
@@ -95,3 +127,7 @@ func removeDistances(s string) string {
 }
 
 func notLetter(r rune) bool { return !unicode.IsLetter(r) }
+
+// MaxPlausibleDistanceM — больше этого (1000 км) дистанция считается
+// ошибкой разбора: Prepare отбрасывает её со счётчиком.
+const MaxPlausibleDistanceM = 1_000_000

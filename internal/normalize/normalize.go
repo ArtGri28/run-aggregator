@@ -18,7 +18,8 @@ func yoToE(s string) string { return yoReplacer.Replace(s) }
 func notLetterOrDigit(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }
 
 var (
-	romanRe = regexp.MustCompile(`^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$`)
+	// romanRe: edition numbers up to 299, no M or D ("MIX", "DI" are words).
+	romanRe = regexp.MustCompile(`^C{0,2}(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$`)
 	yearRe  = regexp.MustCompile(`^(19|20)\d\d$`)
 
 	titleStopWords = map[string]bool{"забег": true, "марафон": true, "полумарафон": true}
@@ -40,8 +41,9 @@ func TitleNorm(s string) string {
 
 func titleNormStep(s string) string {
 	var out []string
+	cyr := strings.ContainsFunc(s, func(r rune) bool { return unicode.Is(unicode.Cyrillic, r) })
 	for _, w := range strings.FieldsFunc(removeDistances(yoToE(s)), notLetterOrDigit) {
-		if isEdition(w) {
+		if isEdition(w, cyr) {
 			continue
 		}
 		w = strings.ToLower(w)
@@ -53,10 +55,16 @@ func titleNormStep(s string) string {
 	return strings.Join(out, " ")
 }
 
-// isEdition reports an upper-case roman numeral ("XV"; Cyrillic Х counts
-// as X). "Mix" is not one.
-func isEdition(w string) bool {
-	return w != "" && romanRe.MatchString(strings.ReplaceAll(w, "Х", "X"))
+// isEdition reports an upper-case roman edition number ("XV"; Cyrillic Х
+// counts as X). A single I, V or X is an edition only in a title with
+// Cyrillic ("X Московский марафон"): in "Run I Love" or "X-Race" it is a
+// word. "Mix" and "MIX" are not numerals.
+func isEdition(w string, cyrillicTitle bool) bool {
+	w = strings.ReplaceAll(w, "Х", "X")
+	if w == "" || !romanRe.MatchString(w) {
+		return false
+	}
+	return len(w) >= 2 || cyrillicTitle && strings.Contains("IVX", w)
 }
 
 // MaxDescriptionRunes is the events.description limit in characters.

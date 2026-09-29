@@ -17,6 +17,13 @@ func TestCity(t *testing.T) {
 		{"  Нижний   Новгород ", "Нижний Новгород"},
 		{"Гатчина", "Гатчина"},
 		{"Щёлково", "Щёлково"},
+		{"г.о. Химки", "Химки"},
+		{"городской округ Химки", "Химки"},
+		{"п. Токсово", "Токсово"},
+		{"пос. Токсово", "Токсово"},
+		{"д. Горки", "Горки"},
+		{"с. Ильинское", "Ильинское"},
+		{"С.-Петербург", "С.-Петербург"},
 		{"", ""},
 	}
 	for _, tt := range tests {
@@ -76,6 +83,9 @@ func TestCityKey(t *testing.T) {
 		{"Ростов-на-Дону", "rostov-na-donu"},
 		{"Щёлково", "schelkovo"},
 		{"Йошкар-Ола", "yoshkar-ola"},
+		{"Москва — Сити", "moskva-siti"},
+		{"Москва ь Сити", "moskva-siti"}, // слово из одного «ь» не даёт «--» (LO-04)
+		{"Усть-Абакан", "ust-abakan"},
 		{"", ""},
 		{"  (—) ", ""},
 		{long, ""}, // checked by invariant only
@@ -149,6 +159,13 @@ func TestCountry(t *testing.T) {
 		{"Беларусь", RUOnlyFallback, "", false},
 		{"BY", NoFallback, "BY", false},
 		{"KZ", RUOnlyFallback, "KZ", false},
+		{"Belarus", RUOnlyFallback, "", false},
+		// ME-04: распознанное написание России
+		{"Russian Federation", NoFallback, "RU", true},
+		{"Rossiya", NoFallback, "RU", true},
+		// ME-04: нераспознанная явная строка — по политике источника
+		{"Атлантида", RUOnlyFallback, "RU", true},
+		{"Атлантида", NoFallback, "", false},
 		// 2. no country + preliminary RU fallback
 		{"", RUOnlyFallback, "RU", true},
 		// 4. no country, no fallback

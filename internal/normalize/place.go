@@ -10,11 +10,13 @@ import (
 var parensRe = regexp.MustCompile(`\([^)]*\)`)
 
 // cityPrefixes are stripped case-insensitively from the start of a city
-// name. A bare "г" is kept (Гатчина): only "г." or "г " is a prefix.
-var cityPrefixes = []string{"город ", "г.", "г "}
+// name, longest first ("г.о. " before "г."). A bare "г" is kept
+// (Гатчина): only "г." or "г " is a prefix; "С.-Петербург" is untouched.
+var cityPrefixes = []string{"городской округ ", "г.о. ", "город ", "пос. ", "п. ", "д. ", "с. ", "г.", "г "}
 
 // City cleans a display city name: drops parenthesised parts and a
-// leading "г." / "город" prefix, collapses spaces. Case and "ё" are kept.
+// leading settlement prefix ("г.", "г.о.", "п.", "с.", "д.", "город"),
+// collapses spaces. Case and "ё" are kept.
 func City(s string) string {
 	s = collapseSpaces(parensRe.ReplaceAllString(s, " "))
 	for _, p := range cityPrefixes {
@@ -81,18 +83,23 @@ func CityKey(s string) string {
 	if canon, ok := citySynonyms[key]; ok {
 		return canon
 	}
-	var b strings.Builder
-	for _, r := range key {
-		switch {
-		case r == ' ':
-			b.WriteByte('-')
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteString(cyrillicToLatin[r]) // other scripts are dropped
+	// Word by word: a word that transliterates to nothing ("ь", other
+	// scripts) is dropped instead of leaving "--" (LO-04).
+	var words []string
+	for _, w := range strings.Fields(key) {
+		var b strings.Builder
+		for _, r := range w {
+			if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+				b.WriteRune(r)
+			} else {
+				b.WriteString(cyrillicToLatin[r]) // other scripts are dropped
+			}
+		}
+		if b.Len() > 0 {
+			words = append(words, b.String())
 		}
 	}
-	out := strings.Trim(b.String(), "-")
+	out := strings.Join(words, "-")
 	if len(out) > maxCityKeyBytes {
 		out = strings.TrimRight(out[:maxCityKeyBytes], "-")
 	}
@@ -125,7 +132,10 @@ var countryNames = map[string]string{
 	"russia": "RU",
 	"рф":     "RU",
 	"российская федерация": "RU",
-	"rus": "RU",
+	"rus":                "RU",
+	"russian federation": "RU",
+	"rossiya":            "RU",
+	"russian":            "RU",
 }
 
 // CountryCode normalizes a country name or ISO alpha-2 code; "" if unknown.
@@ -155,15 +165,22 @@ const (
 	RUOnlyFallback
 )
 
-// Country applies MVP.md §6 rules 1–4. An explicit country always wins:
-// only RU is in scope, any other explicit country is out of scope under
-// every policy. Without one, RUOnlyFallback yields RU and NoFallback
-// yields out of scope. inScope == false means the caller stores the
-// source event with match_state = out_of_scope and creates no event.
+// Country applies MVP.md §6 rules 1–4. A recognised explicit country
+// wins: only RU is in scope, any other code or a known foreign name
+// (ClassifyRegion → RegionForeign) is out of scope under every policy.
+// Without an explicit country, or with one that is not recognised
+// (ME-04: "cannot determine" is not "foreign"), the source policy
+// decides: RUOnlyFallback yields RU, NoFallback yields out of scope.
+// inScope == false means the caller stores the source event with
+// match_state = out_of_scope and creates no event.
 func Country(explicit string, p CountryPolicy) (code string, inScope bool) {
 	if strings.TrimSpace(explicit) != "" {
-		code = CountryCode(explicit)
-		return code, code == "RU"
+		if code = CountryCode(explicit); code != "" {
+			return code, code == "RU"
+		}
+		if _, kind := ClassifyRegion(explicit); kind == RegionForeign {
+			return "", false
+		}
 	}
 	if p == RUOnlyFallback {
 		return "RU", true
