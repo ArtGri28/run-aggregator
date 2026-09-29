@@ -1,0 +1,26 @@
+# Dev-БД с реальными данными Марафонца (D-03), отдельная от тестовой
+# (docker-compose.test.yml). Порт только на 127.0.0.1, данные на
+# именованном томе (переживают `down`; удаляются только `down -v`),
+# пароль — из .env (DEV_POSTGRES_PASSWORD), в файле его нет.
+# Это не production-состав MVP.md §10.2 — он появляется в Phase 6.
+name: aggregator-dev
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: aggregator
+      POSTGRES_DB: aggregator_dev
+      POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD:?задайте DEV_POSTGRES_PASSWORD в .env}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - aggregator-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U aggregator -d aggregator_dev"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  aggregator-dev-data:
