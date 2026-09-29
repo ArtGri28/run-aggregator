@@ -122,11 +122,13 @@ func TestDate(t *testing.T) {
 		{"17.10.2026", day(2026, 10, 17), true},
 		{"2026-10-17", day(2026, 10, 17), true},
 		{"24.10", day(2026, 10, 24), true},
-		{"05.01", day(2027, 1, 5), true}, // month before now -> next year
-		{"31.08", day(2027, 8, 31), true},
+		{"05.01", day(2027, 1, 5), true},  // month before now -> next year
+		{"31.08", day(2026, 8, 31), true}, // 29 days ago: past, not next year
+		{"28.08", day(2027, 8, 28), true}, // over a month ago -> next year
 		{"29.09", day(2026, 9, 29), true},
 		{"01.09", day(2026, 9, 1), true},
 		{"5.1", day(2027, 1, 5), true},
+		{"29.08", day(2026, 8, 29), true}, // exactly a month ago: still past
 		{"31.02.2026", time.Time{}, false},
 		{"32/01/2026", time.Time{}, false},
 		{"10 октября", time.Time{}, false},
@@ -137,6 +139,32 @@ func TestDate(t *testing.T) {
 		if ok != tt.ok || !got.Equal(tt.want) || (ok && got.Location() != time.UTC) {
 			t.Errorf("Date(%q) = (%v, %v), want (%v, %v)", tt.in, got, ok, tt.want, tt.ok)
 		}
+	}
+}
+
+func TestDateAcrossBoundaries(t *testing.T) {
+	msk := time.FixedZone("MSK", 3*3600)
+	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		in   string
+		now  time.Time
+		want time.Time
+	}{
+		{"30.09", time.Date(2026, 10, 1, 10, 0, 0, 0, msk), day(2026, 9, 30)},
+		{"31.12", time.Date(2027, 1, 1, 10, 0, 0, 0, msk), day(2026, 12, 31)},
+		{"05.01", time.Date(2026, 12, 20, 10, 0, 0, 0, msk), day(2027, 1, 5)},
+		// 00:30 MSK on 1 October is still 30 September in UTC; today is MSK.
+		{"30.09", time.Date(2026, 10, 1, 0, 30, 0, 0, msk), day(2026, 9, 30)},
+		{"29.02", time.Date(2027, 12, 15, 10, 0, 0, 0, msk), day(2028, 2, 29)},
+	}
+	for _, tt := range tests {
+		got, ok := Date(tt.in, tt.now)
+		if !ok || !got.Equal(tt.want) {
+			t.Errorf("Date(%q, %v) = (%v, %v), want %v", tt.in, tt.now, got, ok, tt.want)
+		}
+	}
+	if _, ok := Date("29.02", time.Date(2026, 9, 29, 10, 0, 0, 0, msk)); ok {
+		t.Errorf("Date(29.02) in a non-leap target year: ok = true, want false")
 	}
 }
 

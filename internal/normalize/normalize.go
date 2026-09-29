@@ -106,9 +106,10 @@ var (
 )
 
 // Date parses dd/mm/yyyy (Марафонец), dd.mm.yyyy, yyyy-mm-dd and
-// year-less dd.mm (ПроБЕГ). For dd.mm the year is now's, or the next one
-// if the month is before now's month. Result is midnight UTC; impossible
-// dates (31.02) are rejected.
+// year-less dd.mm (ПроБЕГ). A dd.mm date is placed in the window
+// [today−1 month, today+11 months), today taken in now's location: a race
+// that ended last week stays in the past instead of moving a year ahead.
+// Result is midnight UTC; impossible dates (31.02) are rejected.
 func Date(s string, now time.Time) (time.Time, bool) {
 	s = strings.TrimSpace(s)
 	var y, m, d int
@@ -117,10 +118,8 @@ func Date(s string, now time.Time) (time.Time, bool) {
 	} else if p := isoRe.FindStringSubmatch(s); p != nil {
 		y, m, d = atoi(p[1]), atoi(p[2]), atoi(p[3])
 	} else if p := dmRe.FindStringSubmatch(s); p != nil {
-		d, m, y = atoi(p[1]), atoi(p[2]), now.Year()
-		if time.Month(m) < now.Month() {
-			y++
-		}
+		d, m = atoi(p[1]), atoi(p[2])
+		y = yearFor(d, time.Month(m), now)
 	} else {
 		return time.Time{}, false
 	}
@@ -129,6 +128,19 @@ func Date(s string, now time.Time) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return t, true
+}
+
+// yearFor picks the year that puts dd.mm into [today−1 month, today+11 months).
+func yearFor(d int, m time.Month, now time.Time) int {
+	y, nm, nd := now.Date()
+	today := time.Date(y, nm, nd, 0, 0, 0, 0, time.UTC)
+	switch t := time.Date(y, m, d, 0, 0, 0, 0, time.UTC); {
+	case t.Before(today.AddDate(0, -1, 0)):
+		return y + 1
+	case !t.Before(today.AddDate(0, 11, 0)):
+		return y - 1
+	}
+	return y
 }
 
 var timeRe = regexp.MustCompile(`^(\d{1,2})[:.](\d{2})$`)

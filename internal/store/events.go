@@ -251,6 +251,30 @@ func eventArgs(e *event.Event) []any {
 	}
 }
 
+// canonicalize brings e to the form the database returns, so a re-save of
+// the same data compares equal (ING-05): dates become midnight UTC of their
+// own calendar day (the day pgx stores), StartTime becomes "HH:MM".
+func canonicalize(e *event.Event) error {
+	e.StartDate = dateOnly(e.StartDate)
+	if e.EndDate != nil {
+		d := dateOnly(*e.EndDate)
+		e.EndDate = &d
+	}
+	if e.StartTime != "" {
+		t, err := time.Parse("15:04", e.StartTime)
+		if err != nil {
+			return fmt.Errorf("start time %q: want HH:MM", e.StartTime)
+		}
+		e.StartTime = t.Format("15:04")
+	}
+	return nil
+}
+
+func dateOnly(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
 // SaveEvent inserts (e.ID == 0) or updates (e.ID != 0) the canonical
 // event in one transaction. On update, updated_at only advances if a
 // canonical field or the distance set actually changed (ING-05);
@@ -262,6 +286,9 @@ func (s *Store) SaveEvent(ctx context.Context, e *event.Event) (bool, error) {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := canonicalize(e); err != nil {
+		return false, fmt.Errorf("save event: %w", err)
+	}
 	distances := normalizeDistances(e.Distances)
 
 	if e.ID == 0 {

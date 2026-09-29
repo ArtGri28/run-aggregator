@@ -509,3 +509,53 @@ func TestEventConstraints(t *testing.T) {
 func isNotFound(err error) bool {
 	return errors.Is(err, ErrNotFound)
 }
+
+// A caller passing non-canonical but equal values (MSK-midnight date,
+// "9:05") must not see changed=true or a moving updated_at on re-save.
+func TestSaveEventCanonicalRoundTrip(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	msk := time.FixedZone("MSK", 3*3600)
+
+	build := func() *event.Event {
+		e := sampleEvent()
+		e.StartDate = time.Date(2026, 10, 17, 0, 0, 0, 0, msk)
+		end := time.Date(2026, 10, 18, 9, 30, 0, 0, msk)
+		e.EndDate = &end
+		e.StartTime = "9:05"
+		return e
+	}
+
+	e := build()
+	if _, err := s.SaveEvent(ctx, e); err != nil {
+		t.Fatalf("SaveEvent (insert): %v", err)
+	}
+	got, err := s.GetEvent(ctx, e.ID)
+	if err != nil {
+		t.Fatalf("GetEvent: %v", err)
+	}
+	if !got.StartDate.Equal(mustDateFixed("2026-10-17")) || !got.EndDate.Equal(mustDateFixed("2026-10-18")) || got.StartTime != "09:05" {
+		t.Fatalf("stored %v / %v / %q, want 2026-10-17 / 2026-10-18 / 09:05", got.StartDate, *got.EndDate, got.StartTime)
+	}
+
+	for i := 0; i < 2; i++ {
+		again := build()
+		again.ID = e.ID
+		changed, err := s.SaveEvent(ctx, again)
+		if err != nil {
+			t.Fatalf("SaveEvent (re-save %d): %v", i, err)
+		}
+		if changed {
+			t.Fatalf("re-save %d: changed = true, want false", i)
+		}
+		if !again.UpdatedAt.Equal(got.UpdatedAt) {
+			t.Fatalf("re-save %d: UpdatedAt %v -> %v", i, got.UpdatedAt, again.UpdatedAt)
+		}
+	}
+
+	bad := build()
+	bad.StartTime = "10:00:30"
+	if _, err := s.SaveEvent(ctx, bad); err == nil {
+		t.Fatalf("SaveEvent with StartTime %q: err = nil, want error", bad.StartTime)
+	}
+}
