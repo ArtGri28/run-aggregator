@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-29T15:45:04.428Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-09-29T15:55:34.771Z"
 last_activity: 2026-09-29
-last_activity_desc: Phase 1 complete (UAT 5/5, security verified), transitioned to Phase 03
-state_head: 11939b35a3947e07fa27d71597a58b621cfde13e
+last_activity_desc: 03-01 complete (golden fixture, G2 closed)
+state_head: d49788c8df5a1a665c502649c88432f96e4053c1
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 5
+  completed_plans: 6
   percent: 33
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-25)
 
 **Core value:** Полный, актуальный и без дублей каталог забегов
-**Current focus:** Phase 03 — First Source (Марафонец)
+**Current focus:** Phase 3 — First Source
 
 ## Current Position
 
-Phase: 3 (First Source) — READY TO EXECUTE
-Plan: Not started
+Phase: 3 (First Source) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-09-29 — Phase 1 complete (UAT 5/5, security verified), transitioned to Phase 03
+Last activity: 2026-09-29 — 03-01 complete: golden-фикстура /calendar-beg/ (133 строки), G2 закрыт
 
 Progress: [███░░░░░░░] 33%
 
@@ -64,6 +64,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 01 P03 | не измерялась | 3 tasks | 3 files |
 | Phase 02 P01 | ~50min | 2 tasks | 11 files |
 | Phase 02 P02 | ~25min | 2 tasks | 6 files |
+| Phase 03 P01 | ~7min (+ действие владельца) | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 02]: [Phase 2/01]: все суррогатные ключи BIGINT (включая sources.id); только 2 частичных idx_events_* индекса из MVP.md §4.6 (без лишнего idx_events_start_date_id из исследования)
 - [Phase 02]: [Phase 2/01]: коммиты делает владелец вручную (git commit исполнителя отклоняется системой разрешений); код 02-01/02-02 закоммичен владельцем (31152a0…8db6ff4, исправления ревью b369701)
 - [Phase 02]: [Phase 2/02]: TitleNorm повторяет шаг до неподвижной точки (идемпотентность при «10 - км»); Distances отбрасывает значения > MaxInt32 (distance_m INTEGER); словарь городов — только moscow и saint-petersburg
+- [Phase 3]: [Phase 03/01]: G2 закрыт — captcha ×5 на /calendar-beg/ это CSS формы комментариев темы Newsmag (×4) и var tds_captcha="" (×1), шаблонный элемент, не челлендж; 133 строки post-row, HTTP 200
+- [Phase 3]: [Phase 03/01]: область в строках Марафонца — слаг таксономии oblast (русские названия только в data-filters таблицы); у 105 из 133 строк ссылка названия внешняя (регистрация), страницы события на сайте в строке нет — решить в 03-02
 
 ### Pending Todos
 
@@ -95,7 +98,7 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - [Git]: remote ещё не настроен, push невозможен до настройки владельцем
-- [Phase 1 → Phase 3]: у утверждённого источника Марафонец на HTML-страницах с VPS слово captcha x5 (механический вердикт: челлендж), источник не установлен; владелец включил Марафонец в набор 2026-09-29 БЕЗ подтверждения этого вопроса (принят как риск) — закрыть до/во время Phase 3 (view-source в браузере либо доп. read-only GET), см. 01-SOURCES-REPORT §2.1, §4.2, §8
+- ~~[Phase 1 → Phase 3]: у утверждённого источника Марафонец на HTML-страницах с VPS слово captcha x5 (механический вердикт: челлендж), источник не установлен~~ — ЗАКРЫТО 2026-09-29 планом 03-01: один GET /calendar-beg/ с Mac владельца дал HTTP 200 и 133 строки post-row; все 5 вхождений captcha — шаблон темы Newsmag (4 селектора `.td-warning-captcha*` формы комментариев в `<style id="wpr-usedcss">` и `var tds_captcha="";` в настройках темы), челленджа нет (internal/ingest/sources/marathonec/testdata/README.md, раздел «captcha (D-01)»)
 - [Phase 1, справочно, не блокирует]: Runlist (не утверждён) /event/skazka26 с VPS 2026-09-28 весит ~30% от baseline 2026-09-25 при точном совпадении структурных маркеров — G2 не закрыт, причина не установлена; не блокирует Phase 3, т.к. Runlist не входит в утверждённый набор (01-SOURCES-REPORT §2.3, §4.2)
 - [Phase 6]: VPS — reboot-required (новое ядро), 24 обновления apt (3 security), unattended-upgrades включён; SSH permitrootlogin=yes и passwordauthentication=yes; docker compose plugin не установлен; tinyproxy не открытый прокси по критерию плана, но без сетевого барьера на порт 8888 при неактивном ufw — все находки требуют отдельного разрешения владельца (01-VPS-AUDIT.md, PRD-02/PRD-07)
 
@@ -109,6 +112,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T14:31:10.641Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-first-source/03-CONTEXT.md
+Last session: 2026-09-29T15:55:34.747Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
