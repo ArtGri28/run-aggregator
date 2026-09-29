@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,6 +24,17 @@ func TestMain(m *testing.M) {
 	s, err := Open(ctx, dsn)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "open test store:", err)
+		os.Exit(1)
+	}
+	// TRUNCATE в тестах уничтожил бы данные dev-БД (LO-11, D-03):
+	// работаем только с базой, имя которой оканчивается на _test.
+	var dbName string
+	if err := s.pool.QueryRow(ctx, "SELECT current_database()").Scan(&dbName); err != nil {
+		fmt.Fprintln(os.Stderr, "test store: current_database:", err)
+		os.Exit(1)
+	}
+	if !strings.HasSuffix(dbName, "_test") {
+		fmt.Fprintln(os.Stderr, "TEST_DATABASE_URL: имя базы должно оканчиваться на _test")
 		os.Exit(1)
 	}
 	if err := s.Migrate(ctx); err != nil {
@@ -86,8 +98,10 @@ func TestUpsertSourceEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSource: %v", err)
 	}
+	run1 := newRun(t, s, sourceID)
+	run2 := newRun(t, s, sourceID)
 
-	id, changed, err := s.UpsertSourceEvent(ctx, sourceID, "60817", "https://example.test/60817", []byte(`{"title":"A"}`))
+	id, changed, err := s.UpsertSourceEvent(ctx, sourceID, run1, "60817", "https://example.test/60817", []byte(`{"title":"A"}`))
 	if err != nil {
 		t.Fatalf("UpsertSourceEvent (insert): %v", err)
 	}
@@ -104,10 +118,13 @@ func TestUpsertSourceEvent(t *testing.T) {
 	if err := row.Scan(&firstSeen1, &lastSeen1, &hash1); err != nil {
 		t.Fatalf("scan after insert: %v", err)
 	}
+	if got := lastRunID(t, id); got != run1 {
+		t.Fatalf("last_run_id after insert = %d, want %d", got, run1)
+	}
 
 	time.Sleep(10 * time.Millisecond)
 
-	idAgain, changed, err := s.UpsertSourceEvent(ctx, sourceID, "60817", "https://example.test/60817", []byte(`{"title":"A"}`))
+	idAgain, changed, err := s.UpsertSourceEvent(ctx, sourceID, run2, "60817", "https://example.test/60817", []byte(`{"title":"A"}`))
 	if err != nil {
 		t.Fatalf("UpsertSourceEvent (same payload): %v", err)
 	}
@@ -133,8 +150,11 @@ func TestUpsertSourceEvent(t *testing.T) {
 	if lastSeen2.Before(lastSeen1) {
 		t.Fatalf("last_seen_at went backwards: %v -> %v", lastSeen1, lastSeen2)
 	}
+	if got := lastRunID(t, id); got != run2 {
+		t.Fatalf("last_run_id after unchanged repeat = %d, want %d", got, run2)
+	}
 
-	idChanged, changed, err := s.UpsertSourceEvent(ctx, sourceID, "60817", "https://example.test/60817", []byte(`{"title":"B"}`))
+	idChanged, changed, err := s.UpsertSourceEvent(ctx, sourceID, run2, "60817", "https://example.test/60817", []byte(`{"title":"B"}`))
 	if err != nil {
 		t.Fatalf("UpsertSourceEvent (changed payload): %v", err)
 	}
@@ -157,7 +177,7 @@ func TestUpsertSourceEvent(t *testing.T) {
 		t.Fatalf("payload = %q, want it to contain the new title", payload3)
 	}
 
-	otherID, changed, err := s.UpsertSourceEvent(ctx, sourceID, "60818", "https://example.test/60818", []byte(`{"title":"C"}`))
+	otherID, changed, err := s.UpsertSourceEvent(ctx, sourceID, run2, "60818", "https://example.test/60818", []byte(`{"title":"C"}`))
 	if err != nil {
 		t.Fatalf("UpsertSourceEvent (other external_id): %v", err)
 	}
@@ -398,11 +418,12 @@ func TestSetMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSource: %v", err)
 	}
-	se1, _, err := s.UpsertSourceEvent(ctx, sourceID, "1", "https://example.test/1", []byte(`{}`))
+	runID := newRun(t, s, sourceID)
+	se1, _, err := s.UpsertSourceEvent(ctx, sourceID, runID, "1", "https://example.test/1", []byte(`{}`))
 	if err != nil {
 		t.Fatalf("UpsertSourceEvent 1: %v", err)
 	}
-	se2, _, err := s.UpsertSourceEvent(ctx, sourceID, "2", "https://example.test/2", []byte(`{}`))
+	se2, _, err := s.UpsertSourceEvent(ctx, sourceID, runID, "2", "https://example.test/2", []byte(`{}`))
 	if err != nil {
 		t.Fatalf("UpsertSourceEvent 2: %v", err)
 	}
@@ -558,4 +579,498 @@ func TestSaveEventCanonicalRoundTrip(t *testing.T) {
 	if _, err := s.SaveEvent(ctx, bad); err == nil {
 		t.Fatalf("SaveEvent with StartTime %q: err = nil, want error", bad.StartTime)
 	}
+}
+
+// scalar читает одно значение прямым запросом (подготовка и проверки
+// тестов; SQL допустим только в internal/store).
+func scalar[T any](t *testing.T, q string, args ...any) T {
+	t.Helper()
+	var v T
+	if err := testStorePkg.pool.QueryRow(context.Background(), q, args...).Scan(&v); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	return v
+}
+
+func exec(t *testing.T, q string, args ...any) {
+	t.Helper()
+	if _, err := testStorePkg.pool.Exec(context.Background(), q, args...); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+}
+
+// newRun создаёт завершённый прогон ok — на него ссылается last_run_id.
+func newRun(t *testing.T, s *Store, sourceID int64) int64 {
+	t.Helper()
+	return finishedRun(t, s, sourceID, RunFinish{Status: "ok"})
+}
+
+func finishedRun(t *testing.T, s *Store, sourceID int64, f RunFinish) int64 {
+	t.Helper()
+	ctx := context.Background()
+	id, err := s.StartRun(ctx, sourceID, time.Now(), time.Hour)
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if err := s.FinishRun(ctx, id, f); err != nil {
+		t.Fatalf("FinishRun(%s): %v", f.Status, err)
+	}
+	return id
+}
+
+func lastRunID(t *testing.T, sourceEventID int64) int64 {
+	t.Helper()
+	return scalar[int64](t, "SELECT last_run_id FROM source_events WHERE id = $1", sourceEventID)
+}
+
+func TestSaveEventFor(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := newRun(t, s, src)
+	upsert := func(ext string) int64 {
+		t.Helper()
+		id, _, err := s.UpsertSourceEvent(ctx, src, run, ext, "https://example.test/"+ext, []byte(`{}`))
+		if err != nil {
+			t.Fatalf("UpsertSourceEvent %s: %v", ext, err)
+		}
+		return id
+	}
+
+	se := upsert("1")
+	e := sampleEvent()
+	created, changed, err := s.SaveEventFor(ctx, se, e)
+	if err != nil || !created || changed {
+		t.Fatalf("SaveEventFor (new) = %v, %v, %v; want created", created, changed, err)
+	}
+	if got := scalar[int64](t, "SELECT event_id FROM source_events WHERE id = $1", se); got != e.ID {
+		t.Fatalf("event_id = %d, want %d", got, e.ID)
+	}
+	if got := scalar[string](t, "SELECT match_state FROM source_events WHERE id = $1", se); got != "auto" {
+		t.Fatalf("match_state = %q, want auto", got)
+	}
+	before, err := s.GetEvent(ctx, e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	again := sampleEvent()
+	created, changed, err = s.SaveEventFor(ctx, se, again)
+	if err != nil || created || changed || again.ID != e.ID {
+		t.Fatalf("SaveEventFor (same) = %v, %v, %v, id %d; want unchanged event %d", created, changed, err, again.ID, e.ID)
+	}
+	after, err := s.GetEvent(ctx, e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Fatalf("updated_at moved on unchanged save: %v -> %v", before.UpdatedAt, after.UpdatedAt)
+	}
+
+	// Источник без явного статуса не сбрасывает cancelled (Pitfall 10).
+	exec(t, "UPDATE events SET status = 'cancelled' WHERE id = $1", e.ID)
+	if _, _, err := s.SaveEventFor(ctx, se, sampleEvent()); err != nil {
+		t.Fatalf("SaveEventFor (after cancel): %v", err)
+	}
+	if got := scalar[string](t, "SELECT status FROM events WHERE id = $1", e.ID); got != "cancelled" {
+		t.Fatalf("status = %q, want cancelled", got)
+	}
+
+	// Бывшая out_of_scope запись получает событие.
+	se2 := upsert("2")
+	if err := s.SetOutOfScope(ctx, se2); err != nil {
+		t.Fatal(err)
+	}
+	e2 := sampleEvent()
+	if created, _, err := s.SaveEventFor(ctx, se2, e2); err != nil || !created {
+		t.Fatalf("SaveEventFor (out_of_scope) = %v, %v; want created", created, err)
+	}
+	if got := scalar[string](t, "SELECT match_state FROM source_events WHERE id = $1", se2); got != "auto" {
+		t.Fatalf("match_state after out_of_scope = %q, want auto", got)
+	}
+
+	// Ошибка внутри транзакции откатывает и событие, и связь.
+	se3 := upsert("3")
+	events := scalar[int64](t, "SELECT count(*) FROM events")
+	bad := sampleEvent()
+	bad.Description = strings.Repeat("а", 1001)
+	if _, _, err := s.SaveEventFor(ctx, se3, bad); err == nil {
+		t.Fatal("SaveEventFor (1001 chars) err = nil, want CHECK violation")
+	}
+	if got := scalar[int64](t, "SELECT count(*) FROM events"); got != events {
+		t.Fatalf("events count %d -> %d after failed save", events, got)
+	}
+	if got := scalar[string](t, "SELECT match_state || ':' || (event_id IS NULL) FROM source_events WHERE id = $1", se3); got != "new:true" {
+		t.Fatalf("link after failed save = %q, want new:true", got)
+	}
+
+	if _, _, err := s.SaveEventFor(ctx, 999999999, sampleEvent()); !isNotFound(err) {
+		t.Fatalf("SaveEventFor(nonexistent) err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSetOutOfScope(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := newRun(t, s, src)
+	linked := func(ext string) (int64, int64) {
+		t.Helper()
+		se, _, err := s.UpsertSourceEvent(ctx, src, run, ext, "https://example.test/"+ext, []byte(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		e := sampleEvent()
+		if _, _, err := s.SaveEventFor(ctx, se, e); err != nil {
+			t.Fatal(err)
+		}
+		return se, e.ID
+	}
+
+	se1, ev1 := linked("1")
+	exec(t, "UPDATE events SET status = 'postponed' WHERE id = $1", ev1)
+	if err := s.SetOutOfScope(ctx, se1); err != nil {
+		t.Fatalf("SetOutOfScope: %v", err)
+	}
+	if got := scalar[string](t, "SELECT match_state || ':' || (event_id IS NULL) FROM source_events WHERE id = $1", se1); got != "out_of_scope:true" {
+		t.Fatalf("source event = %q, want out_of_scope:true", got)
+	}
+	if got := scalar[string](t, "SELECT is_listed || ':' || status FROM events WHERE id = $1", ev1); got != "false:postponed" {
+		t.Fatalf("event = %q, want false:postponed", got)
+	}
+
+	// Событие с другой живой связью остаётся видимым.
+	se2, ev2 := linked("2")
+	se3, _, err := s.UpsertSourceEvent(ctx, src, run, "3", "https://example.test/3", []byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMatch(ctx, se3, &ev2, event.MatchAuto); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetOutOfScope(ctx, se2); err != nil {
+		t.Fatal(err)
+	}
+	if !scalar[bool](t, "SELECT is_listed FROM events WHERE id = $1", ev2) {
+		t.Fatal("event with another linked source event got is_listed = false")
+	}
+
+	if err := s.SetOutOfScope(ctx, 999999999); !isNotFound(err) {
+		t.Fatalf("SetOutOfScope(nonexistent) err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRunLifecycle(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LastRun(ctx, src); !isNotFound(err) {
+		t.Fatalf("LastRun without runs err = %v, want ErrNotFound", err)
+	}
+
+	id, err := s.StartRun(ctx, src, time.Now(), time.Hour)
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	run, err := s.LastRun(ctx, src)
+	if err != nil || run.ID != id || run.Status != "running" || run.FinishedAt != nil {
+		t.Fatalf("LastRun after start = %+v, %v; want running %d", run, err, id)
+	}
+
+	snap := []byte(`[{"external_id":"1"}]`)
+	f := RunFinish{Status: "suspect", Fetched: 10, Parsed: 10, Rejected: 1, OutOfScope: 2,
+		Error: "первый прогон источника — требуется принятие", Metrics: []byte(`{"valid":9}`), Snapshot: snap}
+	if err := s.FinishRun(ctx, id, f); err != nil {
+		t.Fatalf("FinishRun: %v", err)
+	}
+	run, err = s.LastRun(ctx, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != "suspect" || run.FinishedAt == nil || run.Parsed != 10 || run.Upserted != 0 ||
+		run.Error != f.Error || !strings.Contains(string(run.Snapshot), `"external_id"`) || run.AcceptedAt != nil {
+		t.Fatalf("LastRun after finish = %+v", run)
+	}
+	if got := scalar[string](t, "SELECT fetched || '/' || rejected || '/' || out_of_scope || '/' || (metrics->>'valid') FROM ingest_runs WHERE id = $1", id); got != "10/1/2/9" {
+		t.Fatalf("counters/metrics = %q, want 10/1/2/9", got)
+	}
+	if err := s.FinishRun(ctx, id, RunFinish{Status: "ok"}); !isNotFound(err) {
+		t.Fatalf("FinishRun (finished run) err = %v, want ErrNotFound", err)
+	}
+
+	// Следующий завершённый прогон очищает снимок предыдущего (D-06).
+	okID := finishedRun(t, s, src, RunFinish{Status: "ok", Snapshot: snap})
+	if !scalar[bool](t, "SELECT snapshot IS NULL FROM ingest_runs WHERE id = $1", id) {
+		t.Fatal("snapshot of the previous run was not cleared")
+	}
+	if got := scalar[string](t, "SELECT metrics::text FROM ingest_runs WHERE id = $1", okID); got != "{}" {
+		t.Fatalf("nil metrics stored as %q, want {}", got)
+	}
+	if err := s.AcceptRun(ctx, id, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("AcceptRun (old run) err = %v, want ErrNotAcceptable", err)
+	}
+	if err := s.AcceptRun(ctx, okID, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("AcceptRun (ok run) err = %v, want ErrNotAcceptable", err)
+	}
+	noSnap := finishedRun(t, s, src, RunFinish{Status: "suspect"})
+	if err := s.AcceptRun(ctx, noSnap, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("AcceptRun (no snapshot) err = %v, want ErrNotAcceptable", err)
+	}
+
+	withSnap := finishedRun(t, s, src, RunFinish{Status: "suspect", Snapshot: snap})
+	running, err := s.StartRun(ctx, src, time.Now(), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AcceptRun(ctx, withSnap, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("AcceptRun (not last) err = %v, want ErrNotAcceptable", err)
+	}
+	if err := s.FinishRun(ctx, running, RunFinish{Status: "suspect", Snapshot: snap, Error: strings.Repeat("я", 1500)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := scalar[int](t, "SELECT char_length(error) FROM ingest_runs WHERE id = $1", running); got != 1000 {
+		t.Fatalf("error length = %d, want 1000", got)
+	}
+
+	note := "принят вручную; исходная причина: x"
+	if err := s.AcceptRun(ctx, running, 7, note); err != nil {
+		t.Fatalf("AcceptRun: %v", err)
+	}
+	run, err = s.LastRun(ctx, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Status != "ok" || run.AcceptedAt == nil || run.Snapshot != nil || run.Upserted != 7 || run.Error != note {
+		t.Fatalf("LastRun after accept = %+v", run)
+	}
+	if err := s.AcceptRun(ctx, running, 7, note); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("AcceptRun (twice) err = %v, want ErrNotAcceptable", err)
+	}
+}
+
+func TestStartRunExclusive(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.EnsureSource(ctx, "probeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := 45 * time.Minute
+
+	first, err := s.StartRun(ctx, src, time.Now(), stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartRun(ctx, src, time.Now(), stale); !errors.Is(err, ErrRunInProgress) {
+		t.Fatalf("second StartRun err = %v, want ErrRunInProgress", err)
+	}
+	if _, err := s.StartRun(ctx, other, time.Now(), stale); err != nil {
+		t.Fatalf("StartRun (other source): %v", err)
+	}
+
+	exec(t, "UPDATE ingest_runs SET started_at = now() - interval '2 hours' WHERE id = $1", first)
+	next, err := s.StartRun(ctx, src, time.Now(), stale)
+	if err != nil || next == first {
+		t.Fatalf("StartRun after stale = %d, %v; want a new run", next, err)
+	}
+	got := scalar[string](t, "SELECT status || '|' || error || '|' || (finished_at IS NOT NULL) FROM ingest_runs WHERE id = $1", first)
+	if got != "failed|прерван: процесс остановился|true" {
+		t.Fatalf("stale run = %q", got)
+	}
+}
+
+func TestBaselineRuns(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	okRun := func(parsed int) {
+		finishedRun(t, s, src, RunFinish{Status: "ok", Parsed: parsed, Metrics: []byte(fmt.Sprintf(`{"valid":%d}`, parsed))})
+	}
+	parsedOf := func(rows []BaselineRun) []int {
+		var out []int
+		for _, r := range rows {
+			out = append(out, r.Parsed)
+		}
+		return out
+	}
+
+	if rows, err := s.BaselineRuns(ctx, src, 7); err != nil || len(rows) != 0 {
+		t.Fatalf("BaselineRuns (no runs) = %v, %v", rows, err)
+	}
+	for i := 1; i <= 9; i++ {
+		okRun(i)
+	}
+	finishedRun(t, s, src, RunFinish{Status: "failed", Parsed: 50})
+	rows, err := s.BaselineRuns(ctx, src, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(parsedOf(rows)); got != "[9 8 7 6 5 4 3]" {
+		t.Fatalf("baseline without accepted = %s, want [9 8 7 6 5 4 3]", got)
+	}
+	var m struct{ Valid int }
+	if err := json.Unmarshal(rows[0].Metrics, &m); err != nil || m.Valid != 9 {
+		t.Fatalf("metrics = %s, %v; want valid 9", rows[0].Metrics, err)
+	}
+
+	accepted := finishedRun(t, s, src, RunFinish{Status: "suspect", Parsed: 100, Snapshot: []byte(`[]`)})
+	if err := s.AcceptRun(ctx, accepted, 100, "принят вручную"); err != nil {
+		t.Fatal(err)
+	}
+	okRun(101)
+	okRun(102)
+	finishedRun(t, s, src, RunFinish{Status: "suspect", Parsed: 5})
+
+	rows, err = s.BaselineRuns(ctx, src, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(parsedOf(rows)); got != "[102 101 100]" {
+		t.Fatalf("baseline after accept = %s, want [102 101 100]", got)
+	}
+	rows, err = s.BaselineRuns(ctx, src, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(parsedOf(rows)); got != "[102 101]" {
+		t.Fatalf("baseline limit 2 = %s, want [102 101]", got)
+	}
+}
+
+func TestSourceHealth(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.SourceHealth(ctx, src)
+	if err != nil || h.HasRuns {
+		t.Fatalf("SourceHealth (no runs) = %+v, %v", h, err)
+	}
+
+	finishedRun(t, s, src, RunFinish{Status: "ok"})
+	finishedRun(t, s, src, RunFinish{Status: "failed", Error: "загрузка: timeout"})
+	finishedRun(t, s, src, RunFinish{Status: "failed", Error: "структура не найдена"})
+	h, err = s.SourceHealth(ctx, src)
+	if err != nil || !h.HasRuns || h.LastStatus != "failed" || h.LastReason != "структура не найдена" ||
+		h.ConsecutiveFailures != 2 || h.LastStartedAt.IsZero() {
+		t.Fatalf("SourceHealth = %+v, %v; want failed, 2 in a row", h, err)
+	}
+
+	finishedRun(t, s, src, RunFinish{Status: "suspect", Error: "первый прогон"})
+	finishedRun(t, s, src, RunFinish{Status: "failed", Error: "parsed = 0"})
+	if h, err = s.SourceHealth(ctx, src); err != nil || h.ConsecutiveFailures != 1 {
+		t.Fatalf("SourceHealth after suspect = %+v, %v; want 1", h, err)
+	}
+
+	finishedRun(t, s, src, RunFinish{Status: "ok"})
+	if h, err = s.SourceHealth(ctx, src); err != nil || h.LastStatus != "ok" || h.LastReason != "" || h.ConsecutiveFailures != 0 {
+		t.Fatalf("SourceHealth after ok = %+v, %v", h, err)
+	}
+}
+
+func TestObserve(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := dateOnly(time.Now())
+	future, past := today.AddDate(0, 1, 0), today.AddDate(0, 0, -10)
+	const goneRuns, goneAfter = 3, 72 * time.Hour
+
+	upsert := func(run int64, ext string) int64 {
+		t.Helper()
+		id, _, err := s.UpsertSourceEvent(ctx, src, run, ext, "https://example.test/"+ext, []byte(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	run1 := newRun(t, s, src)
+	ids, events := map[string]int64{}, map[string]int64{}
+	for ext, date := range map[string]time.Time{"x": future, "z": future, "y": future, "p": past} {
+		ids[ext] = upsert(run1, ext)
+		e := sampleEvent()
+		e.StartDate, e.EndDate = date, nil
+		if _, _, err := s.SaveEventFor(ctx, ids[ext], e); err != nil {
+			t.Fatal(err)
+		}
+		events[ext] = e.ID
+	}
+	ids["o"] = upsert(run1, "o")
+	if err := s.SetOutOfScope(ctx, ids["o"]); err != nil {
+		t.Fatal(err)
+	}
+	exec(t, "UPDATE events SET status = 'cancelled' WHERE id = $1", events["x"])
+
+	observe := func(seen ...string) ObserveStats {
+		t.Helper()
+		run := newRun(t, s, src)
+		for _, ext := range seen {
+			upsert(run, ext)
+		}
+		st, err := s.Observe(ctx, src, run, today, goneRuns, goneAfter)
+		if err != nil {
+			t.Fatalf("Observe: %v", err)
+		}
+		return st
+	}
+	state := func(ext string) string {
+		t.Helper()
+		return scalar[string](t, "SELECT state || ':' || missed_runs FROM source_events WHERE id = $1", ids[ext])
+	}
+	listed := func(ext string) string {
+		t.Helper()
+		return scalar[string](t, "SELECT is_listed || ':' || status FROM events WHERE id = $1", events[ext])
+	}
+	check := func(what string, got, want any) {
+		t.Helper()
+		if got != want {
+			t.Fatalf("%s = %v, want %v", what, got, want)
+		}
+	}
+
+	st := observe("y")
+	check("stats run 2", st, ObserveStats{Missing: 2})
+	check("x after run 2", state("x"), "missing:1")
+	check("x event after run 2", listed("x"), "true:cancelled")
+
+	observe("y")
+	check("x after run 3", state("x"), "missing:2")
+	exec(t, "UPDATE source_events SET last_seen_at = now() - interval '73 hours' WHERE id = $1", ids["x"])
+
+	st = observe("y")
+	check("stats run 4", st, ObserveStats{Missing: 1, Gone: 1, ListedChanged: 1})
+	check("x after run 4", state("x"), "gone:3")
+	check("x event after run 4", listed("x"), "false:cancelled")
+	// 3 пропуска, но last_seen_at свежий — ещё не gone.
+	check("z after run 4", state("z"), "missing:3")
+	check("z event after run 4", listed("z"), "true:scheduled")
+	// Прошедшее событие и запись без события наблюдение не трогает.
+	check("p after run 4", state("p"), "active:0")
+	check("o after run 4", state("o"), "active:0")
+
+	st = observe("y", "x")
+	check("stats run 5", st, ObserveStats{Seen: 1, Missing: 1, ListedChanged: 1})
+	check("x after return", state("x"), "active:0")
+	check("x event after return", listed("x"), "true:cancelled")
 }

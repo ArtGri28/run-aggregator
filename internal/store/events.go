@@ -49,9 +49,11 @@ func (s *Store) EnsureSource(ctx context.Context, code string) (int64, error) {
 // unchanged payload only bumps last_seen_at, a changed payload replaces
 // url/payload/content_hash and bumps last_seen_at. content_hash is
 // computed here (hex SHA-256 of payload) so callers can't desync it.
+// last_run_id = runID on insert and on every repeat: the row was seen by
+// that run, which is how Observe tells found rows from missing ones.
 // state, missed_runs, event_id, match_state are left untouched — that's
-// Phase 3's observation logic (ING-08).
-func (s *Store) UpsertSourceEvent(ctx context.Context, sourceID int64, externalID, url string, payload []byte) (int64, bool, error) {
+// the observation logic (Observe, ING-08).
+func (s *Store) UpsertSourceEvent(ctx context.Context, sourceID, runID int64, externalID, url string, payload []byte) (int64, bool, error) {
 	sum := sha256.Sum256(payload)
 	hash := hex.EncodeToString(sum[:])
 
@@ -62,10 +64,11 @@ func (s *Store) UpsertSourceEvent(ctx context.Context, sourceID int64, externalI
 		),
 		upsert AS (
 			INSERT INTO source_events
-				(source_id, external_id, url, payload, content_hash, first_seen_at, last_seen_at, state, missed_runs, match_state)
-			VALUES ($1, $2, $3, $4, $5, now(), now(), 'active', 0, 'new')
+				(source_id, external_id, url, payload, content_hash, first_seen_at, last_seen_at, state, missed_runs, match_state, last_run_id)
+			VALUES ($1, $2, $3, $4, $5, now(), now(), 'active', 0, 'new', $6)
 			ON CONFLICT (source_id, external_id) DO UPDATE
 			SET last_seen_at = now(),
+			    last_run_id  = EXCLUDED.last_run_id,
 			    url          = CASE WHEN source_events.content_hash <> EXCLUDED.content_hash THEN EXCLUDED.url ELSE source_events.url END,
 			    payload      = CASE WHEN source_events.content_hash <> EXCLUDED.content_hash THEN EXCLUDED.payload ELSE source_events.payload END,
 			    content_hash = CASE WHEN source_events.content_hash <> EXCLUDED.content_hash THEN EXCLUDED.content_hash ELSE source_events.content_hash END
@@ -76,7 +79,7 @@ func (s *Store) UpsertSourceEvent(ctx context.Context, sourceID int64, externalI
 
 	var id int64
 	var changed bool
-	if err := s.pool.QueryRow(ctx, q, sourceID, externalID, url, payload, hash).Scan(&id, &changed); err != nil {
+	if err := s.pool.QueryRow(ctx, q, sourceID, externalID, url, payload, hash, runID).Scan(&id, &changed); err != nil {
 		return 0, false, fmt.Errorf("upsert source event: %w", err)
 	}
 	return id, changed, nil
@@ -425,6 +428,44 @@ func (s *Store) SetMatch(ctx context.Context, sourceEventID int64, eventID *int6
 	}
 	if cmd.RowsAffected() == 0 {
 		return fmt.Errorf("set match %d: %w", sourceEventID, ErrNotFound)
+	}
+	return nil
+}
+
+// SetOutOfScope marks a source_events row out_of_scope (event_id NULL)
+// in one transaction. If it was linked to an event and no other linked
+// row outside gone remains, the event gets is_listed = false; the
+// event's status is never changed. A missing id is ErrNotFound.
+func (s *Store) SetOutOfScope(ctx context.Context, sourceEventID int64) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("set out of scope: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var eventID *int64
+	err = tx.QueryRow(ctx, "SELECT event_id FROM source_events WHERE id = $1 FOR UPDATE", sourceEventID).Scan(&eventID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("set out of scope %d: %w", sourceEventID, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("set out of scope: select: %w", err)
+	}
+	const unlink = "UPDATE source_events SET event_id = NULL, match_state = 'out_of_scope' WHERE id = $1"
+	if _, err := tx.Exec(ctx, unlink, sourceEventID); err != nil {
+		return fmt.Errorf("set out of scope: unlink: %w", err)
+	}
+	if eventID != nil {
+		const hide = `
+			UPDATE events SET is_listed = false
+			WHERE id = $1 AND is_listed
+			  AND NOT EXISTS (SELECT 1 FROM source_events WHERE event_id = $1 AND state <> 'gone')`
+		if _, err := tx.Exec(ctx, hide, *eventID); err != nil {
+			return fmt.Errorf("set out of scope: hide event: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("set out of scope: commit: %w", err)
 	}
 	return nil
 }

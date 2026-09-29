@@ -111,7 +111,7 @@ func share(n, of int) float64 {
 
 // median — медиана без изменения входа; чётное число — среднее двух
 // средних; пустой вход — 0.
-func median(xs []int) float64 {
+func median[T int | float64](xs []T) float64 {
 	if len(xs) == 0 {
 		return 0
 	}
