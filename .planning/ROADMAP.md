@@ -13,7 +13,7 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Source Discovery / VPS Audit** - Проверить 2–3 источника с VPS и провести аудит VPS только чтением (логический Phase 0)
+- [x] **Phase 1: Source Discovery / VPS Audit** - Проверить 2–3 источника с VPS и провести аудит VPS только чтением (логический Phase 0) (completed 2026-09-29)
 - [x] **Phase 2: Foundation** - Модуль Go, схема PostgreSQL 17, домен, `store`, `normalize`, тестовая инфраструктура (completed 2026-09-29)
 - [ ] **Phase 3: First Source** - Сбор данных из первого источника: Fetch/Parse/Validate, `ingest_runs`, контроль качества, алерты
 - [ ] **Phase 4: Telegram Search** - Бот на long polling: фильтры, список, карточка, пагинация, админ-доступ
@@ -140,7 +140,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Source Discovery / VPS Audit | 3/3 | In Progress|  |
+| 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 0/TBD | Not started | - |
 | 4. Telegram Search | 0/TBD | Not started | - |

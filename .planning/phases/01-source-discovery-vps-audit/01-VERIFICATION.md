@@ -17,7 +17,7 @@ covered_files:
   - .planning/phases/01-source-discovery-vps-audit/01-VPS-AUDIT.md
   - .planning/phases/01-source-discovery-vps-audit/COVERAGE.md
 
-covered_digest: "v1:sha256:149454a8473b4b4c3f276fd615d71115133d79255ac259aafb83b593f251c679"
+covered_digest: "v1:sha256:a4b0e77c942b4222947e163a5cc3d146c57b32a02a214d3e7134c5ba58b0a2ad"
 behavior_unverified: 0
 overrides_applied: 1
 overrides:
@@ -191,3 +191,7 @@ Human verification closed by owner UAT on 2026-09-29 (`01-UAT.md`, 5/5 pass):
 - Absence of secrets in the repository and read-only VPS audit confirmed by the owner (UAT tests 3–4).
 - Open obligation, not a completion blocker: after Phase 1, remove the `run-agg-phase1` key line from `authorized_keys` on the VPS and decide on the `runagg` user and `/etc/sudoers.d/run-agg` (MVP.md §7.4 item 1). Requires a separate owner-approved VPS change.
 - Minor document fixes pending: decision 33 wording in 01-VPS-AUDIT.md (lines 7, 11, 68) and STATE.md [Init]; stale §6 reference and two typos in 01-SOURCES-REPORT.md.
+
+## Post-verification document update (2026-09-29)
+
+Covered digest recomputed after wording-only changes to `01-VPS-AUDIT.md` made during the security audit (`01-SECURITY.md`): the decision 33 description was corrected (tools run owner-approved read-only blocks through the wrapper; they have no administrative access), and the owner's confirmation that run 2 blocks were read and approved before launch was recorded. No verified fact or verdict changed.
