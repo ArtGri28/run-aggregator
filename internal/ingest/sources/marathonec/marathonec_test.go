@@ -18,8 +18,8 @@ func TestSourcePolicy(t *testing.T) {
 	if s.Code() != "marathonec" {
 		t.Fatalf("Code = %q", s.Code())
 	}
-	if p := s.Policy(); p.CountryFallback != normalize.NoFallback || p.CrawlDelay != 40*time.Second {
-		t.Fatalf("Policy = %+v, want NoFallback (D-07), 40s", p)
+	if p := s.Policy(); p.CountryFallback != normalize.RUOnlyFallback || p.CrawlDelay != 40*time.Second {
+		t.Fatalf("Policy = %+v, want RUOnlyFallback (D-07), 40s", p)
 	}
 	body, err := os.ReadFile(fixture)
 	if err != nil {

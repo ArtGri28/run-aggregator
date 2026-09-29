@@ -59,6 +59,8 @@ func TestMain(m *testing.M) {
 type fixtureSource struct {
 	code string
 	body []byte
+	// noFallback — политика до решения D-07 (без fallback RU).
+	noFallback bool
 }
 
 func newFixtureSource(t *testing.T, body []byte) *fixtureSource {
@@ -68,6 +70,9 @@ func newFixtureSource(t *testing.T, body []byte) *fixtureSource {
 func (s *fixtureSource) Code() string { return s.code }
 
 func (s *fixtureSource) Policy() ingest.Policy {
+	if s.noFallback {
+		return ingest.Policy{CountryFallback: normalize.NoFallback}
+	}
 	return ingest.Policy{CountryFallback: normalize.RUOnlyFallback}
 }
 
@@ -145,6 +150,37 @@ func TestRunFixture(t *testing.T) {
 	if second.Status != ingest.StatusOK || second.Created != 0 || second.Changed != 0 || second.Unchanged != acc.Created || second.Upserted != acc.Upserted {
 		t.Fatalf("second Run = %s, %+v; want ok, Created 0, Changed 0, Unchanged %d, Upserted %d",
 			statusOf(second), second, acc.Created, acc.Upserted)
+	}
+}
+
+// TestAcceptAfterPolicySwitch — снимок хранит разобранные записи, а не
+// классификацию: прогон suspect без fallback RU (всё out_of_scope)
+// принимается уже по текущей политике источника (D-07 → политика → принятие).
+func TestAcceptAfterPolicySwitch(t *testing.T) {
+	r := testRunner(t)
+	body, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := newFixtureSource(t, body)
+	src.noFallback = true
+	ctx := context.Background()
+
+	first, err := r.Run(ctx, src)
+	if err != nil {
+		t.Fatalf("first Run: %v", err)
+	}
+	if first.Status != ingest.StatusSuspect || first.OutOfScope == 0 || first.OutOfScope != first.Parsed-first.Rejected-first.Expired {
+		t.Fatalf("first Run = %s, %+v; want suspect, every valid record out_of_scope", statusOf(first), first)
+	}
+
+	src.noFallback = false
+	acc, err := r.Accept(ctx, src, 0)
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if acc.OutOfScope != 0 || acc.Created == 0 || acc.Created != acc.Upserted {
+		t.Fatalf("Accept = %+v, want OutOfScope 0, Created == Upserted > 0 under RUOnlyFallback", acc)
 	}
 }
 

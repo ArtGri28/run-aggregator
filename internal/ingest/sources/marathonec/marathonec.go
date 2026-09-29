@@ -32,12 +32,12 @@ func New(f *ingest.Fetcher) *Source { return &Source{f: f, url: CalendarURL} }
 // Code — код источника.
 func (s *Source) Code() string { return Code }
 
-// Policy — правила источника. D-07: fallback RU выключен (NoFallback) до
-// решения владельца, записанного в
-// .planning/phases/03-first-source/03-SANITY-REPORT.md; меняется только
-// планом 03-07 по этому решению.
+// Policy — правила источника. D-07: fallback RU подтверждён владельцем
+// 2026-09-29 по санити-отчёту прогона 5
+// (.planning/phases/03-first-source/03-SANITY-REPORT.md); явно иностранная
+// область — out_of_scope, нераспознанная — RU со счётчиком и порогом (D-09).
 func (s *Source) Policy() ingest.Policy {
-	return ingest.Policy{CountryFallback: normalize.NoFallback, CrawlDelay: CrawlDelay}
+	return ingest.Policy{CountryFallback: normalize.RUOnlyFallback, CrawlDelay: CrawlDelay}
 }
 
 // Fetch загружает страницу календаря с соблюдением Crawl-delay.
