@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
 status: executing
-stopped_at: Completed 03-05-PLAN.md
+stopped_at: Completed 03-06-PLAN.md (RU fallback confirmed, baseline not accepted)
 last_updated: "2026-09-29T17:57:11.729Z"
 last_activity: 2026-09-29
 last_activity_desc: 03-05 complete (Fetcher, config from env, raw store, scheduler, sanity report, worker subcommands, dev PostgreSQL)
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 3 (First Source) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-09-29 — 03-05 complete: Fetcher (повторы, Retry-After, лимиты, редиректы, затвор хоста, Crawl-delay 40 с), конфигурация из окружения (QUALITY_*, INGEST_*, RAW_*, OBSERVE_*, FETCH_*), сырые ответы на диске, планировщик от started_at, санити-отчёт RU, worker run-once/accept-baseline/sanity-report, dev-PostgreSQL 127.0.0.1:5434 (D-03)
 
@@ -128,5 +128,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-09-29T17:57:11.707Z
-Stopped at: Completed 03-05-PLAN.md
+Stopped at: Completed 03-06-PLAN.md (RU fallback confirmed, baseline not accepted)
 Resume file: None

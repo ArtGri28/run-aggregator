@@ -111,7 +111,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 03-06-PLAN.md — Владелец: первый реальный прогон (suspect), санити-отчёт RU и решение по fallback (D-07)
+- [x] 03-06-PLAN.md — Владелец: первый реальный прогон (suspect), санити-отчёт RU и решение по fallback (D-07)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
@@ -171,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
-| 3. First Source | 5/7 | In Progress|  |
+| 3. First Source | 6/7 | In Progress|  |
 | 4. Telegram Search | 0/TBD | Not started | - |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
