@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-29T15:55:34.771Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-29T16:13:05.502Z"
 last_activity: 2026-09-29
-last_activity_desc: 03-01 complete (golden fixture, G2 closed)
-state_head: d49788c8df5a1a665c502649c88432f96e4053c1
+last_activity_desc: 03-02 complete (tracer fixture → PostgreSQL 17, golden Parse)
+state_head: c6545c6913a4e519b5480ccaa1d572dae1534077
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 6
+  completed_plans: 7
   percent: 33
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 3 (First Source) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
-Last activity: 2026-09-29 — 03-01 complete: golden-фикстура /calendar-beg/ (133 строки), G2 закрыт
+Last activity: 2026-09-29 — 03-02 complete: tracer фикстура → PostgreSQL 17 (133 события, повтор без изменений), golden Parse
 
 Progress: [███░░░░░░░] 33%
 
@@ -65,6 +65,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P01 | ~50min | 2 tasks | 11 files |
 | Phase 02 P02 | ~25min | 2 tasks | 6 files |
 | Phase 03 P01 | ~7min (+ действие владельца) | 2 tasks | 2 files |
+| Phase 03 P02 | ~15min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 02]: [Phase 2/02]: TitleNorm повторяет шаг до неподвижной точки (идемпотентность при «10 - км»); Distances отбрасывает значения > MaxInt32 (distance_m INTEGER); словарь городов — только moscow и saint-petersburg
 - [Phase 3]: [Phase 03/01]: G2 закрыт — captcha ×5 на /calendar-beg/ это CSS формы комментариев темы Newsmag (×4) и var tds_captcha="" (×1), шаблонный элемент, не челлендж; 133 строки post-row, HTTP 200
 - [Phase 3]: [Phase 03/01]: область в строках Марафонца — слаг таксономии oblast (русские названия только в data-filters таблицы); у 105 из 133 строк ссылка названия внешняя (регистрация), страницы события на сайте в строке нет — решить в 03-02
+- [Phase 3]: [03-02] D-13: только ссылка названия; marathonec.ru → URL события, внешняя → registration_url, URL = страница календаря; #new_tab срезается
+- [Phase 3]: [03-02] D-14: SourceEvent.RegionSlugs/Regions (все области строки), Region = название из data-filters при одной области, пусто при нескольких; нет словаря областей → ErrStructureNotFound
 
 ### Pending Todos
 
@@ -112,6 +115,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T15:55:34.747Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-09-29T16:13:05.480Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

@@ -27,10 +27,10 @@
 ### Ingestion (сбор данных)
 
 - [ ] **ING-01**: `Fetch` с таймаутами, повторами (3 попытки, экспоненциальный backoff с jitter, `Retry-After`), лимитом размера ответа, rate limit на хост и `User-Agent` с контактом; значения конфигурируемы
-- [ ] **ING-02**: `Parse` — чистая функция без сети; для каждого источника есть фикстуры в `testdata/` и golden-тесты
-- [ ] **ING-03**: `Validate` отклоняет записи без обязательных полей или с датой вне `[сегодня−1 день, сегодня+3 года]`; отклонённые считаются
-- [ ] **ING-04**: Upsert `source_events` идемпотентен по `(source_id, external_id)`; сохраняются `payload`, `content_hash`, `first_seen_at`, `last_seen_at`; неизменённая запись обновляет только `last_seen_at`
-- [ ] **ING-05**: Создание канонического `events` и `event_distances` из `source_events`; поля выбираются по приоритету источника; `updated_at` меняется только при изменении канонических полей
+- [x] **ING-02**: `Parse` — чистая функция без сети; для каждого источника есть фикстуры в `testdata/` и golden-тесты
+- [x] **ING-03**: `Validate` отклоняет записи без обязательных полей или с датой вне `[сегодня−1 день, сегодня+3 года]`; отклонённые считаются
+- [x] **ING-04**: Upsert `source_events` идемпотентен по `(source_id, external_id)`; сохраняются `payload`, `content_hash`, `first_seen_at`, `last_seen_at`; неизменённая запись обновляет только `last_seen_at`
+- [x] **ING-05**: Создание канонического `events` и `event_distances` из `source_events`; поля выбираются по приоритету источника; `updated_at` меняется только при изменении канонических полей
 - [ ] **ING-06**: Каждый запуск источника записывается в `ingest_runs` со статусом и счётчиками `fetched`, `parsed`, `rejected`, `out_of_scope`, `upserted`, `error`
 - [ ] **ING-07**: Статус прогона `ok`/`suspect`/`failed` определяется автоматически (медиана последних 7 прогонов `ok`, доля отклонённых, даты вне диапазона, доля NULL); **прогоны `suspect` и `failed` ничего не применяют**; пороги конфигурируемы; есть ручное принятие нового базового уровня
 - [ ] **ING-08**: Состояние наблюдения `source_events` (`active`/`missing`/`gone`) меняется только по здоровым прогонам и только для записей с `start_date ≥ сегодня`; `gone` влияет только на `events.is_listed`, **никогда не меняет `events.status`**; записи не удаляются
@@ -149,10 +149,10 @@
 | FND-05 | Phase 2 | Complete |
 | FND-06 | Phase 2 | Complete |
 | ING-01 | Phase 3 | Pending |
-| ING-02 | Phase 3 | Pending |
-| ING-03 | Phase 3 | Pending |
-| ING-04 | Phase 3 | Pending |
-| ING-05 | Phase 3 | Pending |
+| ING-02 | Phase 3 | Complete |
+| ING-03 | Phase 3 | Complete |
+| ING-04 | Phase 3 | Complete |
+| ING-05 | Phase 3 | Complete |
 | ING-06 | Phase 3 | Pending |
 | ING-07 | Phase 3 | Pending |
 | ING-08 | Phase 3 | Pending |
