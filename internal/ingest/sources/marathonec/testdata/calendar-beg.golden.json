@@ -1,0 +1,2289 @@
+[
+  {
+    "external_id": "60817",
+    "url": "https://marathonec.ru/trail-burya/",
+    "title": "Трейл «Буря»",
+    "date": "15/11/2026",
+    "distances": "10 км, 20 км, 5 км",
+    "city": "Красногорск",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "62548",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Ягуся Ультра Трейл",
+    "date": "17/10/2026",
+    "distances": "104 км, 51 км",
+    "city": "Нерехта",
+    "region": "Костромская область",
+    "region_slugs": [
+      "kostromskaya-oblast"
+    ],
+    "regions": [
+      "Костромская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/yagusya-ultra-treil-2026-poluavtonomka-2026"
+  },
+  {
+    "external_id": "63911",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Карстовый трейл",
+    "date": "24/10/2026",
+    "distances": "12 км, 23 км, 6 км, 66 км",
+    "city": "Ишеево",
+    "region": "Республика Башкортостан",
+    "region_slugs": [
+      "respublika-bashkortostan"
+    ],
+    "regions": [
+      "Республика Башкортостан"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2072"
+  },
+  {
+    "external_id": "60377",
+    "url": "https://marathonec.ru/trail-beshtaugorsky-krest/",
+    "title": "Фестиваль трейлраннинга «Бештаугорский Крест»",
+    "date": "03/04/2027",
+    "distances": "15 км, 17 км, 23 км, 5 км",
+    "city": "Пятигорск",
+    "region": "Ставропольский край",
+    "region_slugs": [
+      "stavropolskij-kraj"
+    ],
+    "regions": [
+      "Ставропольский край"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "60336",
+    "url": "https://marathonec.ru/o-trail-ferrum/",
+    "title": "О-Трейл Феррум Фест",
+    "date": "17/10/2026",
+    "distances": "19 км, 2 км, 3 км, 30 км, 9 км",
+    "city": "Железноводск",
+    "region": "Ставропольский край",
+    "region_slugs": [
+      "stavropolskij-kraj"
+    ],
+    "regions": [
+      "Ставропольский край"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "67153",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Новотроицкий полумарафон",
+    "date": "03/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Новотроицк",
+    "region": "Оренбургская область",
+    "region_slugs": [
+      "orenburgskaya-oblast"
+    ],
+    "regions": [
+      "Оренбургская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/NOVOTROITsKIYPOLUMARAFON2026"
+  },
+  {
+    "external_id": "67169",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Иркутский Осенний марафон",
+    "date": "04/10/2026",
+    "distances": "21 км, 42 км, 7 км",
+    "city": "Иркутск",
+    "region": "Иркутская область",
+    "region_slugs": [
+      "irkutskaya-oblast"
+    ],
+    "regions": [
+      "Иркутская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://toplist.run/race/irkutskii-osennii-marafon-2026"
+  },
+  {
+    "external_id": "67203",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Дмитров Трейл Осень",
+    "date": "08/11/2026",
+    "distances": "3 км, 7 км",
+    "city": "Дмитров",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/DmitrovTreylOsen2026"
+  },
+  {
+    "external_id": "67221",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Полумарафон «Жемчужина Золотого Кольца»",
+    "date": "11/10/2026",
+    "distances": "10 км, 21 км, 3 км, 5 км",
+    "city": "Суздаль",
+    "region": "Владимирская область",
+    "region_slugs": [
+      "vladimirskaya-oblast"
+    ],
+    "regions": [
+      "Владимирская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/SuzdalskiypolumarafonZhemchuzhinaZolotogokoltsa2026"
+  },
+  {
+    "external_id": "67329",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Забег «Ржевский рубеж»",
+    "date": "03/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Ржев",
+    "region": "Тверская область",
+    "region_slugs": [
+      "tverskaya-oblast"
+    ],
+    "regions": [
+      "Тверская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://myrace.info/events/1877"
+  },
+  {
+    "external_id": "67363",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Крымский марафон",
+    "date": "15/11/2026",
+    "distances": "10 км, 21 км, 42 км, 5 км",
+    "city": "Симферополь",
+    "region": "Республика Крым",
+    "region_slugs": [
+      "respublika-krym"
+    ],
+    "regions": [
+      "Республика Крым"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/KrymskiyMarafon2026"
+  },
+  {
+    "external_id": "67406",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Есенинский пробег",
+    "date": "10/10/2026",
+    "distances": "21 км",
+    "city": "Рыбное",
+    "region": "Рязанская область",
+    "region_slugs": [
+      "ryazanskaya-oblast"
+    ],
+    "regions": [
+      "Рязанская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ESENINBEG26"
+  },
+  {
+    "external_id": "63367",
+    "url": "https://marathonec.ru/riekkalansaari-trail/",
+    "title": "Riekkalansaari Ultra Trail",
+    "date": "13/08/2027",
+    "distances": "12 км, 25 км, 35 км, 55 км, 7 км, 80 км",
+    "city": "Риеккалансаари",
+    "region": "Республика Карелия",
+    "region_slugs": [
+      "respublika-kareliya"
+    ],
+    "regions": [
+      "Республика Карелия"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "60972",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Новогодний марафон Sosnovka Goat",
+    "date": "13/12/2026",
+    "distances": "10 км, 21 км, 42 км, 5 км, 63 км",
+    "city": "Санкт-Петербург",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/SosnovkaGoat"
+  },
+  {
+    "external_id": "60843",
+    "url": "https://marathonec.ru/lake-ice-race/",
+    "title": "Международный трейловый забег Lake Ice Race",
+    "date": "23/01/2027",
+    "distances": "10 км, 20 км, 3 км",
+    "city": "Миасс",
+    "region": "Челябинская область",
+    "region_slugs": [
+      "chelyabinskaya-oblast"
+    ],
+    "regions": [
+      "Челябинская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "68272",
+    "url": "https://marathonec.ru/vottovaara-mountain-race/",
+    "title": "Vottovaara Mountain Race",
+    "date": "04/09/2027",
+    "distances": "100 миль, 14 км, 50 миль, 55 км",
+    "city": "Гимолы",
+    "region": "Республика Карелия",
+    "region_slugs": [
+      "respublika-kareliya"
+    ],
+    "regions": [
+      "Республика Карелия"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "68374",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Вьюнок Трейл",
+    "date": "11/10/2026",
+    "distances": "12 км, 2 км, 24 км, 5 км",
+    "city": "Гарболово",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/vyunok26"
+  },
+  {
+    "external_id": "61079",
+    "url": "https://marathonec.ru/iremel-yarish/",
+    "title": "Трейл «Ирәмәл Ярыш: новый вызов»",
+    "date": "27/03/2027",
+    "distances": "10 км, 27 км, 3.5 км, 5 км",
+    "city": "Белорецк",
+    "region": "Республика Башкортостан",
+    "region_slugs": [
+      "respublika-bashkortostan"
+    ],
+    "regions": [
+      "Республика Башкортостан"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "72065",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Марафон «Путь к роднику»",
+    "date": "03/10/2026",
+    "distances": "21 км, 3 км, 42 км",
+    "city": "Слюдорудник",
+    "region": "Челябинская область",
+    "region_slugs": [
+      "chelyabinskaya-oblast"
+    ],
+    "regions": [
+      "Челябинская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/1540"
+  },
+  {
+    "external_id": "72424",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Марафон «Мучкап – Шапкино – Любо»",
+    "date": "31/10/2026",
+    "distances": "10 км, 21 км, 42 км",
+    "city": "Мучкапский",
+    "region": "Тамбовская область",
+    "region_slugs": [
+      "tambovskaya-oblast"
+    ],
+    "regions": [
+      "Тамбовская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/MARAFONMUChKAPShAPKINOLYuBO2026"
+  },
+  {
+    "external_id": "72448",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Рубеж»",
+    "date": "24/10/2026",
+    "distances": "10 км, 100 км, 30 км, 5 км",
+    "city": "Ильинское",
+    "region": "Калужская область",
+    "region_slugs": [
+      "kaluzhskaya-oblast"
+    ],
+    "regions": [
+      "Калужская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://xn--40-emcadbfdgn.xn--p1ai/events/162"
+  },
+  {
+    "external_id": "73420",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Народный трейл",
+    "date": "04/11/2026",
+    "distances": "10 км, 20 км, 5 км",
+    "city": "Истра",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://istra.run/narod#rec773672918"
+  },
+  {
+    "external_id": "73916",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "KultaKarjala",
+    "date": "03/10/2026",
+    "distances": "12 км, 4 км, 8 км",
+    "city": "Петрозаводск",
+    "region": "Республика Карелия",
+    "region_slugs": [
+      "respublika-kareliya"
+    ],
+    "regions": [
+      "Республика Карелия"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/KULTAKARJALA2026"
+  },
+  {
+    "external_id": "73918",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Осенний трейл «Краски леса»",
+    "date": "11/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Ступино",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/TREYLKRASKILESA2026"
+  },
+  {
+    "external_id": "73926",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Ночной трейловый забег «Светлая ночь»",
+    "date": "05/12/2026",
+    "distances": "16 км, 30 км, 5 км",
+    "city": "Кварса",
+    "region": "Удмуртская Республика",
+    "region_slugs": [
+      "udmurtskaya-respublika"
+    ],
+    "regions": [
+      "Удмуртская Республика"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/Svetlaynoch2026"
+  },
+  {
+    "external_id": "55401",
+    "url": "https://marathonec.ru/t-bank-rosa-wild-trail/",
+    "title": "Т-Банк Rosa Wild Fest",
+    "date": "03/09/2027",
+    "distances": "115 км, 12 км, 13 км, 180 км, 20 км, 35 км, 40 км, 45 км, 6.3 км, 80 км",
+    "city": "Сочи",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "60637",
+    "url": "https://marathonec.ru/kross-lisya-gora-osen/",
+    "title": "Осенний кросс «Лисья гора»",
+    "date": "04/10/2026",
+    "distances": "2 км, 4 км, 6 км, 8 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "61022",
+    "url": "https://marathonec.ru/october-trail/",
+    "title": "Октобер Трейл",
+    "date": "04/10/2026",
+    "distances": "17 км, 28 км, 45 км, 8 км",
+    "city": "Новосибирск",
+    "region": "Новосибирская область",
+    "region_slugs": [
+      "novosibirskaya-oblast"
+    ],
+    "regions": [
+      "Новосибирская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "60625",
+    "url": "https://marathonec.ru/kross-bystry-pes-osen/",
+    "title": "Осенний кросс «Быстрый пёс»",
+    "date": "03/10/2026",
+    "distances": "2 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "76677",
+    "url": "https://marathonec.ru/novgorod-ice-2/",
+    "title": "Novgorod Ice",
+    "date": "13/02/2027",
+    "distances": "15 км, 21 км, 6 км",
+    "city": "Великий Новгород",
+    "region": "Новгородская область",
+    "region_slugs": [
+      "novgorodskaya-oblast"
+    ],
+    "regions": [
+      "Новгородская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "76777",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Марий Форест SnowRun – Backyard Ultra",
+    "date": "06/03/2027",
+    "distances": "6.7 км",
+    "city": "Йошкар-Ола",
+    "region": "Республика Марий Эл",
+    "region_slugs": [
+      "respublika-marij-el"
+    ],
+    "regions": [
+      "Республика Марий Эл"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2028"
+  },
+  {
+    "external_id": "76789",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Сормовский осенний пробег имени Г. П. Терентьева",
+    "date": "11/10/2026",
+    "distances": "10 км, 20 км, 5 км",
+    "city": "Нижний Новгород",
+    "region": "Нижегородская область",
+    "region_slugs": [
+      "nizhegorodskaya-oblast"
+    ],
+    "regions": [
+      "Нижегородская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/SORMOVSKIYOSENNIYPROBEG2026"
+  },
+  {
+    "external_id": "77049",
+    "url": "https://marathonec.ru/trejl-ximkinskij-les/",
+    "title": "Трейл «Химкинский лес»",
+    "date": "11/04/2027",
+    "distances": "13 км, 27 км, 7.8 км",
+    "city": "Химки",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "77600",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "City Trail 6 X-Race",
+    "date": "01/11/2026",
+    "distances": "10 км, 20 км, 30 км, 5 км",
+    "city": "Красногорск",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://city-trail.ru/6"
+  },
+  {
+    "external_id": "77628",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Кунтаг Ультра Трейл",
+    "date": "15/05/2027",
+    "distances": "21 км, 50 км, 8 км",
+    "city": "Усть-Абакан",
+    "region": "Республика Хакасия",
+    "region_slugs": [
+      "respublika-xakasiya"
+    ],
+    "regions": [
+      "Республика Хакасия"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/kuntag-ultra-treil-2027"
+  },
+  {
+    "external_id": "79215",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «По тропам предков»",
+    "date": "07/11/2026",
+    "distances": "12 км",
+    "city": "Кара-Паго",
+    "region": "Карачаево-Черкесская Республика",
+    "region_slugs": [
+      "karachaevo-cherkesskaya-respublika"
+    ],
+    "regions": [
+      "Карачаево-Черкесская Республика"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/ZabegpoperesechennoymestnostiPotropampredkov1"
+  },
+  {
+    "external_id": "60478",
+    "url": "https://marathonec.ru/zimny-polumarathon-evropa-aziya/",
+    "title": "Зимний полумарафон «Европа-Азия»",
+    "date": "06/12/2026",
+    "distances": "21 км, 7 км",
+    "city": "Екатеринбург",
+    "region": "Свердловская область",
+    "region_slugs": [
+      "sverdlovskaya-oblast"
+    ],
+    "regions": [
+      "Свердловская область"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "63884",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Покровский полумарафон",
+    "date": "04/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Покровское",
+    "region": "Вологодская область",
+    "region_slugs": [
+      "vologodskaya-oblast"
+    ],
+    "regions": [
+      "Вологодская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://vk.com/away.php?to=https%3A%2F%2Fvologdamarafon.ru%2Fmarafon%2Fpokrovskij-polumarafon%2Fregistraciya%2F\u0026utf=1"
+  },
+  {
+    "external_id": "72430",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Полумарафон «Бегущая Вологда»",
+    "date": "06/12/2026",
+    "distances": "10 км, 2 км, 21 км, 5 км",
+    "city": "Вологда",
+    "region": "Вологодская область",
+    "region_slugs": [
+      "vologodskaya-oblast"
+    ],
+    "regions": [
+      "Вологодская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/IXpolumarafonBV"
+  },
+  {
+    "external_id": "79931",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Кисловодский марафон Kavkaz.Run",
+    "date": "03/10/2026",
+    "distances": "10 км, 2 км, 21 км, 42 км, 5 км",
+    "city": "Кисловодск",
+    "region": "Ставропольский край",
+    "region_slugs": [
+      "stavropolskij-kraj"
+    ],
+    "regions": [
+      "Ставропольский край"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/KislovodskiymarafonKAVKAZRUN2026"
+  },
+  {
+    "external_id": "79952",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Полумарафон «Русский Север»",
+    "date": "31/10/2026",
+    "distances": "10 км, 2 км, 21 км, 5 км",
+    "city": "Кириллов",
+    "region": "Вологодская область",
+    "region_slugs": [
+      "vologodskaya-oblast"
+    ],
+    "regions": [
+      "Вологодская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/IIIpolumarafonRusskiySever"
+  },
+  {
+    "external_id": "22985",
+    "url": "https://marathonec.ru/sochi-marafon-gid/",
+    "title": "Сочи марафон 2026",
+    "date": "31/10/2026",
+    "distances": "10 км, 2.5 км, 21 км, 42 км, 5 км",
+    "city": "Сочи",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "73910",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Яблочный трейл",
+    "date": "10/10/2026",
+    "distances": "14 км, 24 км, 3 км, 39 км, 7 км",
+    "city": "Грушевка",
+    "region": "Республика Крым",
+    "region_slugs": [
+      "respublika-krym"
+    ],
+    "regions": [
+      "Республика Крым"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/YablochnyyTreyl2026"
+  },
+  {
+    "external_id": "67866",
+    "url": "https://marathonec.ru/kazanski-nacionalny-polumarafon-gid/",
+    "title": "Казанский национальный полумарафон 2026",
+    "date": "10/10/2026",
+    "distances": "10 км, 21 км, 3 км, 5 км",
+    "city": "Казань",
+    "region": "Республика Татарстан",
+    "region_slugs": [
+      "respublika-tatarstan"
+    ],
+    "regions": [
+      "Республика Татарстан"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "44926",
+    "url": "https://marathonec.ru/gatchinskij-polumarafon-gid/",
+    "title": "Гатчинский полумарафон 2026",
+    "date": "08/11/2026",
+    "distances": "10 км, 2 км, 21 км",
+    "city": "Гатчина",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "74103",
+    "url": "https://marathonec.ru/arena-marafon-gid/",
+    "title": "«Арена марафон» 2026",
+    "date": "24/10/2026",
+    "distances": "10 км, 21 км, 42 км, 5 км",
+    "city": "Санкт-Петербург",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "80955",
+    "url": "https://marathonec.ru/mad-fox-ultra-2026/",
+    "title": "Mad Fox Ultra 2026",
+    "date": "18/12/2026",
+    "distances": "10 км, 160 км, 20 км, 40 км, 70 км, 80 км",
+    "city": "Переславль-Залесский",
+    "region": "Ярославская область",
+    "region_slugs": [
+      "yaroslavskaya-oblast"
+    ],
+    "regions": [
+      "Ярославская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "81053",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Завидово трейл",
+    "date": "03/10/2026",
+    "distances": "10 км, 20 км, 5 км, 50 км",
+    "city": "Завидово",
+    "region": "Тверская область",
+    "region_slugs": [
+      "tverskaya-oblast"
+    ],
+    "regions": [
+      "Тверская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/ZAVIDOVOTRAIL"
+  },
+  {
+    "external_id": "81343",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Благотворительный забег «Вместе против инсульта»",
+    "date": "10/10/2026",
+    "distances": "1 км, 2.5 км, 5 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ORBI26"
+  },
+  {
+    "external_id": "81406",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Бородино Трейл",
+    "date": "04/10/2026",
+    "distances": "10 км, 15 км, 20 км, 5 км",
+    "city": "Бородино",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/BORODINOTRAIL3"
+  },
+  {
+    "external_id": "81411",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Окская тропа» – ночной забег",
+    "date": "24/10/2026",
+    "distances": "10 км, 3.5 км",
+    "city": "Нижний Новгород",
+    "region": "Нижегородская область",
+    "region_slugs": [
+      "nizhegorodskaya-oblast"
+    ],
+    "regions": [
+      "Нижегородская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/NochOkaTrail2026"
+  },
+  {
+    "external_id": "81459",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Шарташ Карасики»",
+    "date": "03/10/2026",
+    "distances": "21 км, 7 км",
+    "city": "Екатеринбург",
+    "region": "Свердловская область",
+    "region_slugs": [
+      "sverdlovskaya-oblast"
+    ],
+    "regions": [
+      "Свердловская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026"
+  },
+  {
+    "external_id": "81569",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Эстафета 5х4,2 км Осень",
+    "date": "11/10/2026",
+    "distances": "4.2 км",
+    "city": "Тула",
+    "region": "Тульская область",
+    "region_slugs": [
+      "tulskaya-oblast"
+    ],
+    "regions": [
+      "Тульская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/rla2026"
+  },
+  {
+    "external_id": "81585",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "O-Trail Karras",
+    "date": "31/10/2026",
+    "distances": "16 км, 8 км",
+    "city": "Железноводск",
+    "region": "Ставропольский край",
+    "region_slugs": [
+      "stavropolskij-kraj"
+    ],
+    "regions": [
+      "Ставропольский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/OTRAILKarras2026"
+  },
+  {
+    "external_id": "81592",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Осенний Павловский забег",
+    "date": "04/10/2026",
+    "distances": "10 км, 21 км, 3 км",
+    "city": "Павловск",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/OsenniyPavlovskiyzabeg2026"
+  },
+  {
+    "external_id": "81654",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Часовой забег «Осенний вальс»",
+    "date": "18/10/2026",
+    "distances": "1 час",
+    "city": "Волгоград",
+    "region": "Волгоградская область",
+    "region_slugs": [
+      "volgogradskaya-oblast"
+    ],
+    "regions": [
+      "Волгоградская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ZABEGOSENNIYVALS202618102026"
+  },
+  {
+    "external_id": "81691",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Забег «Марьинская Стрела»",
+    "date": "08/11/2026",
+    "distances": "10 км, 15 км, 2 км, 21 км, 25 км, 3 км, 30 км, 5 км, 7 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ZabegpolumarafonMarinskayaStrela12"
+  },
+  {
+    "external_id": "81714",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Осенний трейл «Первоуральск Опен»",
+    "date": "10/10/2026",
+    "distances": "10 км, 15 км, 30 км, 5 км",
+    "city": "Первоуральск",
+    "region": "Свердловская область",
+    "region_slugs": [
+      "sverdlovskaya-oblast"
+    ],
+    "regions": [
+      "Свердловская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/PervouralskOpen2026Osen"
+  },
+  {
+    "external_id": "81723",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Сосновый рай»",
+    "date": "17/10/2026",
+    "distances": "14 км, 7 км",
+    "city": "Самара",
+    "region": "Самарская область",
+    "region_slugs": [
+      "samarskaya-oblast"
+    ],
+    "regions": [
+      "Самарская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/sosnovyi-rai-2026"
+  },
+  {
+    "external_id": "81771",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Саратовский марафон",
+    "date": "11/10/2026",
+    "distances": "10 км, 21 км, 3 км, 42 км",
+    "city": "Саратов",
+    "region": "Саратовская область",
+    "region_slugs": [
+      "saratovskaya-oblast"
+    ],
+    "regions": [
+      "Саратовская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://myrace.info/events/1708"
+  },
+  {
+    "external_id": "81833",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "«Воронки трейл»",
+    "date": "04/10/2026",
+    "distances": "10 км, 15 км, 5 км",
+    "city": "Уфа",
+    "region": "Республика Башкортостан",
+    "region_slugs": [
+      "respublika-bashkortostan"
+    ],
+    "regions": [
+      "Республика Башкортостан"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/VORONKITREYL2026"
+  },
+  {
+    "external_id": "33603",
+    "url": "https://marathonec.ru/moya-stolica-polumarafon-gid/",
+    "title": "Полумарафон «Моя столица» 2026",
+    "date": "03/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "82278",
+    "url": "https://marathonec.ru/golden-ring-ultra-trail-100/",
+    "title": "Golden Ring Ultra Trail 2027",
+    "date": "23/07/2027",
+    "distances": "10 км, 100 км, 20 км, 30 км, 5 км, 50 км, 80 км",
+    "city": "Суздаль",
+    "region": "Владимирская область",
+    "region_slugs": [
+      "vladimirskaya-oblast"
+    ],
+    "regions": [
+      "Владимирская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "82417",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "White Bride Ultra Gelendzhik",
+    "date": "01/10/2027",
+    "distances": "120 км, 15 км, 30 км, 50 км, 70 км",
+    "city": "Геленджик",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://goldenultra.ru/wbu/"
+  },
+  {
+    "external_id": "82481",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Хехцир Трейл «Золотая осень»",
+    "date": "03/10/2026",
+    "distances": "12 км, 22 км, 30 км, 6 км",
+    "city": "Хабаровск",
+    "region": "Хабаровский край",
+    "region_slugs": [
+      "xabarovskij-kraj"
+    ],
+    "regions": [
+      "Хабаровский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://trail27.ru/"
+  },
+  {
+    "external_id": "82514",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл Wild Peak",
+    "date": "19/06/2027",
+    "distances": "15 км, 35 км, 66 км, 7 км",
+    "city": "Акташ",
+    "region": "Республика Алтай",
+    "region_slugs": [
+      "respublika-altaj"
+    ],
+    "regions": [
+      "Республика Алтай"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2027"
+  },
+  {
+    "external_id": "82565",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Уда трейл",
+    "date": "15/11/2026",
+    "distances": "10 км, 19 км, 3 км, 47 км",
+    "city": "Убинская",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/uda-treil-2026-2025"
+  },
+  {
+    "external_id": "82587",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Погоня за Лисой",
+    "date": "28/11/2026",
+    "distances": "15 км, 8 км",
+    "city": "Красноярск",
+    "region": "Красноярский край",
+    "region_slugs": [
+      "krasnoyarskij-kraj"
+    ],
+    "regions": [
+      "Красноярский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/11313"
+  },
+  {
+    "external_id": "82598",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Горячий шоколад»",
+    "date": "13/12/2026",
+    "distances": "10 км, 20 км, 5 км",
+    "city": "Горячий Ключ",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/TreylpolumarafonGoryachiyshokolad2026"
+  },
+  {
+    "external_id": "82675",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Тульский зимний трейл",
+    "date": "05/01/2027",
+    "distances": "15 км, 6 км",
+    "city": "Тула",
+    "region": "Тульская область",
+    "region_slugs": [
+      "tulskaya-oblast"
+    ],
+    "regions": [
+      "Тульская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/TWT2027"
+  },
+  {
+    "external_id": "82666",
+    "url": "https://marathonec.ru/crazy-owl-50/",
+    "title": "Crazy Owl 50 наследие Николая Львова, русский Да Винчи 2027",
+    "date": "12/06/2027",
+    "distances": "2 км, 26 км, 3 км, 57 км",
+    "city": "Старая Ладога",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "83354",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Осенний марафон «Орден белого орла»",
+    "date": "08/11/2026",
+    "distances": "10 км, 21 км, 42 км, 5 км, 63 км",
+    "city": "Санкт-Петербург",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/AutumnOrden2026"
+  },
+  {
+    "external_id": "83757",
+    "url": "https://marathonec.ru/dagestan-wild-trail-2026/",
+    "title": "Dagestan Wild Trail 2027",
+    "date": "09/04/2027",
+    "distances": "100 км, 12 км, 19 км, 30 км, 55 км, 75 км",
+    "city": "Махачкала",
+    "region": "Республика Дагестан",
+    "region_slugs": [
+      "respublika-dagestan"
+    ],
+    "regions": [
+      "Республика Дагестан"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "83775",
+    "url": "https://marathonec.ru/arkhyz-wild-trail-2026/",
+    "title": "Arkhyz Wild Trail 2027",
+    "date": "25/06/2027",
+    "distances": "15 км, 19 км, 30 км, 40 км, 50 км, 65 км",
+    "city": "Архыз",
+    "region": "Кабардино-Балкарская Республика",
+    "region_slugs": [
+      "kabardino-balkarskaya-respublika"
+    ],
+    "regions": [
+      "Кабардино-Балкарская Республика"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "84090",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл Poma Run Cup",
+    "date": "17/07/2027",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Суздаль",
+    "region": "Владимирская область",
+    "region_slugs": [
+      "vladimirskaya-oblast"
+    ],
+    "regions": [
+      "Владимирская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/POMARUNCUP2027"
+  },
+  {
+    "external_id": "84201",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Железноводск Ultra Trail",
+    "date": "30/10/2026",
+    "distances": "10 км, 100 км, 30 км, 5 км, 50 км",
+    "city": "Железноводск",
+    "region": "Ставропольский край",
+    "region_slugs": [
+      "stavropolskij-kraj"
+    ],
+    "regions": [
+      "Ставропольский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.place/events/ultra-trail-2026/"
+  },
+  {
+    "external_id": "84224",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Moscow Drift Cross",
+    "date": "14/11/2026",
+    "distances": "9 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://ultras.goldenultra.ru/"
+  },
+  {
+    "external_id": "24926",
+    "url": "https://marathonec.ru/zabeg-rf-gid/",
+    "title": "Всероссийский полумарафон «ЗаБег.РФ» 2027",
+    "date": "22/05/2027",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Вся Россия",
+    "region": "",
+    "region_slugs": [
+      "vologodskaya-oblast",
+      "zabajkalskij-kraj",
+      "irkutskaya-oblast",
+      "kaliningradskaya-oblast",
+      "kamchatskij-kraj",
+      "kemerovskaya-oblast",
+      "krasnodarskij-kraj",
+      "krasnoyarskij-kraj",
+      "moskovskaya-oblast",
+      "novgorodskaya-oblast",
+      "novosibirskaya-oblast",
+      "primorskij-kraj",
+      "pskovskaya-oblast",
+      "respublika-bashkortostan",
+      "respublika-krym",
+      "yakutiya",
+      "rostovskaya-oblast",
+      "samarskaya-oblast",
+      "saratovskaya-oblast",
+      "sverdlovskaya-oblast",
+      "leningradskaya-oblast",
+      "tambovskaya-oblast",
+      "tverskaya-oblast",
+      "ulyanovskaya-oblast",
+      "xabarovskij-kraj",
+      "chelyabinskaya-oblast",
+      "yaroslavskaya-oblast"
+    ],
+    "regions": [
+      "Вологодская область",
+      "Забайкальский край",
+      "Иркутская область",
+      "Калининградская область",
+      "Камчатский край",
+      "Кемеровская область",
+      "Краснодарский край",
+      "Красноярский край",
+      "Москва и Московская область",
+      "Новгородская область",
+      "Новосибирская область",
+      "Приморский край",
+      "Псковская область",
+      "Республика Башкортостан",
+      "Республика Крым",
+      "Республика Саха (Якутия)",
+      "Ростовская область",
+      "Самарская область",
+      "Саратовская область",
+      "Свердловская область",
+      "СПБ и Ленинградская область",
+      "Тамбовская область",
+      "Тверская область",
+      "Ульяновская область",
+      "Хабаровский край",
+      "Челябинская область",
+      "Ярославская область"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "84949",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Иммерсивный Жуков трейл",
+    "date": "28/11/2026",
+    "distances": "10 км, 5 км",
+    "city": "Стрелковка",
+    "region": "Калужская область",
+    "region_slugs": [
+      "kaluzhskaya-oblast"
+    ],
+    "regions": [
+      "Калужская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://xn--40-emcadbfdgn.xn--p1ai/events/161"
+  },
+  {
+    "external_id": "84958",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Новогодний хоровод",
+    "date": "31/12/2026",
+    "distances": "5 км",
+    "city": "Обнинск",
+    "region": "Калужская область",
+    "region_slugs": [
+      "kaluzhskaya-oblast"
+    ],
+    "regions": [
+      "Калужская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://xn--40-emcadbfdgn.xn--p1ai/events/169"
+  },
+  {
+    "external_id": "85847",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Туман»",
+    "date": "10/10/2026",
+    "distances": "10 км, 20 км, 5 км",
+    "city": "Фрязино",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.place/?q%5Btag%5D=OB"
+  },
+  {
+    "external_id": "86086",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Grand Kislovodsk",
+    "date": "02/05/2027",
+    "distances": "105 км, 11 км, 17 км, 30 км, 5 км, 60 км",
+    "city": "Кисловодск",
+    "region": "Свердловская область",
+    "region_slugs": [
+      "sverdlovskaya-oblast"
+    ],
+    "regions": [
+      "Свердловская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/1900"
+  },
+  {
+    "external_id": "86140",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Вышний Волочёк Race",
+    "date": "03/10/2026",
+    "distances": "35 км",
+    "city": "Вышний Волочёк",
+    "region": "Тверская область",
+    "region_slugs": [
+      "tverskaya-oblast"
+    ],
+    "regions": [
+      "Тверская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2148"
+  },
+  {
+    "external_id": "86157",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Норильск. Горный старт",
+    "date": "21/08/2027",
+    "distances": "17 км, 30 км, 5 км, 50 км, 70 км",
+    "city": "Норильск",
+    "region": "Красноярский край",
+    "region_slugs": [
+      "krasnoyarskij-kraj"
+    ],
+    "regions": [
+      "Красноярский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2064"
+  },
+  {
+    "external_id": "86190",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Фестиваль ВолховМен «На пути из варяг в греки»",
+    "date": "17/07/2027",
+    "distances": "12 км, 4 км, 8 км",
+    "city": "Великий Новгород",
+    "region": "Новгородская область",
+    "region_slugs": [
+      "novgorodskaya-oblast"
+    ],
+    "regions": [
+      "Новгородская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/VOLKhOVMEN"
+  },
+  {
+    "external_id": "23206",
+    "url": "https://marathonec.ru/chelyabinsky-marafon-gid/",
+    "title": "Челябинский марафон 2027",
+    "date": "22/08/2027",
+    "distances": "10 км, 21 км, 42 км, 5 км",
+    "city": "Челябинск",
+    "region": "Челябинская область",
+    "region_slugs": [
+      "chelyabinskaya-oblast"
+    ],
+    "regions": [
+      "Челябинская область"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "86323",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Шекснинский полумарафон",
+    "date": "17/10/2026",
+    "distances": "10 км, 21 км, 42 км, 5 км",
+    "city": "Шексна",
+    "region": "Вологодская область",
+    "region_slugs": [
+      "vologodskaya-oblast"
+    ],
+    "regions": [
+      "Вологодская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://vk.com/away.php?to=https%3A%2F%2Fvologdamarafon.ru%2Fmarafon%2F%25D1%2588%25D0%25B5%25D0%25BA%25D1%2581%25D0%25BD%25D0%25B8%25D0%25BD%25D1%2581%25D0%25BA%25D0%25B8%25D0%25B9-%25D0%25BF%25D0%25BE%25D0%25BB%25D1%2583%25D0%25BC%25D0%25B0%25D1%2580%25D0%25B0%25D1%2584%25D0%25BE%25D0%25BD%2F%25D1%2580%25D0%25B5%25D0%25B3%25D0%25B8%25D1%2581%25D1%2582%25D1%2580%25D0%25B0%25D1%2586%25D0%25B8%25D1%258F%2F\u0026utf=1"
+  },
+  {
+    "external_id": "22503",
+    "url": "https://marathonec.ru/perm-marathon-gid/",
+    "title": "Пермский марафон 2027",
+    "date": "04/09/2027",
+    "distances": "10 км, 21 км, 3 км, 42 км, 5 км",
+    "city": "Пермь",
+    "region": "Пермский край",
+    "region_slugs": [
+      "permskij-kraj"
+    ],
+    "regions": [
+      "Пермский край"
+    ],
+    "type": "shosse"
+  },
+  {
+    "external_id": "86419",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Wolf Trail Backyard Ultra «Волчьими тропами»",
+    "date": "13/08/2027",
+    "distances": "10 км, 6.7 км",
+    "city": "Нижний Новгород",
+    "region": "Нижегородская область",
+    "region_slugs": [
+      "nizhegorodskaya-oblast"
+    ],
+    "regions": [
+      "Нижегородская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/WOLFTRAIL2027"
+  },
+  {
+    "external_id": "86440",
+    "url": "https://marathonec.ru/t-bank-elbrus-wild-trail-gid/",
+    "title": "Elbrus Wild Trail 2027",
+    "date": "06/08/2027",
+    "distances": "11 км, 130 км, 20 км, 25 км, 35 км, 60 км",
+    "city": "Терскол",
+    "region": "Кабардино-Балкарская Республика",
+    "region_slugs": [
+      "kabardino-balkarskaya-respublika"
+    ],
+    "regions": [
+      "Кабардино-Балкарская Республика"
+    ],
+    "type": "trejl"
+  },
+  {
+    "external_id": "86495",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Городская ультра «Уфимское ожерелье». 3 этап",
+    "date": "17/10/2026",
+    "distances": "37 км, 63 км, 9.9 км",
+    "city": "Уфа",
+    "region": "Республика Башкортостан",
+    "region_slugs": [
+      "respublika-bashkortostan"
+    ],
+    "regions": [
+      "Республика Башкортостан"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ufacityultra20263"
+  },
+  {
+    "external_id": "87022",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "НеЗаповедные тропы",
+    "date": "24/10/2026",
+    "distances": "10 км, 23 км, 5 км",
+    "city": "Красноярск",
+    "region": "Красноярский край",
+    "region_slugs": [
+      "krasnoyarskij-kraj"
+    ],
+    "regions": [
+      "Красноярский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://www.toplist.run/race/12592"
+  },
+  {
+    "external_id": "87418",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Ультратрейл «Тридцатка»",
+    "date": "11/09/2027",
+    "distances": "59 км",
+    "city": "Майкоп, Солохаул",
+    "region": "",
+    "region_slugs": [
+      "krasnodarskij-kraj",
+      "respublika-adygeya"
+    ],
+    "regions": [
+      "Краснодарский край",
+      "Республика Адыгея"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/ULTRATREYLTRIDTsATKA2027"
+  },
+  {
+    "external_id": "87515",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейлфест «МинВоды»",
+    "date": "07/11/2026",
+    "distances": "12 км, 7 км",
+    "city": "Минеральные Воды",
+    "region": "Ставропольский край",
+    "region_slugs": [
+      "stavropolskij-kraj"
+    ],
+    "regions": [
+      "Ставропольский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/TreylfestZmeyka2026"
+  },
+  {
+    "external_id": "88425",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Юрманка трейл",
+    "date": "17/10/2026",
+    "distances": "110 км, 15 км, 35 км, 70 км",
+    "city": "Верх-Ики",
+    "region": "Новосибирская область",
+    "region_slugs": [
+      "novosibirskaya-oblast"
+    ],
+    "regions": [
+      "Новосибирская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://sportsauce.ru/starts/yurmanka-trejl-309"
+  },
+  {
+    "external_id": "89575",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Фонарный забег",
+    "date": "03/10/2026",
+    "distances": "10 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://zeppelinrun.ru/fonarny-zabeg?ysclid=mrnwzxsqaw875265498#rec2328550151"
+  },
+  {
+    "external_id": "89578",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "«Золотая параллель»",
+    "date": "03/10/2026",
+    "distances": "10 км, 5 км",
+    "city": "Армавир",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/gold_parallel"
+  },
+  {
+    "external_id": "89582",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Горный трейл «Зигитяк»",
+    "date": "03/10/2026",
+    "distances": "4.3 км, 7.4 км",
+    "city": "Зигитяк",
+    "region": "Республика Башкортостан",
+    "region_slugs": [
+      "respublika-bashkortostan"
+    ],
+    "regions": [
+      "Республика Башкортостан"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/ZigityakMountainTrailChampionship2026"
+  },
+  {
+    "external_id": "89584",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Забег «Этноран» в Калмыкии",
+    "date": "04/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Элиста",
+    "region": "Республика Калмыкия",
+    "region_slugs": [
+      "respublika-kalmykiya"
+    ],
+    "regions": [
+      "Республика Калмыкия"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ZabegEtnoranRespublikaKalmykiya2026"
+  },
+  {
+    "external_id": "89588",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Space Half Marathon",
+    "date": "10/10/2026",
+    "distances": "10 км, 21 км, 5 км",
+    "city": "Королев",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/spacehalf2026"
+  },
+  {
+    "external_id": "89592",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Знаменский забег",
+    "date": "17/10/2026",
+    "distances": "10 км, 15 км, 5 км",
+    "city": "Санкт-Петербург",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/Znamenkarun"
+  },
+  {
+    "external_id": "89600",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Лесобег осень»",
+    "date": "18/10/2026",
+    "distances": "11 км, 22 км, 4.5 км",
+    "city": "Липецк",
+    "region": "Липецкая область",
+    "region_slugs": [
+      "lipeckaya-oblast"
+    ],
+    "regions": [
+      "Липецкая область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/LesobegOSEN18102026"
+  },
+  {
+    "external_id": "89602",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Окская тропа» – дневной забег",
+    "date": "25/10/2026",
+    "distances": "15 км, 3.5 км, 31 км, 5 км, 8 км",
+    "city": "Нижний Новгород",
+    "region": "Нижегородская область",
+    "region_slugs": [
+      "nizhegorodskaya-oblast"
+    ],
+    "regions": [
+      "Нижегородская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/treylOkskayatropa2026dnevnoyzabeg"
+  },
+  {
+    "external_id": "89607",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Hard Trail Sand",
+    "date": "04/10/2026",
+    "distances": "15 км, 30 км, 7 км",
+    "city": "Семиозерье",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://hardadventure.ru/sand2026"
+  },
+  {
+    "external_id": "89615",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Благотворительный забег «8 городов. Москва»",
+    "date": "01/11/2026",
+    "distances": "10 км, 2 км, 21 км, 5 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/8gorodovMoskva"
+  },
+  {
+    "external_id": "89618",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Благотворительный забег «8 городов. Санкт-Петербург»",
+    "date": "01/11/2026",
+    "distances": "10 км, 2 км, 21 км, 5 км",
+    "city": "Санкт-Петербург",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/8gorodovSanktPeterburg"
+  },
+  {
+    "external_id": "89623",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Крымский Зимний Ультра Трейл",
+    "date": "05/01/2027",
+    "distances": "120 км, 14 км, 24 км, 34 км, 7 км",
+    "city": "Бахчисарай",
+    "region": "Республика Крым",
+    "region_slugs": [
+      "respublika-krym"
+    ],
+    "regions": [
+      "Республика Крым"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/cwut27"
+  },
+  {
+    "external_id": "89627",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Забег «Покровское-Стрешнево»",
+    "date": "18/10/2026",
+    "distances": "10 км, 15 км, 2 км, 21 км, 25 км, 3 км, 30 км, 5 км, 7 км",
+    "city": "Москва",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/PokrovskoeStreshnevo2"
+  },
+  {
+    "external_id": "89632",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Кросс «Высота 102»",
+    "date": "10/10/2026",
+    "distances": "6 км",
+    "city": "Волгоград",
+    "region": "Волгоградская область",
+    "region_slugs": [
+      "volgogradskaya-oblast"
+    ],
+    "regions": [
+      "Волгоградская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/KrossVysota102"
+  },
+  {
+    "external_id": "90420",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Кросс памяти Серафима и Георгия Знаменских",
+    "date": "02/10/2026",
+    "distances": "1 км, 2 км, 3 км, 4 км, 5 км, 6 км, 8 км",
+    "city": "Чулково",
+    "region": "Москва и Московская область",
+    "region_slugs": [
+      "moskovskaya-oblast"
+    ],
+    "regions": [
+      "Москва и Московская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2159"
+  },
+  {
+    "external_id": "90423",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Благотворительный забег «Хвостатый сезон в Притяжении»",
+    "date": "03/10/2026",
+    "distances": "1 км, 5 км",
+    "city": "Магнитогорск",
+    "region": "Челябинская область",
+    "region_slugs": [
+      "chelyabinskaya-oblast"
+    ],
+    "regions": [
+      "Челябинская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://myrace.info/events/2133"
+  },
+  {
+    "external_id": "90429",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Дальний Trail Race",
+    "date": "18/10/2026",
+    "distances": "12 км, 21 км",
+    "city": "Калуга",
+    "region": "Калужская область",
+    "region_slugs": [
+      "kaluzhskaya-oblast"
+    ],
+    "regions": [
+      "Калужская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2120"
+  },
+  {
+    "external_id": "90431",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейловый полумарафон «Ветлан»",
+    "date": "10/10/2026",
+    "distances": "20 км",
+    "city": "Ныроб",
+    "region": "Пермский край",
+    "region_slugs": [
+      "permskij-kraj"
+    ],
+    "regions": [
+      "Пермский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2140"
+  },
+  {
+    "external_id": "90433",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Каменск Урбан Трейл",
+    "date": "04/10/2026",
+    "distances": "10 км, 14 км, 20 км, 3 км, 30 км",
+    "city": "Каменск-Уральский",
+    "region": "Свердловская область",
+    "region_slugs": [
+      "sverdlovskaya-oblast"
+    ],
+    "regions": [
+      "Свердловская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/1967"
+  },
+  {
+    "external_id": "90435",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Уральский вулкан: гора Липовая»",
+    "date": "03/10/2026",
+    "distances": "10 км, 2 км, 20 км",
+    "city": "Черноисточинск",
+    "region": "Свердловская область",
+    "region_slugs": [
+      "sverdlovskaya-oblast"
+    ],
+    "regions": [
+      "Свердловская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2080"
+  },
+  {
+    "external_id": "90439",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Розовый забег",
+    "date": "03/10/2026",
+    "distances": "2.5 км",
+    "city": "Челябинск",
+    "region": "Челябинская область",
+    "region_slugs": [
+      "chelyabinskaya-oblast"
+    ],
+    "regions": [
+      "Челябинская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2123"
+  },
+  {
+    "external_id": "90441",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Samba Trail: Арчеда",
+    "date": "01/11/2026",
+    "distances": "14 км, 28 км, 5 км, 50 км",
+    "city": "Фролово",
+    "region": "Волгоградская область",
+    "region_slugs": [
+      "volgogradskaya-oblast"
+    ],
+    "regions": [
+      "Волгоградская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/1907"
+  },
+  {
+    "external_id": "90454",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Глинтвейновый забег",
+    "date": "24/01/2027",
+    "distances": "1 км, 1.6 км, 10 км, 4 км",
+    "city": "Санкт-Петербург",
+    "region": "СПБ и Ленинградская область",
+    "region_slugs": [
+      "leningradskaya-oblast"
+    ],
+    "regions": [
+      "СПБ и Ленинградская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://myrace.info/events/2156"
+  },
+  {
+    "external_id": "90466",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Золото Богуная»",
+    "date": "04/10/2026",
+    "distances": "10 км",
+    "city": "Зеленогорск",
+    "region": "Красноярский край",
+    "region_slugs": [
+      "krasnoyarskij-kraj"
+    ],
+    "regions": [
+      "Красноярский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/treil-zoloto-bogunaya-2026"
+  },
+  {
+    "external_id": "90469",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Фестиваль здоровья «Пульс земли»",
+    "date": "03/10/2026",
+    "distances": "12 км, 3 км, 35 км, 5 км",
+    "city": "Сосновоборск",
+    "region": "Красноярский край",
+    "region_slugs": [
+      "krasnoyarskij-kraj"
+    ],
+    "regions": [
+      "Красноярский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/festival-zdorovya-puls-zemli-2026"
+  },
+  {
+    "external_id": "90472",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Сверхмарафон «Хозяин тайги»",
+    "date": "17/10/2026",
+    "distances": "11 км, 25 км, 48 км",
+    "city": "Красноярск",
+    "region": "Красноярский край",
+    "region_slugs": [
+      "krasnoyarskij-kraj"
+    ],
+    "regions": [
+      "Красноярский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/sverkhmarafon-khozyain-taigi-2026"
+  },
+  {
+    "external_id": "90476",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Тропа Зайцева»",
+    "date": "11/10/2026",
+    "distances": "1 км, 10 км, 2 км, 3 км, 4 км, 6 км, 8 км",
+    "city": "Тюмень",
+    "region": "Тюменская область",
+    "region_slugs": [
+      "tyumenskayaoblast"
+    ],
+    "regions": [
+      "Тюменская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/tropa-zaitseva-2026-2025"
+  },
+  {
+    "external_id": "90478",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Детский забег «Ангарский километр»",
+    "date": "04/10/2026",
+    "distances": "1 км",
+    "city": "Ангарск",
+    "region": "Иркутская область",
+    "region_slugs": [
+      "irkutskaya-oblast"
+    ],
+    "regions": [
+      "Иркутская область"
+    ],
+    "type": "shosse",
+    "registration_url": "https://toplist.run/race/angarskii-kilometr-3-etap-2026-2"
+  },
+  {
+    "external_id": "90485",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Fury trail",
+    "date": "22/08/2027",
+    "distances": "12 км, 22 км, 5 км, 6 км",
+    "city": "Ангарск",
+    "region": "Иркутская область",
+    "region_slugs": [
+      "irkutskaya-oblast"
+    ],
+    "regions": [
+      "Иркутская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://toplist.run/race/fury-trail-2027-2026"
+  },
+  {
+    "external_id": "90488",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Фестиваль спорта «Исток Дона»",
+    "date": "10/10/2026",
+    "distances": "15 км, 7 км",
+    "city": "Новомосковск",
+    "region": "Тульская область",
+    "region_slugs": [
+      "tulskaya-oblast"
+    ],
+    "regions": [
+      "Тульская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/ID2026"
+  },
+  {
+    "external_id": "90490",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "ЗБ Трейл",
+    "date": "18/10/2026",
+    "distances": "12 км, 22 км, 6 км",
+    "city": "Балаклава",
+    "region": "Республика Крым",
+    "region_slugs": [
+      "respublika-krym"
+    ],
+    "regions": [
+      "Республика Крым"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/zbtrail"
+  },
+  {
+    "external_id": "90493",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "СоюзТрейл",
+    "date": "17/10/2026",
+    "distances": "13 км, 26 км, 5 км",
+    "city": "Белокуриха",
+    "region": "Алтайский край",
+    "region_slugs": [
+      "altajskij-kraj"
+    ],
+    "regions": [
+      "Алтайский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/SoyuzTreyl"
+  },
+  {
+    "external_id": "90507",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Ультратрейл «Восьмёрка»",
+    "date": "17/07/2027",
+    "distances": "80 км",
+    "city": "Красная Поляна, Псебай",
+    "region": "Краснодарский край",
+    "region_slugs": [
+      "krasnodarskij-kraj"
+    ],
+    "regions": [
+      "Краснодарский край"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/ultratrailvosmerka2027"
+  },
+  {
+    "external_id": "90510",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Трейл «Беги»",
+    "date": "20/11/2026",
+    "distances": "10 км",
+    "city": "Челябинск",
+    "region": "Челябинская область",
+    "region_slugs": [
+      "chelyabinskaya-oblast"
+    ],
+    "regions": [
+      "Челябинская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/marathonRUN"
+  },
+  {
+    "external_id": "90522",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Осенний кросс «КультаКарьяла»",
+    "date": "04/10/2026",
+    "distances": "12 км, 4 км, 8 км",
+    "city": "Петрозаводск",
+    "region": "Республика Карелия",
+    "region_slugs": [
+      "respublika-kareliya"
+    ],
+    "regions": [
+      "Республика Карелия"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/KULTAKARJALA2026"
+  },
+  {
+    "external_id": "90525",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Тюменский осенний полумарафон",
+    "date": "25/10/2026",
+    "distances": "21 км",
+    "city": "Петрозаводск",
+    "region": "Республика Карелия",
+    "region_slugs": [
+      "respublika-kareliya"
+    ],
+    "regions": [
+      "Республика Карелия"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/XIITyumenskiyosenniypolumarafonTyatlet"
+  },
+  {
+    "external_id": "90527",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Пещерный трейл",
+    "date": "25/10/2026",
+    "distances": "15 км, 30 км",
+    "city": "Терновка",
+    "region": "Воронежская область",
+    "region_slugs": [
+      "voronezhskaya-oblast"
+    ],
+    "regions": [
+      "Воронежская область"
+    ],
+    "type": "trejl",
+    "registration_url": "https://reg.russiarunning.com/event/Peshchernyytreyl"
+  },
+  {
+    "external_id": "90530",
+    "url": "https://marathonec.ru/calendar-beg/",
+    "title": "Забег «Этноран» в Чеченской Республике",
+    "date": "25/10/2026",
+    "distances": "10 км, 5 км",
+    "city": "Грозный",
+    "region": "Чеченская Республика",
+    "region_slugs": [
+      "chechenskaya-respublika"
+    ],
+    "regions": [
+      "Чеченская Республика"
+    ],
+    "type": "shosse",
+    "registration_url": "https://reg.russiarunning.com/event/ETNORAN"
+  }
+]
