@@ -1,0 +1,2567 @@
+{
+  "stats": {
+    "Parsed": 133,
+    "Valid": 133,
+    "Rejected": 0,
+    "Expired": 0,
+    "DateOutOfRange": 0,
+    "OutOfScope": 0,
+    "UnrecognizedRegion": 0,
+    "MultiRegion": 2,
+    "DroppedDistances": 0,
+    "Rejects": {},
+    "Empty": {
+      "distances": 1
+    },
+    "Unrecognized": {}
+  },
+  "records": [
+    {
+      "external_id": "60817",
+      "in_scope": true,
+      "title": "Трейл «Буря»",
+      "title_norm": "трейл буря",
+      "start_date": "2026-11-15",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Красногорск",
+      "city_key": "krasnogorsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000
+      ]
+    },
+    {
+      "external_id": "62548",
+      "in_scope": true,
+      "title": "Ягуся Ультра Трейл",
+      "title_norm": "ягуся ультра трейл",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Костромская область",
+      "city": "Нерехта",
+      "city_key": "nerehta",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        51000,
+        104000
+      ],
+      "registration_url": "https://toplist.run/race/yagusya-ultra-treil-2026-poluavtonomka-2026"
+    },
+    {
+      "external_id": "63911",
+      "in_scope": true,
+      "title": "Карстовый трейл",
+      "title_norm": "карстовый трейл",
+      "start_date": "2026-10-24",
+      "country_code": "RU",
+      "region": "Республика Башкортостан",
+      "city": "Ишеево",
+      "city_key": "isheevo",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6000,
+        12000,
+        23000,
+        66000
+      ],
+      "registration_url": "https://myrace.info/events/2072"
+    },
+    {
+      "external_id": "60377",
+      "in_scope": true,
+      "title": "Фестиваль трейлраннинга «Бештаугорский Крест»",
+      "title_norm": "фестиваль трейлраннинга бештаугорский крест",
+      "start_date": "2027-04-03",
+      "country_code": "RU",
+      "region": "Ставропольский край",
+      "city": "Пятигорск",
+      "city_key": "pyatigorsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        15000,
+        17000,
+        23000
+      ]
+    },
+    {
+      "external_id": "60336",
+      "in_scope": true,
+      "title": "О-Трейл Феррум Фест",
+      "title_norm": "о трейл феррум фест",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Ставропольский край",
+      "city": "Железноводск",
+      "city_key": "zheleznovodsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        2000,
+        3000,
+        9000,
+        19000,
+        30000
+      ]
+    },
+    {
+      "external_id": "67153",
+      "in_scope": true,
+      "title": "Новотроицкий полумарафон",
+      "title_norm": "новотроицкий",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Оренбургская область",
+      "city": "Новотроицк",
+      "city_key": "novotroick",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/NOVOTROITsKIYPOLUMARAFON2026"
+    },
+    {
+      "external_id": "67169",
+      "in_scope": true,
+      "title": "Иркутский Осенний марафон",
+      "title_norm": "иркутский осенний",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Иркутская область",
+      "city": "Иркутск",
+      "city_key": "irkutsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        7000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://toplist.run/race/irkutskii-osennii-marafon-2026"
+    },
+    {
+      "external_id": "67203",
+      "in_scope": true,
+      "title": "Дмитров Трейл Осень",
+      "title_norm": "дмитров трейл осень",
+      "start_date": "2026-11-08",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Дмитров",
+      "city_key": "dmitrov",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        7000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/DmitrovTreylOsen2026"
+    },
+    {
+      "external_id": "67221",
+      "in_scope": true,
+      "title": "Полумарафон «Жемчужина Золотого Кольца»",
+      "title_norm": "жемчужина золотого кольца",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Владимирская область",
+      "city": "Суздаль",
+      "city_key": "suzdal",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        3000,
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/SuzdalskiypolumarafonZhemchuzhinaZolotogokoltsa2026"
+    },
+    {
+      "external_id": "67329",
+      "in_scope": true,
+      "title": "Забег «Ржевский рубеж»",
+      "title_norm": "ржевский рубеж",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Тверская область",
+      "city": "Ржев",
+      "city_key": "rzhev",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://myrace.info/events/1877"
+    },
+    {
+      "external_id": "67363",
+      "in_scope": true,
+      "title": "Крымский марафон",
+      "title_norm": "крымский",
+      "start_date": "2026-11-15",
+      "country_code": "RU",
+      "region": "Республика Крым",
+      "city": "Симферополь",
+      "city_key": "simferopol",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/KrymskiyMarafon2026"
+    },
+    {
+      "external_id": "67406",
+      "in_scope": true,
+      "title": "Есенинский пробег",
+      "title_norm": "есенинский пробег",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Рязанская область",
+      "city": "Рыбное",
+      "city_key": "rybnoe",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ESENINBEG26"
+    },
+    {
+      "external_id": "63367",
+      "in_scope": true,
+      "title": "Riekkalansaari Ultra Trail",
+      "title_norm": "riekkalansaari ultra trail",
+      "start_date": "2027-08-13",
+      "country_code": "RU",
+      "region": "Республика Карелия",
+      "city": "Риеккалансаари",
+      "city_key": "riekkalansaari",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        12000,
+        25000,
+        35000,
+        55000,
+        80000
+      ]
+    },
+    {
+      "external_id": "60972",
+      "in_scope": true,
+      "title": "Новогодний марафон Sosnovka Goat",
+      "title_norm": "новогодний sosnovka goat",
+      "start_date": "2026-12-13",
+      "country_code": "RU",
+      "region": "Санкт-Петербург",
+      "city": "Санкт-Петербург",
+      "city_key": "saint-petersburg",
+      "timezone": "Europe/Moscow",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        21000,
+        42000,
+        63000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/SosnovkaGoat"
+    },
+    {
+      "external_id": "60843",
+      "in_scope": true,
+      "title": "Международный трейловый забег Lake Ice Race",
+      "title_norm": "международный трейловый lake ice race",
+      "start_date": "2027-01-23",
+      "country_code": "RU",
+      "region": "Челябинская область",
+      "city": "Миасс",
+      "city_key": "miass",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        10000,
+        20000
+      ]
+    },
+    {
+      "external_id": "68272",
+      "in_scope": true,
+      "title": "Vottovaara Mountain Race",
+      "title_norm": "vottovaara mountain race",
+      "start_date": "2027-09-04",
+      "country_code": "RU",
+      "region": "Республика Карелия",
+      "city": "Гимолы",
+      "city_key": "gimoly",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        14000,
+        55000,
+        80467,
+        160934
+      ]
+    },
+    {
+      "external_id": "68374",
+      "in_scope": true,
+      "title": "Вьюнок Трейл",
+      "title_norm": "вьюнок трейл",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Ленинградская область",
+      "city": "Гарболово",
+      "city_key": "garbolovo",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        2000,
+        5000,
+        12000,
+        24000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/vyunok26"
+    },
+    {
+      "external_id": "61079",
+      "in_scope": true,
+      "title": "Трейл «Ирәмәл Ярыш: новый вызов»",
+      "title_norm": "трейл ирәмәл ярыш новый вызов",
+      "start_date": "2027-03-27",
+      "country_code": "RU",
+      "region": "Республика Башкортостан",
+      "city": "Белорецк",
+      "city_key": "beloreck",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3500,
+        5000,
+        10000,
+        27000
+      ]
+    },
+    {
+      "external_id": "72065",
+      "in_scope": true,
+      "title": "Марафон «Путь к роднику»",
+      "title_norm": "путь к роднику",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Челябинская область",
+      "city": "Слюдорудник",
+      "city_key": "slyudorudnik",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://myrace.info/events/1540"
+    },
+    {
+      "external_id": "72424",
+      "in_scope": true,
+      "title": "Марафон «Мучкап – Шапкино – Любо»",
+      "title_norm": "мучкап шапкино любо",
+      "start_date": "2026-10-31",
+      "country_code": "RU",
+      "region": "Тамбовская область",
+      "city": "Мучкапский",
+      "city_key": "muchkapskiy",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        10000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/MARAFONMUChKAPShAPKINOLYuBO2026"
+    },
+    {
+      "external_id": "72448",
+      "in_scope": true,
+      "title": "Трейл «Рубеж»",
+      "title_norm": "трейл рубеж",
+      "start_date": "2026-10-24",
+      "country_code": "RU",
+      "region": "Калужская область",
+      "city": "Ильинское",
+      "city_key": "ilinskoe",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        30000,
+        100000
+      ],
+      "registration_url": "https://xn--40-emcadbfdgn.xn--p1ai/events/162"
+    },
+    {
+      "external_id": "73420",
+      "in_scope": true,
+      "title": "Народный трейл",
+      "title_norm": "народный трейл",
+      "start_date": "2026-11-04",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Истра",
+      "city_key": "istra",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000
+      ],
+      "registration_url": "https://istra.run/narod#rec773672918"
+    },
+    {
+      "external_id": "73916",
+      "in_scope": true,
+      "title": "KultaKarjala",
+      "title_norm": "kultakarjala",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Республика Карелия",
+      "city": "Петрозаводск",
+      "city_key": "petrozavodsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        4000,
+        8000,
+        12000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/KULTAKARJALA2026"
+    },
+    {
+      "external_id": "73918",
+      "in_scope": true,
+      "title": "Осенний трейл «Краски леса»",
+      "title_norm": "осенний трейл краски леса",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Ступино",
+      "city_key": "stupino",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/TREYLKRASKILESA2026"
+    },
+    {
+      "external_id": "73926",
+      "in_scope": true,
+      "title": "Ночной трейловый забег «Светлая ночь»",
+      "title_norm": "ночной трейловый светлая ночь",
+      "start_date": "2026-12-05",
+      "country_code": "RU",
+      "region": "Удмуртская Республика",
+      "city": "Кварса",
+      "city_key": "kvarsa",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        16000,
+        30000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/Svetlaynoch2026"
+    },
+    {
+      "external_id": "55401",
+      "in_scope": true,
+      "title": "Т-Банк Rosa Wild Fest",
+      "title_norm": "т банк rosa wild fest",
+      "start_date": "2027-09-03",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Сочи",
+      "city_key": "sochi",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6300,
+        12000,
+        13000,
+        20000,
+        35000,
+        40000,
+        45000,
+        80000,
+        115000,
+        180000
+      ]
+    },
+    {
+      "external_id": "60637",
+      "in_scope": true,
+      "title": "Осенний кросс «Лисья гора»",
+      "title_norm": "осенний кросс лисья гора",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "trail",
+      "distances": [
+        2000,
+        4000,
+        6000,
+        8000
+      ]
+    },
+    {
+      "external_id": "61022",
+      "in_scope": true,
+      "title": "Октобер Трейл",
+      "title_norm": "октобер трейл",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Новосибирская область",
+      "city": "Новосибирск",
+      "city_key": "novosibirsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        8000,
+        17000,
+        28000,
+        45000
+      ]
+    },
+    {
+      "external_id": "60625",
+      "in_scope": true,
+      "title": "Осенний кросс «Быстрый пёс»",
+      "title_norm": "осенний кросс быстрый пес",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "trail",
+      "distances": [
+        2000
+      ]
+    },
+    {
+      "external_id": "76677",
+      "in_scope": true,
+      "title": "Novgorod Ice",
+      "title_norm": "novgorod ice",
+      "start_date": "2027-02-13",
+      "country_code": "RU",
+      "region": "Новгородская область",
+      "city": "Великий Новгород",
+      "city_key": "velikiy-novgorod",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6000,
+        15000,
+        21000
+      ]
+    },
+    {
+      "external_id": "76777",
+      "in_scope": true,
+      "title": "Марий Форест SnowRun – Backyard Ultra",
+      "title_norm": "марий форест snowrun backyard ultra",
+      "start_date": "2027-03-06",
+      "country_code": "RU",
+      "region": "Республика Марий Эл",
+      "city": "Йошкар-Ола",
+      "city_key": "yoshkar-ola",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6700
+      ],
+      "registration_url": "https://myrace.info/events/2028"
+    },
+    {
+      "external_id": "76789",
+      "in_scope": true,
+      "title": "Сормовский осенний пробег имени Г. П. Терентьева",
+      "title_norm": "сормовский осенний пробег имени г п терентьева",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Нижегородская область",
+      "city": "Нижний Новгород",
+      "city_key": "nizhniy-novgorod",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        20000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/SORMOVSKIYOSENNIYPROBEG2026"
+    },
+    {
+      "external_id": "77049",
+      "in_scope": true,
+      "title": "Трейл «Химкинский лес»",
+      "title_norm": "трейл химкинский лес",
+      "start_date": "2027-04-11",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Химки",
+      "city_key": "himki",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7800,
+        13000,
+        27000
+      ]
+    },
+    {
+      "external_id": "77600",
+      "in_scope": true,
+      "title": "City Trail 6 X-Race",
+      "title_norm": "city trail 6 x race",
+      "start_date": "2026-11-01",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Красногорск",
+      "city_key": "krasnogorsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000,
+        30000
+      ],
+      "registration_url": "https://city-trail.ru/6"
+    },
+    {
+      "external_id": "77628",
+      "in_scope": true,
+      "title": "Кунтаг Ультра Трейл",
+      "title_norm": "кунтаг ультра трейл",
+      "start_date": "2027-05-15",
+      "country_code": "RU",
+      "region": "Республика Хакасия",
+      "city": "Усть-Абакан",
+      "city_key": "ust-abakan",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        8000,
+        21000,
+        50000
+      ],
+      "registration_url": "https://toplist.run/race/kuntag-ultra-treil-2027"
+    },
+    {
+      "external_id": "79215",
+      "in_scope": true,
+      "title": "Трейл «По тропам предков»",
+      "title_norm": "трейл по тропам предков",
+      "start_date": "2026-11-07",
+      "country_code": "RU",
+      "region": "Карачаево-Черкесская Республика",
+      "city": "Кара-Паго",
+      "city_key": "kara-pago",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        12000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ZabegpoperesechennoymestnostiPotropampredkov1"
+    },
+    {
+      "external_id": "60478",
+      "in_scope": true,
+      "title": "Зимний полумарафон «Европа-Азия»",
+      "title_norm": "зимний европа азия",
+      "start_date": "2026-12-06",
+      "country_code": "RU",
+      "region": "Свердловская область",
+      "city": "Екатеринбург",
+      "city_key": "ekaterinburg",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        7000,
+        21000
+      ]
+    },
+    {
+      "external_id": "63884",
+      "in_scope": true,
+      "title": "Покровский полумарафон",
+      "title_norm": "покровский",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Вологодская область",
+      "city": "Покровское",
+      "city_key": "pokrovskoe",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://vk.com/away.php?to=https%3A%2F%2Fvologdamarafon.ru%2Fmarafon%2Fpokrovskij-polumarafon%2Fregistraciya%2F\u0026utf=1"
+    },
+    {
+      "external_id": "72430",
+      "in_scope": true,
+      "title": "Полумарафон «Бегущая Вологда»",
+      "title_norm": "бегущая вологда",
+      "start_date": "2026-12-06",
+      "country_code": "RU",
+      "region": "Вологодская область",
+      "city": "Вологда",
+      "city_key": "vologda",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        2000,
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/IXpolumarafonBV"
+    },
+    {
+      "external_id": "79931",
+      "in_scope": true,
+      "title": "Кисловодский марафон Kavkaz.Run",
+      "title_norm": "кисловодский kavkaz run",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Ставропольский край",
+      "city": "Кисловодск",
+      "city_key": "kislovodsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        2000,
+        5000,
+        10000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/KislovodskiymarafonKAVKAZRUN2026"
+    },
+    {
+      "external_id": "79952",
+      "in_scope": true,
+      "title": "Полумарафон «Русский Север»",
+      "title_norm": "русский север",
+      "start_date": "2026-10-31",
+      "country_code": "RU",
+      "region": "Вологодская область",
+      "city": "Кириллов",
+      "city_key": "kirillov",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        2000,
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/IIIpolumarafonRusskiySever"
+    },
+    {
+      "external_id": "22985",
+      "in_scope": true,
+      "title": "Сочи марафон 2026",
+      "title_norm": "сочи",
+      "start_date": "2026-10-31",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Сочи",
+      "city_key": "sochi",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        2500,
+        5000,
+        10000,
+        21000,
+        42000
+      ]
+    },
+    {
+      "external_id": "73910",
+      "in_scope": true,
+      "title": "Яблочный трейл",
+      "title_norm": "яблочный трейл",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Республика Крым",
+      "city": "Грушевка",
+      "city_key": "grushevka",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        7000,
+        14000,
+        24000,
+        39000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/YablochnyyTreyl2026"
+    },
+    {
+      "external_id": "67866",
+      "in_scope": true,
+      "title": "Казанский национальный полумарафон 2026",
+      "title_norm": "казанский национальный",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Республика Татарстан",
+      "city": "Казань",
+      "city_key": "kazan",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        3000,
+        5000,
+        10000,
+        21000
+      ]
+    },
+    {
+      "external_id": "44926",
+      "in_scope": true,
+      "title": "Гатчинский полумарафон 2026",
+      "title_norm": "гатчинский",
+      "start_date": "2026-11-08",
+      "country_code": "RU",
+      "region": "Ленинградская область",
+      "city": "Гатчина",
+      "city_key": "gatchina",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        2000,
+        10000,
+        21000
+      ]
+    },
+    {
+      "external_id": "74103",
+      "in_scope": true,
+      "title": "«Арена марафон» 2026",
+      "title_norm": "арена",
+      "start_date": "2026-10-24",
+      "country_code": "RU",
+      "region": "Санкт-Петербург",
+      "city": "Санкт-Петербург",
+      "city_key": "saint-petersburg",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000,
+        42000
+      ]
+    },
+    {
+      "external_id": "80955",
+      "in_scope": true,
+      "title": "Mad Fox Ultra 2026",
+      "title_norm": "mad fox ultra",
+      "start_date": "2026-12-18",
+      "country_code": "RU",
+      "region": "Ярославская область",
+      "city": "Переславль-Залесский",
+      "city_key": "pereslavl-zalesskiy",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        10000,
+        20000,
+        40000,
+        70000,
+        80000,
+        160000
+      ]
+    },
+    {
+      "external_id": "81053",
+      "in_scope": true,
+      "title": "Завидово трейл",
+      "title_norm": "завидово трейл",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Тверская область",
+      "city": "Завидово",
+      "city_key": "zavidovo",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000,
+        50000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ZAVIDOVOTRAIL"
+    },
+    {
+      "external_id": "81343",
+      "in_scope": true,
+      "title": "Благотворительный забег «Вместе против инсульта»",
+      "title_norm": "благотворительный вместе против инсульта",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        1000,
+        2500,
+        5000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ORBI26"
+    },
+    {
+      "external_id": "81406",
+      "in_scope": true,
+      "title": "Бородино Трейл",
+      "title_norm": "бородино трейл",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Бородино",
+      "city_key": "borodino",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        15000,
+        20000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/BORODINOTRAIL3"
+    },
+    {
+      "external_id": "81411",
+      "in_scope": true,
+      "title": "Трейл «Окская тропа» – ночной забег",
+      "title_norm": "трейл окская тропа ночной",
+      "start_date": "2026-10-24",
+      "country_code": "RU",
+      "region": "Нижегородская область",
+      "city": "Нижний Новгород",
+      "city_key": "nizhniy-novgorod",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3500,
+        10000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/NochOkaTrail2026"
+    },
+    {
+      "external_id": "81459",
+      "in_scope": true,
+      "title": "Трейл «Шарташ Карасики»",
+      "title_norm": "трейл шарташ карасики",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Свердловская область",
+      "city": "Екатеринбург",
+      "city_key": "ekaterinburg",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026"
+    },
+    {
+      "external_id": "81569",
+      "in_scope": true,
+      "title": "Эстафета 5х4,2 км Осень",
+      "title_norm": "эстафета 5х осень",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Тульская область",
+      "city": "Тула",
+      "city_key": "tula",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        4200
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/rla2026"
+    },
+    {
+      "external_id": "81585",
+      "in_scope": true,
+      "title": "O-Trail Karras",
+      "title_norm": "o trail karras",
+      "start_date": "2026-10-31",
+      "country_code": "RU",
+      "region": "Ставропольский край",
+      "city": "Железноводск",
+      "city_key": "zheleznovodsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        8000,
+        16000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/OTRAILKarras2026"
+    },
+    {
+      "external_id": "81592",
+      "in_scope": true,
+      "title": "Осенний Павловский забег",
+      "title_norm": "осенний павловский",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Ленинградская область",
+      "city": "Павловск",
+      "city_key": "pavlovsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        3000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/OsenniyPavlovskiyzabeg2026"
+    },
+    {
+      "external_id": "81654",
+      "in_scope": true,
+      "title": "Часовой забег «Осенний вальс»",
+      "title_norm": "часовой осенний вальс",
+      "start_date": "2026-10-18",
+      "country_code": "RU",
+      "region": "Волгоградская область",
+      "city": "Волгоград",
+      "city_key": "volgograd",
+      "timezone": "",
+      "type": "road",
+      "distances": [],
+      "registration_url": "https://reg.russiarunning.com/event/ZABEGOSENNIYVALS202618102026"
+    },
+    {
+      "external_id": "81691",
+      "in_scope": true,
+      "title": "Забег «Марьинская Стрела»",
+      "title_norm": "марьинская стрела",
+      "start_date": "2026-11-08",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        2000,
+        3000,
+        5000,
+        7000,
+        10000,
+        15000,
+        21000,
+        25000,
+        30000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ZabegpolumarafonMarinskayaStrela12"
+    },
+    {
+      "external_id": "81714",
+      "in_scope": true,
+      "title": "Осенний трейл «Первоуральск Опен»",
+      "title_norm": "осенний трейл первоуральск опен",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Свердловская область",
+      "city": "Первоуральск",
+      "city_key": "pervouralsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        15000,
+        30000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/PervouralskOpen2026Osen"
+    },
+    {
+      "external_id": "81723",
+      "in_scope": true,
+      "title": "Трейл «Сосновый рай»",
+      "title_norm": "трейл сосновый рай",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Самарская область",
+      "city": "Самара",
+      "city_key": "samara",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        14000
+      ],
+      "registration_url": "https://toplist.run/race/sosnovyi-rai-2026"
+    },
+    {
+      "external_id": "81771",
+      "in_scope": true,
+      "title": "Саратовский марафон",
+      "title_norm": "саратовский",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Саратовская область",
+      "city": "Саратов",
+      "city_key": "saratov",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        3000,
+        10000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://myrace.info/events/1708"
+    },
+    {
+      "external_id": "81833",
+      "in_scope": true,
+      "title": "«Воронки трейл»",
+      "title_norm": "воронки трейл",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Республика Башкортостан",
+      "city": "Уфа",
+      "city_key": "ufa",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        15000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/VORONKITREYL2026"
+    },
+    {
+      "external_id": "33603",
+      "in_scope": true,
+      "title": "Полумарафон «Моя столица» 2026",
+      "title_norm": "моя столица",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ]
+    },
+    {
+      "external_id": "82278",
+      "in_scope": true,
+      "title": "Golden Ring Ultra Trail 2027",
+      "title_norm": "golden ring ultra trail",
+      "start_date": "2027-07-23",
+      "country_code": "RU",
+      "region": "Владимирская область",
+      "city": "Суздаль",
+      "city_key": "suzdal",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000,
+        30000,
+        50000,
+        80000,
+        100000
+      ]
+    },
+    {
+      "external_id": "82417",
+      "in_scope": true,
+      "title": "White Bride Ultra Gelendzhik",
+      "title_norm": "white bride ultra gelendzhik",
+      "start_date": "2027-10-01",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Геленджик",
+      "city_key": "gelendzhik",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        15000,
+        30000,
+        50000,
+        70000,
+        120000
+      ],
+      "registration_url": "https://goldenultra.ru/wbu/"
+    },
+    {
+      "external_id": "82481",
+      "in_scope": true,
+      "title": "Хехцир Трейл «Золотая осень»",
+      "title_norm": "хехцир трейл золотая осень",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Хабаровский край",
+      "city": "Хабаровск",
+      "city_key": "habarovsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6000,
+        12000,
+        22000,
+        30000
+      ],
+      "registration_url": "https://trail27.ru/"
+    },
+    {
+      "external_id": "82514",
+      "in_scope": true,
+      "title": "Трейл Wild Peak",
+      "title_norm": "трейл wild peak",
+      "start_date": "2027-06-19",
+      "country_code": "RU",
+      "region": "Республика Алтай",
+      "city": "Акташ",
+      "city_key": "aktash",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        15000,
+        35000,
+        66000
+      ],
+      "registration_url": "https://myrace.info/events/2027"
+    },
+    {
+      "external_id": "82565",
+      "in_scope": true,
+      "title": "Уда трейл",
+      "title_norm": "уда трейл",
+      "start_date": "2026-11-15",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Убинская",
+      "city_key": "ubinskaya",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        10000,
+        19000,
+        47000
+      ],
+      "registration_url": "https://toplist.run/race/uda-treil-2026-2025"
+    },
+    {
+      "external_id": "82587",
+      "in_scope": true,
+      "title": "Погоня за Лисой",
+      "title_norm": "погоня за лисой",
+      "start_date": "2026-11-28",
+      "country_code": "RU",
+      "region": "Красноярский край",
+      "city": "Красноярск",
+      "city_key": "krasnoyarsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        8000,
+        15000
+      ],
+      "registration_url": "https://toplist.run/race/11313"
+    },
+    {
+      "external_id": "82598",
+      "in_scope": true,
+      "title": "Трейл «Горячий шоколад»",
+      "title_norm": "трейл горячий шоколад",
+      "start_date": "2026-12-13",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Горячий Ключ",
+      "city_key": "goryachiy-klyuch",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/TreylpolumarafonGoryachiyshokolad2026"
+    },
+    {
+      "external_id": "82675",
+      "in_scope": true,
+      "title": "Тульский зимний трейл",
+      "title_norm": "тульский зимний трейл",
+      "start_date": "2027-01-05",
+      "country_code": "RU",
+      "region": "Тульская область",
+      "city": "Тула",
+      "city_key": "tula",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6000,
+        15000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/TWT2027"
+    },
+    {
+      "external_id": "82666",
+      "in_scope": true,
+      "title": "Crazy Owl 50 наследие Николая Львова, русский Да Винчи 2027",
+      "title_norm": "crazy owl 50 наследие николая львова русский да винчи",
+      "start_date": "2027-06-12",
+      "country_code": "RU",
+      "region": "Ленинградская область",
+      "city": "Старая Ладога",
+      "city_key": "staraya-ladoga",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        2000,
+        3000,
+        26000,
+        57000
+      ]
+    },
+    {
+      "external_id": "83354",
+      "in_scope": true,
+      "title": "Осенний марафон «Орден белого орла»",
+      "title_norm": "осенний орден белого орла",
+      "start_date": "2026-11-08",
+      "country_code": "RU",
+      "region": "Санкт-Петербург",
+      "city": "Санкт-Петербург",
+      "city_key": "saint-petersburg",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000,
+        42000,
+        63000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/AutumnOrden2026"
+    },
+    {
+      "external_id": "83757",
+      "in_scope": true,
+      "title": "Dagestan Wild Trail 2027",
+      "title_norm": "dagestan wild trail",
+      "start_date": "2027-04-09",
+      "country_code": "RU",
+      "region": "Республика Дагестан",
+      "city": "Махачкала",
+      "city_key": "mahachkala",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        12000,
+        19000,
+        30000,
+        55000,
+        75000,
+        100000
+      ]
+    },
+    {
+      "external_id": "83775",
+      "in_scope": true,
+      "title": "Arkhyz Wild Trail 2027",
+      "title_norm": "arkhyz wild trail",
+      "start_date": "2027-06-25",
+      "country_code": "RU",
+      "region": "Кабардино-Балкарская Республика",
+      "city": "Архыз",
+      "city_key": "arhyz",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        15000,
+        19000,
+        30000,
+        40000,
+        50000,
+        65000
+      ]
+    },
+    {
+      "external_id": "84090",
+      "in_scope": true,
+      "title": "Трейл Poma Run Cup",
+      "title_norm": "трейл poma run cup",
+      "start_date": "2027-07-17",
+      "country_code": "RU",
+      "region": "Владимирская область",
+      "city": "Суздаль",
+      "city_key": "suzdal",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/POMARUNCUP2027"
+    },
+    {
+      "external_id": "84201",
+      "in_scope": true,
+      "title": "Железноводск Ultra Trail",
+      "title_norm": "железноводск ultra trail",
+      "start_date": "2026-10-30",
+      "country_code": "RU",
+      "region": "Ставропольский край",
+      "city": "Железноводск",
+      "city_key": "zheleznovodsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        30000,
+        50000,
+        100000
+      ],
+      "registration_url": "https://reg.place/events/ultra-trail-2026/"
+    },
+    {
+      "external_id": "84224",
+      "in_scope": true,
+      "title": "Moscow Drift Cross",
+      "title_norm": "moscow drift cross",
+      "start_date": "2026-11-14",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "trail",
+      "distances": [
+        9000
+      ],
+      "registration_url": "https://ultras.goldenultra.ru/"
+    },
+    {
+      "external_id": "24926",
+      "in_scope": true,
+      "title": "Всероссийский полумарафон «ЗаБег.РФ» 2027",
+      "title_norm": "всероссийский рф",
+      "start_date": "2027-05-22",
+      "country_code": "RU",
+      "region": "",
+      "city": "Вся Россия",
+      "city_key": "vsya-rossiya",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ]
+    },
+    {
+      "external_id": "84949",
+      "in_scope": true,
+      "title": "Иммерсивный Жуков трейл",
+      "title_norm": "иммерсивный жуков трейл",
+      "start_date": "2026-11-28",
+      "country_code": "RU",
+      "region": "Калужская область",
+      "city": "Стрелковка",
+      "city_key": "strelkovka",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000
+      ],
+      "registration_url": "https://xn--40-emcadbfdgn.xn--p1ai/events/161"
+    },
+    {
+      "external_id": "84958",
+      "in_scope": true,
+      "title": "Новогодний хоровод",
+      "title_norm": "новогодний хоровод",
+      "start_date": "2026-12-31",
+      "country_code": "RU",
+      "region": "Калужская область",
+      "city": "Обнинск",
+      "city_key": "obninsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000
+      ],
+      "registration_url": "https://xn--40-emcadbfdgn.xn--p1ai/events/169"
+    },
+    {
+      "external_id": "85847",
+      "in_scope": true,
+      "title": "Трейл «Туман»",
+      "title_norm": "трейл туман",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Фрязино",
+      "city_key": "fryazino",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        20000
+      ],
+      "registration_url": "https://reg.place/?q%5Btag%5D=OB"
+    },
+    {
+      "external_id": "86086",
+      "in_scope": true,
+      "title": "Grand Kislovodsk",
+      "title_norm": "grand kislovodsk",
+      "start_date": "2027-05-02",
+      "country_code": "RU",
+      "region": "Свердловская область",
+      "city": "Кисловодск",
+      "city_key": "kislovodsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        11000,
+        17000,
+        30000,
+        60000,
+        105000
+      ],
+      "registration_url": "https://myrace.info/events/1900"
+    },
+    {
+      "external_id": "86140",
+      "in_scope": true,
+      "title": "Вышний Волочёк Race",
+      "title_norm": "вышний волочек race",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Тверская область",
+      "city": "Вышний Волочёк",
+      "city_key": "vyshniy-volochek",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        35000
+      ],
+      "registration_url": "https://myrace.info/events/2148"
+    },
+    {
+      "external_id": "86157",
+      "in_scope": true,
+      "title": "Норильск. Горный старт",
+      "title_norm": "норильск горный старт",
+      "start_date": "2027-08-21",
+      "country_code": "RU",
+      "region": "Красноярский край",
+      "city": "Норильск",
+      "city_key": "norilsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        17000,
+        30000,
+        50000,
+        70000
+      ],
+      "registration_url": "https://myrace.info/events/2064"
+    },
+    {
+      "external_id": "86190",
+      "in_scope": true,
+      "title": "Фестиваль ВолховМен «На пути из варяг в греки»",
+      "title_norm": "фестиваль волховмен на пути из варяг в греки",
+      "start_date": "2027-07-17",
+      "country_code": "RU",
+      "region": "Новгородская область",
+      "city": "Великий Новгород",
+      "city_key": "velikiy-novgorod",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        4000,
+        8000,
+        12000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/VOLKhOVMEN"
+    },
+    {
+      "external_id": "23206",
+      "in_scope": true,
+      "title": "Челябинский марафон 2027",
+      "title_norm": "челябинский",
+      "start_date": "2027-08-22",
+      "country_code": "RU",
+      "region": "Челябинская область",
+      "city": "Челябинск",
+      "city_key": "chelyabinsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000,
+        42000
+      ]
+    },
+    {
+      "external_id": "86323",
+      "in_scope": true,
+      "title": "Шекснинский полумарафон",
+      "title_norm": "шекснинский",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Вологодская область",
+      "city": "Шексна",
+      "city_key": "sheksna",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000,
+        42000
+      ],
+      "registration_url": "https://vk.com/away.php?to=https%3A%2F%2Fvologdamarafon.ru%2Fmarafon%2F%25D1%2588%25D0%25B5%25D0%25BA%25D1%2581%25D0%25BD%25D0%25B8%25D0%25BD%25D1%2581%25D0%25BA%25D0%25B8%25D0%25B9-%25D0%25BF%25D0%25BE%25D0%25BB%25D1%2583%25D0%25BC%25D0%25B0%25D1%2580%25D0%25B0%25D1%2584%25D0%25BE%25D0%25BD%2F%25D1%2580%25D0%25B5%25D0%25B3%25D0%25B8%25D1%2581%25D1%2582%25D1%2580%25D0%25B0%25D1%2586%25D0%25B8%25D1%258F%2F\u0026utf=1"
+    },
+    {
+      "external_id": "22503",
+      "in_scope": true,
+      "title": "Пермский марафон 2027",
+      "title_norm": "пермский",
+      "start_date": "2027-09-04",
+      "country_code": "RU",
+      "region": "Пермский край",
+      "city": "Пермь",
+      "city_key": "perm",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        3000,
+        5000,
+        10000,
+        21000,
+        42000
+      ]
+    },
+    {
+      "external_id": "86419",
+      "in_scope": true,
+      "title": "Wolf Trail Backyard Ultra «Волчьими тропами»",
+      "title_norm": "wolf trail backyard ultra волчьими тропами",
+      "start_date": "2027-08-13",
+      "country_code": "RU",
+      "region": "Нижегородская область",
+      "city": "Нижний Новгород",
+      "city_key": "nizhniy-novgorod",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6700,
+        10000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/WOLFTRAIL2027"
+    },
+    {
+      "external_id": "86440",
+      "in_scope": true,
+      "title": "Elbrus Wild Trail 2027",
+      "title_norm": "elbrus wild trail",
+      "start_date": "2027-08-06",
+      "country_code": "RU",
+      "region": "Кабардино-Балкарская Республика",
+      "city": "Терскол",
+      "city_key": "terskol",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        11000,
+        20000,
+        25000,
+        35000,
+        60000,
+        130000
+      ]
+    },
+    {
+      "external_id": "86495",
+      "in_scope": true,
+      "title": "Городская ультра «Уфимское ожерелье». 3 этап",
+      "title_norm": "городская ультра уфимское ожерелье 3 этап",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Республика Башкортостан",
+      "city": "Уфа",
+      "city_key": "ufa",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        9900,
+        37000,
+        63000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ufacityultra20263"
+    },
+    {
+      "external_id": "87022",
+      "in_scope": true,
+      "title": "НеЗаповедные тропы",
+      "title_norm": "незаповедные тропы",
+      "start_date": "2026-10-24",
+      "country_code": "RU",
+      "region": "Красноярский край",
+      "city": "Красноярск",
+      "city_key": "krasnoyarsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        10000,
+        23000
+      ],
+      "registration_url": "https://www.toplist.run/race/12592"
+    },
+    {
+      "external_id": "87418",
+      "in_scope": true,
+      "title": "Ультратрейл «Тридцатка»",
+      "title_norm": "ультратрейл тридцатка",
+      "start_date": "2027-09-11",
+      "country_code": "RU",
+      "region": "",
+      "city": "Майкоп, Солохаул",
+      "city_key": "maykop-solohaul",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        59000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ULTRATREYLTRIDTsATKA2027"
+    },
+    {
+      "external_id": "87515",
+      "in_scope": true,
+      "title": "Трейлфест «МинВоды»",
+      "title_norm": "трейлфест минводы",
+      "start_date": "2026-11-07",
+      "country_code": "RU",
+      "region": "Ставропольский край",
+      "city": "Минеральные Воды",
+      "city_key": "mineralnye-vody",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        12000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/TreylfestZmeyka2026"
+    },
+    {
+      "external_id": "88425",
+      "in_scope": true,
+      "title": "Юрманка трейл",
+      "title_norm": "юрманка трейл",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Новосибирская область",
+      "city": "Верх-Ики",
+      "city_key": "verh-iki",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        15000,
+        35000,
+        70000,
+        110000
+      ],
+      "registration_url": "https://sportsauce.ru/starts/yurmanka-trejl-309"
+    },
+    {
+      "external_id": "89575",
+      "in_scope": true,
+      "title": "Фонарный забег",
+      "title_norm": "фонарный",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        10000
+      ],
+      "registration_url": "https://zeppelinrun.ru/fonarny-zabeg?ysclid=mrnwzxsqaw875265498#rec2328550151"
+    },
+    {
+      "external_id": "89578",
+      "in_scope": true,
+      "title": "«Золотая параллель»",
+      "title_norm": "золотая параллель",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Армавир",
+      "city_key": "armavir",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/gold_parallel"
+    },
+    {
+      "external_id": "89582",
+      "in_scope": true,
+      "title": "Горный трейл «Зигитяк»",
+      "title_norm": "горный трейл зигитяк",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Республика Башкортостан",
+      "city": "Зигитяк",
+      "city_key": "zigityak",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        4300,
+        7400
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ZigityakMountainTrailChampionship2026"
+    },
+    {
+      "external_id": "89584",
+      "in_scope": true,
+      "title": "Забег «Этноран» в Калмыкии",
+      "title_norm": "этноран в калмыкии",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Республика Калмыкия",
+      "city": "Элиста",
+      "city_key": "elista",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ZabegEtnoranRespublikaKalmykiya2026"
+    },
+    {
+      "external_id": "89588",
+      "in_scope": true,
+      "title": "Space Half Marathon",
+      "title_norm": "space half marathon",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Королев",
+      "city_key": "korolev",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/spacehalf2026"
+    },
+    {
+      "external_id": "89592",
+      "in_scope": true,
+      "title": "Знаменский забег",
+      "title_norm": "знаменский",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Санкт-Петербург",
+      "city": "Санкт-Петербург",
+      "city_key": "saint-petersburg",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        5000,
+        10000,
+        15000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/Znamenkarun"
+    },
+    {
+      "external_id": "89600",
+      "in_scope": true,
+      "title": "Трейл «Лесобег осень»",
+      "title_norm": "трейл лесобег осень",
+      "start_date": "2026-10-18",
+      "country_code": "RU",
+      "region": "Липецкая область",
+      "city": "Липецк",
+      "city_key": "lipeck",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        4500,
+        11000,
+        22000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/LesobegOSEN18102026"
+    },
+    {
+      "external_id": "89602",
+      "in_scope": true,
+      "title": "Трейл «Окская тропа» – дневной забег",
+      "title_norm": "трейл окская тропа дневной",
+      "start_date": "2026-10-25",
+      "country_code": "RU",
+      "region": "Нижегородская область",
+      "city": "Нижний Новгород",
+      "city_key": "nizhniy-novgorod",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3500,
+        5000,
+        8000,
+        15000,
+        31000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/treylOkskayatropa2026dnevnoyzabeg"
+    },
+    {
+      "external_id": "89607",
+      "in_scope": true,
+      "title": "Hard Trail Sand",
+      "title_norm": "hard trail sand",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Ленинградская область",
+      "city": "Семиозерье",
+      "city_key": "semiozere",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        15000,
+        30000
+      ],
+      "registration_url": "https://hardadventure.ru/sand2026"
+    },
+    {
+      "external_id": "89615",
+      "in_scope": true,
+      "title": "Благотворительный забег «8 городов. Москва»",
+      "title_norm": "благотворительный 8 городов москва",
+      "start_date": "2026-11-01",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        2000,
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/8gorodovMoskva"
+    },
+    {
+      "external_id": "89618",
+      "in_scope": true,
+      "title": "Благотворительный забег «8 городов. Санкт-Петербург»",
+      "title_norm": "благотворительный 8 городов санкт петербург",
+      "start_date": "2026-11-01",
+      "country_code": "RU",
+      "region": "Санкт-Петербург",
+      "city": "Санкт-Петербург",
+      "city_key": "saint-petersburg",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        2000,
+        5000,
+        10000,
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/8gorodovSanktPeterburg"
+    },
+    {
+      "external_id": "89623",
+      "in_scope": true,
+      "title": "Крымский Зимний Ультра Трейл",
+      "title_norm": "крымский зимний ультра трейл",
+      "start_date": "2027-01-05",
+      "country_code": "RU",
+      "region": "Республика Крым",
+      "city": "Бахчисарай",
+      "city_key": "bahchisaray",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        14000,
+        24000,
+        34000,
+        120000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/cwut27"
+    },
+    {
+      "external_id": "89627",
+      "in_scope": true,
+      "title": "Забег «Покровское-Стрешнево»",
+      "title_norm": "покровское стрешнево",
+      "start_date": "2026-10-18",
+      "country_code": "RU",
+      "region": "Москва",
+      "city": "Москва",
+      "city_key": "moscow",
+      "timezone": "Europe/Moscow",
+      "type": "road",
+      "distances": [
+        2000,
+        3000,
+        5000,
+        7000,
+        10000,
+        15000,
+        21000,
+        25000,
+        30000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/PokrovskoeStreshnevo2"
+    },
+    {
+      "external_id": "89632",
+      "in_scope": true,
+      "title": "Кросс «Высота 102»",
+      "title_norm": "кросс высота 102",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Волгоградская область",
+      "city": "Волгоград",
+      "city_key": "volgograd",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        6000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/KrossVysota102"
+    },
+    {
+      "external_id": "90420",
+      "in_scope": true,
+      "title": "Кросс памяти Серафима и Георгия Знаменских",
+      "title_norm": "кросс памяти серафима и георгия знаменских",
+      "start_date": "2026-10-02",
+      "country_code": "RU",
+      "region": "Московская область",
+      "city": "Чулково",
+      "city_key": "chulkovo",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        1000,
+        2000,
+        3000,
+        4000,
+        5000,
+        6000,
+        8000
+      ],
+      "registration_url": "https://myrace.info/events/2159"
+    },
+    {
+      "external_id": "90423",
+      "in_scope": true,
+      "title": "Благотворительный забег «Хвостатый сезон в Притяжении»",
+      "title_norm": "благотворительный хвостатый сезон в притяжении",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Челябинская область",
+      "city": "Магнитогорск",
+      "city_key": "magnitogorsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        1000,
+        5000
+      ],
+      "registration_url": "https://myrace.info/events/2133"
+    },
+    {
+      "external_id": "90429",
+      "in_scope": true,
+      "title": "Дальний Trail Race",
+      "title_norm": "дальний trail race",
+      "start_date": "2026-10-18",
+      "country_code": "RU",
+      "region": "Калужская область",
+      "city": "Калуга",
+      "city_key": "kaluga",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        12000,
+        21000
+      ],
+      "registration_url": "https://myrace.info/events/2120"
+    },
+    {
+      "external_id": "90431",
+      "in_scope": true,
+      "title": "Трейловый полумарафон «Ветлан»",
+      "title_norm": "трейловый ветлан",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Пермский край",
+      "city": "Ныроб",
+      "city_key": "nyrob",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        20000
+      ],
+      "registration_url": "https://myrace.info/events/2140"
+    },
+    {
+      "external_id": "90433",
+      "in_scope": true,
+      "title": "Каменск Урбан Трейл",
+      "title_norm": "каменск урбан трейл",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Свердловская область",
+      "city": "Каменск-Уральский",
+      "city_key": "kamensk-uralskiy",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        10000,
+        14000,
+        20000,
+        30000
+      ],
+      "registration_url": "https://myrace.info/events/1967"
+    },
+    {
+      "external_id": "90435",
+      "in_scope": true,
+      "title": "Трейл «Уральский вулкан: гора Липовая»",
+      "title_norm": "трейл уральский вулкан гора липовая",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Свердловская область",
+      "city": "Черноисточинск",
+      "city_key": "chernoistochinsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        2000,
+        10000,
+        20000
+      ],
+      "registration_url": "https://myrace.info/events/2080"
+    },
+    {
+      "external_id": "90439",
+      "in_scope": true,
+      "title": "Розовый забег",
+      "title_norm": "розовый",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Челябинская область",
+      "city": "Челябинск",
+      "city_key": "chelyabinsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        2500
+      ],
+      "registration_url": "https://myrace.info/events/2123"
+    },
+    {
+      "external_id": "90441",
+      "in_scope": true,
+      "title": "Samba Trail: Арчеда",
+      "title_norm": "samba trail арчеда",
+      "start_date": "2026-11-01",
+      "country_code": "RU",
+      "region": "Волгоградская область",
+      "city": "Фролово",
+      "city_key": "frolovo",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        14000,
+        28000,
+        50000
+      ],
+      "registration_url": "https://myrace.info/events/1907"
+    },
+    {
+      "external_id": "90454",
+      "in_scope": true,
+      "title": "Глинтвейновый забег",
+      "title_norm": "глинтвейновый",
+      "start_date": "2027-01-24",
+      "country_code": "RU",
+      "region": "Санкт-Петербург",
+      "city": "Санкт-Петербург",
+      "city_key": "saint-petersburg",
+      "timezone": "Europe/Moscow",
+      "type": "trail",
+      "distances": [
+        1000,
+        1600,
+        4000,
+        10000
+      ],
+      "registration_url": "https://myrace.info/events/2156"
+    },
+    {
+      "external_id": "90466",
+      "in_scope": true,
+      "title": "Трейл «Золото Богуная»",
+      "title_norm": "трейл золото богуная",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Красноярский край",
+      "city": "Зеленогорск",
+      "city_key": "zelenogorsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        10000
+      ],
+      "registration_url": "https://toplist.run/race/treil-zoloto-bogunaya-2026"
+    },
+    {
+      "external_id": "90469",
+      "in_scope": true,
+      "title": "Фестиваль здоровья «Пульс земли»",
+      "title_norm": "фестиваль здоровья пульс земли",
+      "start_date": "2026-10-03",
+      "country_code": "RU",
+      "region": "Красноярский край",
+      "city": "Сосновоборск",
+      "city_key": "sosnovoborsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        3000,
+        5000,
+        12000,
+        35000
+      ],
+      "registration_url": "https://toplist.run/race/festival-zdorovya-puls-zemli-2026"
+    },
+    {
+      "external_id": "90472",
+      "in_scope": true,
+      "title": "Сверхмарафон «Хозяин тайги»",
+      "title_norm": "сверхмарафон хозяин тайги",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Красноярский край",
+      "city": "Красноярск",
+      "city_key": "krasnoyarsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        11000,
+        25000,
+        48000
+      ],
+      "registration_url": "https://toplist.run/race/sverkhmarafon-khozyain-taigi-2026"
+    },
+    {
+      "external_id": "90476",
+      "in_scope": true,
+      "title": "Трейл «Тропа Зайцева»",
+      "title_norm": "трейл тропа зайцева",
+      "start_date": "2026-10-11",
+      "country_code": "RU",
+      "region": "Тюменская область",
+      "city": "Тюмень",
+      "city_key": "tyumen",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        1000,
+        2000,
+        3000,
+        4000,
+        6000,
+        8000,
+        10000
+      ],
+      "registration_url": "https://toplist.run/race/tropa-zaitseva-2026-2025"
+    },
+    {
+      "external_id": "90478",
+      "in_scope": true,
+      "title": "Детский забег «Ангарский километр»",
+      "title_norm": "детский ангарский километр",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Иркутская область",
+      "city": "Ангарск",
+      "city_key": "angarsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        1000
+      ],
+      "registration_url": "https://toplist.run/race/angarskii-kilometr-3-etap-2026-2"
+    },
+    {
+      "external_id": "90485",
+      "in_scope": true,
+      "title": "Fury trail",
+      "title_norm": "fury trail",
+      "start_date": "2027-08-22",
+      "country_code": "RU",
+      "region": "Иркутская область",
+      "city": "Ангарск",
+      "city_key": "angarsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        6000,
+        12000,
+        22000
+      ],
+      "registration_url": "https://toplist.run/race/fury-trail-2027-2026"
+    },
+    {
+      "external_id": "90488",
+      "in_scope": true,
+      "title": "Фестиваль спорта «Исток Дона»",
+      "title_norm": "фестиваль спорта исток дона",
+      "start_date": "2026-10-10",
+      "country_code": "RU",
+      "region": "Тульская область",
+      "city": "Новомосковск",
+      "city_key": "novomoskovsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        7000,
+        15000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ID2026"
+    },
+    {
+      "external_id": "90490",
+      "in_scope": true,
+      "title": "ЗБ Трейл",
+      "title_norm": "зб трейл",
+      "start_date": "2026-10-18",
+      "country_code": "RU",
+      "region": "Республика Крым",
+      "city": "Балаклава",
+      "city_key": "balaklava",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        6000,
+        12000,
+        22000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/zbtrail"
+    },
+    {
+      "external_id": "90493",
+      "in_scope": true,
+      "title": "СоюзТрейл",
+      "title_norm": "союзтрейл",
+      "start_date": "2026-10-17",
+      "country_code": "RU",
+      "region": "Алтайский край",
+      "city": "Белокуриха",
+      "city_key": "belokuriha",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        5000,
+        13000,
+        26000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/SoyuzTreyl"
+    },
+    {
+      "external_id": "90507",
+      "in_scope": true,
+      "title": "Ультратрейл «Восьмёрка»",
+      "title_norm": "ультратрейл восьмерка",
+      "start_date": "2027-07-17",
+      "country_code": "RU",
+      "region": "Краснодарский край",
+      "city": "Красная Поляна, Псебай",
+      "city_key": "krasnaya-polyana-psebay",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        80000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ultratrailvosmerka2027"
+    },
+    {
+      "external_id": "90510",
+      "in_scope": true,
+      "title": "Трейл «Беги»",
+      "title_norm": "трейл беги",
+      "start_date": "2026-11-20",
+      "country_code": "RU",
+      "region": "Челябинская область",
+      "city": "Челябинск",
+      "city_key": "chelyabinsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        10000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/marathonRUN"
+    },
+    {
+      "external_id": "90522",
+      "in_scope": true,
+      "title": "Осенний кросс «КультаКарьяла»",
+      "title_norm": "осенний кросс культакарьяла",
+      "start_date": "2026-10-04",
+      "country_code": "RU",
+      "region": "Республика Карелия",
+      "city": "Петрозаводск",
+      "city_key": "petrozavodsk",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        4000,
+        8000,
+        12000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/KULTAKARJALA2026"
+    },
+    {
+      "external_id": "90525",
+      "in_scope": true,
+      "title": "Тюменский осенний полумарафон",
+      "title_norm": "тюменский осенний",
+      "start_date": "2026-10-25",
+      "country_code": "RU",
+      "region": "Республика Карелия",
+      "city": "Петрозаводск",
+      "city_key": "petrozavodsk",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        21000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/XIITyumenskiyosenniypolumarafonTyatlet"
+    },
+    {
+      "external_id": "90527",
+      "in_scope": true,
+      "title": "Пещерный трейл",
+      "title_norm": "пещерный трейл",
+      "start_date": "2026-10-25",
+      "country_code": "RU",
+      "region": "Воронежская область",
+      "city": "Терновка",
+      "city_key": "ternovka",
+      "timezone": "",
+      "type": "trail",
+      "distances": [
+        15000,
+        30000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/Peshchernyytreyl"
+    },
+    {
+      "external_id": "90530",
+      "in_scope": true,
+      "title": "Забег «Этноран» в Чеченской Республике",
+      "title_norm": "этноран в чеченской республике",
+      "start_date": "2026-10-25",
+      "country_code": "RU",
+      "region": "Чеченская Республика",
+      "city": "Грозный",
+      "city_key": "groznyy",
+      "timezone": "",
+      "type": "road",
+      "distances": [
+        5000,
+        10000
+      ],
+      "registration_url": "https://reg.russiarunning.com/event/ETNORAN"
+    }
+  ]
+}

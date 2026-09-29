@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"time"
 
@@ -48,14 +49,26 @@ type Stats struct {
 	// DateOutOfRange — даты позже сегодня+3 года (входят в Rejected).
 	DateOutOfRange int
 	OutOfScope     int
-	Rejects        map[string]ReasonStat
+	// UnrecognizedRegion — область не из перечня субъектов РФ и не
+	// иностранная (D-09); пары «область — город» — в Unrecognized.
+	UnrecognizedRegion int
+	// MultiRegion — записи с несколькими областями (D-14): region пуст,
+	// но это не пустое поле и не нераспознанная область.
+	MultiRegion int
+	// DroppedDistances — дистанции больше normalize.MaxPlausibleDistanceM,
+	// отброшенные из событий.
+	DroppedDistances int
+	Rejects          map[string]ReasonStat
+	// Empty — число валидных записей с пустым city, region, distances.
+	Empty        map[string]int
+	Unrecognized map[string]int
 }
 
 // Prepare выполняет Validate и Normalize (MVP.md §5.2, §6) над всеми
 // записями прогона. Чистая функция: время — только из now (в прогоне —
 // момент старта). Порядок выхода совпадает с порядком входа.
 func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) {
-	st := Stats{Parsed: len(recs), Rejects: map[string]ReasonStat{}}
+	st := Stats{Parsed: len(recs), Rejects: map[string]ReasonStat{}, Empty: map[string]int{}, Unrecognized: map[string]int{}}
 	y, m, d := now.UTC().Date()
 	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 	minDate, maxDate := today.AddDate(0, 0, -1), today.AddDate(3, 0, 0)
@@ -101,7 +114,30 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 
 		city := normalize.City(rec.City)
 		cityKey := normalize.CityKey(city)
+		if city == "" {
+			st.Empty["city"]++
+		}
+		// Область (D-08, D-09, D-14). Иностранная — вне каталога при любой
+		// политике; нераспознанная считается независимо от политики.
 		region := normalize.Region(rec.Region)
+		foreign := false
+		switch {
+		case len(rec.RegionSlugs) > 1:
+			st.MultiRegion++
+		case region == "":
+			st.Empty["region"]++
+		default:
+			canonical, kind := normalize.ClassifyPlace(region, city)
+			switch kind {
+			case normalize.RegionRF:
+				region = canonical
+			case normalize.RegionForeign:
+				foreign = true
+			default:
+				st.UnrecognizedRegion++
+				st.Unrecognized[region+" — "+city]++
+			}
+		}
 		// LO-06: дистанции только из столбца дистанций, при пустом — из
 		// названия; описание не используется никогда.
 		distSrc := rec.Distances
@@ -110,9 +146,19 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 		}
 		var dists []event.Distance
 		for _, meters := range normalize.Distances(distSrc) {
+			if meters > normalize.MaxPlausibleDistanceM {
+				st.DroppedDistances++
+				continue
+			}
 			dists = append(dists, event.Distance{Meters: meters})
 		}
+		if len(dists) == 0 {
+			st.Empty["distances"]++
+		}
 		code, inScope := normalize.Country(rec.Country, pol.CountryFallback)
+		if foreign {
+			code, inScope = "", false
+		}
 		if !inScope {
 			st.OutOfScope++
 		}
@@ -142,4 +188,37 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 	}
 	st.Valid = len(out)
 	return out, st
+}
+
+// Metrics — метрики прогона для ingest_runs.metrics: счётчики и доли
+// пустых ключевых полей от valid (4 знака; при valid = 0 — нули). Доли
+// нужны проверке роста пустых полей относительно базы (MVP.md §5.4).
+func (s Stats) Metrics() []byte {
+	type empty struct {
+		City      float64 `json:"city"`
+		Region    float64 `json:"region"`
+		Distances float64 `json:"distances"`
+	}
+	m := struct {
+		Valid              int   `json:"valid"`
+		Expired            int   `json:"expired"`
+		DateOutOfRange     int   `json:"date_out_of_range"`
+		OutOfScope         int   `json:"out_of_scope"`
+		UnrecognizedRegion int   `json:"unrecognized_region"`
+		MultiRegion        int   `json:"multi_region"`
+		DroppedDistances   int   `json:"dropped_distances"`
+		Empty              empty `json:"empty"`
+	}{s.Valid, s.Expired, s.DateOutOfRange, s.OutOfScope, s.UnrecognizedRegion, s.MultiRegion, s.DroppedDistances,
+		empty{s.emptyShare("city"), s.emptyShare("region"), s.emptyShare("distances")}}
+	// Marshal структуры из чисел не возвращает ошибку.
+	b, _ := json.Marshal(m)
+	return b
+}
+
+// emptyShare — доля валидных записей с пустым полем, 4 знака.
+func (s Stats) emptyShare(field string) float64 {
+	if s.Valid == 0 {
+		return 0
+	}
+	return math.Round(float64(s.Empty[field])/float64(s.Valid)*1e4) / 1e4
 }
