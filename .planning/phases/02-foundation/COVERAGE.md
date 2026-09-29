@@ -1,0 +1,1 @@
+No external API integration: foundation phase builds the Go binary, the PostgreSQL schema (goose migrations), the store and normalize packages and a local test PostgreSQL; it calls no external services (source sites arrive in Phase 3, Telegram in Phase 4).
