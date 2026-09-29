@@ -86,7 +86,7 @@ Plans:
   4. Исчезновение записи из источника скрывает событие через `is_listed` только по здоровым прогонам и не меняет `events.status`
   5. Реальные события первого источника лежат в БД с `country_code`, `region`, `city`, каждый запуск виден в `ingest_runs`; описание не длиннее 1000 символов, изображения не сохраняются; санити-проверка на этих данных окончательно подтверждает (или отклоняет) предварительный статус кандидата на fallback `RU` из Phase 1
 
-**Plans**: 5/7 plans executed
+**Plans**: 7/7 plans executed
 
 Plans:
 **Wave 1**
@@ -115,7 +115,7 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 03-07-PLAN.md — Запись решения и политики источника, accept-baseline и второй прогон владельцем, проверка критериев ROADMAP
+- [x] 03-07-PLAN.md — Запись решения и политики источника, accept-baseline и второй прогон владельцем, проверка критериев ROADMAP
 
 ### Phase 4: Telegram Search
 
@@ -171,7 +171,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
-| 3. First Source | 6/7 | In Progress|  |
+| 3. First Source | 7/7 | In Progress|  |
 | 4. Telegram Search | 0/TBD | Not started | - |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |

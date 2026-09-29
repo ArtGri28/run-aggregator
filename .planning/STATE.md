@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
-status: executing
-stopped_at: Completed 03-06-PLAN.md (RU fallback confirmed, baseline not accepted)
-last_updated: "2026-09-29T17:57:11.729Z"
+status: verifying
+stopped_at: Completed 03-07-PLAN.md (Phase 3 plans 7/7; все 5 критериев ROADMAP выполнены на dev-БД)
+last_updated: "2026-09-29T19:36:57.078Z"
 last_activity: 2026-09-29
-last_activity_desc: 03-05 complete (Fetcher, config from env, raw store, scheduler, sanity report, worker subcommands, dev PostgreSQL)
-state_head: 75bb78b1aaa2e612655966d1e5c853e4ae92163c
+last_activity_desc: 03-07 complete (RUOnlyFallback for marathonec, baseline accepted, second real run ok without changes)
+state_head: 1ef5af700a561dca43758823d69ab68dd4f096c4
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 12
   percent: 33
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 
 ## Current Position
 
-Phase: 3 (First Source) — EXECUTING
+Phase: 3 (First Source) — VERIFYING
 Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-09-29 — 03-05 complete: Fetcher (повторы, Retry-After, лимиты, редиректы, затвор хоста, Crawl-delay 40 с), конфигурация из окружения (QUALITY_*, INGEST_*, RAW_*, OBSERVE_*, FETCH_*), сырые ответы на диске, планировщик от started_at, санити-отчёт RU, worker run-once/accept-baseline/sanity-report, dev-PostgreSQL 127.0.0.1:5434 (D-03)
+Status: Phase complete — ready for verification
+Last activity: 2026-09-29 — 03-07 complete: политика Марафонца RUOnlyFallback по решению владельца (D-07/D-15), прогон 5 принят вручную (133 события), второй реальный прогон 6 ok (created 0, changed 0, unchanged 133); все 5 критериев ROADMAP Phase 3 выполнены на dev-БД
 
 Progress: [███░░░░░░░] 33%
 
@@ -69,6 +69,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P03 | ~14min | 2 tasks | 14 files |
 | Phase 03 P04 | ~13min | 2 tasks | 8 files |
 | Phase 03 P05 | 35min | 3 tasks | 18 files |
+| Phase 03 P07 | ~20min (+ действия владельца) | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,8 @@ Recent decisions affecting current work:
 - [Phase 3]: [03-05] RawDoc.URL — запрошенный адрес (CalendarURL), не адрес после редиректа: payload стабилен (D-13)
 - [Phase 3]: [03-05] параметры Fetcher читаются из окружения (FETCH_*), как требует ING-01
 - [Phase 3]: [03-05] санити-отчёт выделяет записи с несколькими областями отдельной строкой
+- [Phase 3]: [03-07] Марафонец: CountryFallback = RUOnlyFallback по решению владельца 2026-09-29 (прогон 5, D-07/D-15); новых написаний областей не потребовалось
+- [Phase 3]: [03-07] Базовый уровень Марафонца принят (прогон 5, created 133); второй реальный прогон 6 ok: created 0, changed 0, unchanged 133
 
 ### Pending Todos
 
@@ -127,6 +130,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T17:57:11.707Z
-Stopped at: Completed 03-06-PLAN.md (RU fallback confirmed, baseline not accepted)
+Last session: 2026-09-29T19:36:57.056Z
+Stopped at: Completed 03-07-PLAN.md (Phase 3 plans 7/7; все 5 критериев ROADMAP выполнены на dev-БД)
 Resume file: None
