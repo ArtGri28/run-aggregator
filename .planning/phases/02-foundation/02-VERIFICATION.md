@@ -1,7 +1,7 @@
 ---
 phase: 02-foundation
 verified: 2026-09-29T09:59:53Z
-status: human_needed
+status: passed
 score: 5/5 roadmap success criteria verified (15/15 plan truths verified; 4/4 review fixes confirmed)
 covered_files:
   - ".env.example"
@@ -55,7 +55,7 @@ human_verification:
 
 **Phase Goal:** Есть каркас проекта и схема данных, на которую можно сажать сбор данных и поиск
 **Verified:** 2026-09-29T09:59:53Z (HEAD 8db6ff4 plus the uncommitted review fixes in `internal/normalize/{distance,normalize}.go`, `internal/store/events.go` and their tests)
-**Status:** human_needed. All roadmap criteria, plan truths and the four review fixes are verified. Two judgment-tier prohibitions still need owner sign-off; the evidence says both hold.
+**Status:** passed (both judgment-tier items confirmed by the owner on 2026-09-29). All roadmap criteria, plan truths and the four review fixes are verified. Two judgment-tier prohibitions still need owner sign-off; the evidence says both hold.
 **Re-verification:** Yes. It follows the fixes for code-review findings HI-01, ME-01, ME-02 and ME-03 (see `02-REVIEW.md`, "Fixes applied").
 
 ## Scope of the re-verification
