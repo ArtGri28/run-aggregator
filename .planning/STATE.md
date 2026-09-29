@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: First Source
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-09-29T16:44:00.008Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-09-29T17:57:11.729Z"
 last_activity: 2026-09-29
-last_activity_desc: 03-04 complete (ingest_runs lifecycle, observation, Runner with quality gate and Accept)
-state_head: 06f2785f098f97db20d4df540befae741e701ceb
+last_activity_desc: 03-05 complete (Fetcher, config from env, raw store, scheduler, sanity report, worker subcommands, dev PostgreSQL)
+state_head: 75bb78b1aaa2e612655966d1e5c853e4ae92163c
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 33
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 3 (First Source) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Last activity: 2026-09-29 — 03-04 complete: миграция 00002 (accepted_at, metrics, snapshot, ux_ingest_runs_running), жизненный цикл прогона и наблюдение active/missing/gone в store, Runner «Evaluate до записи» + Accept (D-06), guard _test (LO-11)
+Last activity: 2026-09-29 — 03-05 complete: Fetcher (повторы, Retry-After, лимиты, редиректы, затвор хоста, Crawl-delay 40 с), конфигурация из окружения (QUALITY_*, INGEST_*, RAW_*, OBSERVE_*, FETCH_*), сырые ответы на диске, планировщик от started_at, санити-отчёт RU, worker run-once/accept-baseline/sanity-report, dev-PostgreSQL 127.0.0.1:5434 (D-03)
 
 Progress: [███░░░░░░░] 33%
 
@@ -68,6 +68,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 03 P02 | ~15min | 2 tasks | 14 files |
 | Phase 03 P03 | ~14min | 2 tasks | 14 files |
 | Phase 03 P04 | ~13min | 2 tasks | 8 files |
+| Phase 03 P05 | 35min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase 3]: [03-04] StartRun получил startedAt: started_at = часы Runner.Now, Accept повторяет Prepare с этим моментом (детерминизм тестов, точное совпадение Run/Accept)
 - [Phase 3]: [03-04] Окно базы — ok с id ≥ последнего принятого (≤ 7); снимок suspect в ingest_runs.snapshot живёт до принятия или следующего завершённого прогона
 - [Phase 3]: [03-04] Observe: gone-записи больше не трогаются; Missing = ненайденные и оставшиеся missing; events.status наблюдением не меняется
+- [Phase 3]: [03-05] RawDoc.URL — запрошенный адрес (CalendarURL), не адрес после редиректа: payload стабилен (D-13)
+- [Phase 3]: [03-05] параметры Fetcher читаются из окружения (FETCH_*), как требует ING-01
+- [Phase 3]: [03-05] санити-отчёт выделяет записи с несколькими областями отдельной строкой
 
 ### Pending Todos
 
@@ -123,6 +127,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T16:43:59.987Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-09-29T17:57:11.707Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None
