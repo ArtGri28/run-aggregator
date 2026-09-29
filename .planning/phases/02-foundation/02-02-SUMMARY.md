@@ -147,7 +147,7 @@ Extra test cases beyond `<behavior>` (no behaviour change): «Г. Москва»
 ## Known Limitations (by plan design)
 
 - All-caps Latin titles: a word that is a valid roman numeral is dropped as an edition number («MIX RUN» → «run»). The plan's rule («целиком из заглавных римских цифр») is followed literally; only mixed case «Mix» is protected.
-- Named distance and numeric distance in one string both count («полумарафон 21,1 км» → [21098 21100]); merge tolerance (MVP §4.3) absorbs it.
+- ~~Named distance and numeric distance in one string both count («полумарафон 21,1 км» → [21098 21100])~~ — fixed after code review (02-REVIEW.md ME-03): named distances are used only when no numeric distance is present.
 - City dictionary is only Moscow and Saint Petersburg (D-03, A3); Phase 3 extends it from real data.
 
 ## Verification

@@ -117,7 +117,7 @@ status: complete
 
 ## Task Commits
 
-**None — see "Commits — blocked by permission system" below.** All work is on disk, uncommitted, staged where noted.
+**Committed afterwards by the owner:** `31152a0` (binary skeleton, migrations, healthcheck, test database), `46cafa8` (event domain and store upserts), `0ab9a7b` (plan docs). The section below records the state at the end of execution.
 
 ## Files Created/Modified
 - `go.mod`, `go.sum` — module `aggregator`, `go 1.27.1`, direct deps `pgx/v5 v5.11.0` and `goose/v3 v3.28.0` only
