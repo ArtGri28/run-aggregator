@@ -26,6 +26,8 @@ var errParserPanic = errors.New("паника парсера")
 // и наблюдение (research Pattern 2). Нулевые поля — значения по умолчанию.
 type Runner struct {
 	Store *store.Store
+	// Raw — хранилище сырых ответов (ING-10); nil — не сохранять.
+	Raw *RawStore
 	// Thresholds — пороги Evaluate; нулевое значение — DefaultThresholds().
 	Thresholds Thresholds
 	// RunTimeout — предел Fetch и Parse (0 → 30 мин); FinalizeTimeout —
@@ -114,7 +116,7 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 	began := time.Now()
 
 	runCtx, cancel := context.WithTimeout(ctx, r.runTimeout())
-	recs, reason := collect(runCtx, src, log)
+	recs, reason := r.collect(runCtx, src, res.RunID, log)
 	cancel()
 	res.Fetched, res.Parsed = len(recs), len(recs)
 
@@ -172,12 +174,23 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 	return res, finish(store.RunFinish{Metrics: withCounts(st.Metrics(), res)})
 }
 
-// collect выполняет Fetch и Parse всех документов. Непустая причина —
-// прогон failed; записи в этом случае не нужны.
-func collect(ctx context.Context, src Source, log *slog.Logger) ([]SourceEvent, string) {
+// collect выполняет Fetch, сохраняет сырые ответы (до Parse — чтобы
+// упавший разбор можно было повторить по файлу) и разбирает все
+// документы. Непустая причина — прогон failed; записи тогда не нужны.
+func (r *Runner) collect(ctx context.Context, src Source, runID int64, log *slog.Logger) ([]SourceEvent, string) {
 	docs, err := src.Fetch(ctx)
 	if err != nil {
 		return nil, "загрузка: " + err.Error()
+	}
+	size := 0
+	for _, d := range docs {
+		size += len(d.Body)
+	}
+	log.Info("fetch done", "docs", len(docs), "bytes", size)
+	if r.Raw != nil {
+		if err := r.Raw.Save(src.Code(), runID, docs); err != nil {
+			log.Warn("raw save failed", "err", err)
+		}
 	}
 	var recs []SourceEvent
 	for _, d := range docs {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -443,5 +444,34 @@ func TestAcceptRefusals(t *testing.T) {
 	}
 	if _, err := r.Accept(ctx, src, 0); !errors.Is(err, store.ErrNotAcceptable) {
 		t.Fatalf("Accept(ok run) err = %v, want ErrNotAcceptable", err)
+	}
+}
+
+func TestRunSavesRaw(t *testing.T) {
+	r := testRunner(t)
+	body, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	r.Raw = &ingest.RawStore{Dir: dir}
+	// Код источника — только [a-z0-9-] (имя каталога сырых ответов).
+	src := &fixtureSource{code: fmt.Sprintf("test-raw-%d", time.Now().UnixNano()), body: body}
+	res, err := r.Run(context.Background(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, src.code, fmt.Sprintf("%d-0.html", res.RunID)))
+	if err != nil || !slices.Equal(got, body) {
+		t.Fatalf("raw file: %d bytes, %v; want the fixture body", len(got), err)
+	}
+
+	r.Raw = nil
+	src2 := &fixtureSource{code: fmt.Sprintf("test-noraw-%d", time.Now().UnixNano()), body: body}
+	if _, err := r.Run(context.Background(), src2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, src2.code)); !os.IsNotExist(err) {
+		t.Fatalf("Raw == nil wrote files: %v", err)
 	}
 }
