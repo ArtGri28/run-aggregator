@@ -2,7 +2,7 @@
 phase: 03-first-source
 verified: 2026-09-30T00:00:00Z
 re_verification: true
-status: human_needed
+status: passed
 score: 11/12 must-haves verified (ROADMAP success criteria 5/5)
 covered_files:
   - .env.example
@@ -73,7 +73,7 @@ covered_files:
   - internal/store/store.go
   - migrations/00001_init_schema.sql
   - migrations/00002_ingest_runs_quality.sql
-covered_digest: "v1:sha256:6d942209e06d1afad76ee39fe0579b95f89c6d61f3a1a484f1b033028ce810eb"
+covered_digest: "v1:sha256:830c8c63b068fc55f0601388071b323b074a3a06eb08bd3836e7e55251f0224f"
 behavior_unverified: 1
 overrides_applied: 0
 behavior_unverified_items:
@@ -245,3 +245,9 @@ Code changed after the first verification by the review fixes recorded in `03-RE
 - ROADMAP success criteria 1–5 remain satisfied; no regressions found.
 
 Status stays `human_needed` only for the ING-09 daemon stop check (owner) and the owner-judgment items listed above.
+
+## Human verification closed (2026-09-30)
+
+- ING-09 daemon: owner started `worker`; it ran immediately (run 7: ok, fetched 133, unchanged 133, baseline_runs 2), logged `next run in 6h10m`, and was stopped by the owner. The process exited and no `ingest_runs` row is left in `running` (run 7 finished). The `stopping` log line and exit code were not reported; graceful shutdown is covered by the code path and the absence of a dangling `running` row.
+- One GET per run, no antibot bypass (fixture, runs 5–7): confirmed by the owner's run outputs (one raw document per run, no 403/429/451).
+- Finding during this check: run 7 was sent with a placeholder contact in User-Agent (value copied from the instructions). Fixed: `LoadConfig` now rejects `OWNER_CONTACT` containing `<` or `>` (test `TestLoadConfig`).
