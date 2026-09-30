@@ -11,15 +11,19 @@ import (
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"aggregator/internal/ingest"
 	"aggregator/internal/store"
 )
 
 const staleNotice = "Кнопка устарела — нажмите /start"
 
-// Bot — Telegram-бот. Now nil — time.Now.
+// Bot — Telegram-бот. Now nil — time.Now. Runner и Sources нужны только
+// для принятия прогона кнопкой (nil — принятие недоступно).
 type Bot struct {
-	Store *store.Store
-	Now   func() time.Time
+	Store   *store.Store
+	Now     func() time.Time
+	Runner  *ingest.Runner
+	Sources []ingest.Source
 
 	api    *tgbot.Bot
 	admins map[int64]bool
@@ -47,9 +51,11 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithMiddlewares(recoverMW, privateOnlyMW),
 		tgbot.WithAllowedUpdates(tgbot.AllowedUpdates{"message", "callback_query"}),
 		tgbot.WithMessageTextHandler("start", tgbot.MatchTypeCommandStartOnly, b.onStart),
+		tgbot.WithMessageTextHandler("runs", tgbot.MatchTypeCommandStartOnly, b.onRuns),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
 		tgbot.WithCallbackQueryDataHandler("p:", tgbot.MatchTypePrefix, b.cb(b.onList)),
 		tgbot.WithCallbackQueryDataHandler("e:", tgbot.MatchTypePrefix, b.cb(b.onCard)),
+		tgbot.WithCallbackQueryDataHandler("r:", tgbot.MatchTypePrefix, b.cb(b.onRun)),
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {
@@ -63,6 +69,8 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 
 // Start принимает апдейты (long polling) до отмены ctx.
 func (b *Bot) Start(ctx context.Context) { b.api.Start(ctx) }
+
+func (b *Bot) isAdmin(id int64) bool { return b.admins[id] }
 
 func (b *Bot) logger() *slog.Logger {
 	if b.log != nil {

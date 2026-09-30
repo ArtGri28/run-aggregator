@@ -251,9 +251,9 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 	}
 	switch {
 	case runID != 0 && runID != last.ID:
-		return res, fmt.Errorf("%s: принимать можно только последний прогон (последний: %d)", code, last.ID)
+		return res, fmt.Errorf("%s: принимать можно только последний прогон (последний: %d): %w", code, last.ID, store.ErrNotAcceptable)
 	case last.Status == "running":
-		return res, fmt.Errorf("%s: идёт прогон %d", code, last.ID)
+		return res, fmt.Errorf("%s: идёт прогон %d: %w", code, last.ID, store.ErrRunInProgress)
 	case last.Status != string(StatusSuspect) || last.Snapshot == nil:
 		return res, fmt.Errorf("%s: прогон %d (%s, снимок: %t): %w", code, last.ID, last.Status, last.Snapshot != nil, store.ErrNotAcceptable)
 	}
