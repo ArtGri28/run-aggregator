@@ -19,7 +19,8 @@ confirm() {
   local ans
   printf 'Введите слово %s для продолжения: ' "$1"
   read -r ans
-  [ "$ans" = "$1" ] || { echo "Отменено, хост не изменён."; exit 1; }
+  ans=${ans//$'\r'/} # консоль провайдера может присылать CR вместе с Enter
+  [ "$ans" = "$1" ] || { printf 'Отменено, хост не изменён (получено: %q).\n' "$ans"; exit 1; }
 }
 
 export DEBIAN_FRONTEND=noninteractive

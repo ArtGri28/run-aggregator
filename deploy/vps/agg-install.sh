@@ -62,7 +62,8 @@ sed 's/^/    /' sudoers.new
 [ ! -e "$A" ] || echo "  (обновление: $A уже есть)"
 printf 'Введите слово INSTALL: '
 read -r ANS
-[ "$ANS" = INSTALL ] || { echo "Отменено, хост не изменён."; exit 1; }
+ANS=${ANS//$'\r'/} # консоль провайдера может присылать CR вместе с Enter
+[ "$ANS" = INSTALL ] || { printf 'Отменено, хост не изменён (получено: %q).\n' "$ANS"; exit 1; }
 
 install -d -o root -g root -m 755 "$L"
 for f in $LIB; do install -o root -g root -m 644 "$f" "$L/$f"; done
