@@ -131,7 +131,7 @@ Plans:
   4. Скрытые и слитые события в выдаче не появляются; отменённые и перенесённые **не скрываются** и показываются явно с пометкой `[ОТМЕНЁН]` или `[ПЕРЕНЕСЁН]` в списке и в карточке
   5. `/runs` и Telegram-алерты о `failed` и `suspect` прогонах доступны только администратору (`ADMIN_TG_IDS`); о пользователях хранятся только Telegram ID и настройки поиска
 
-**Plans**: 3/8 plans executed
+**Plans**: 4/8 plans executed
 
 Plans:
 **Wave 1**
@@ -148,7 +148,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 04-04-PLAN.md — Миграция 00003_source_alerts, store для алертов и /runs, пакет alert: решение, текст, цикл раз в минуту (MON-05)
+- [x] 04-04-PLAN.md — Миграция 00003_source_alerts, store для алертов и /runs, пакет alert: решение, текст, цикл раз в минуту (MON-05)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -207,6 +207,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
-| 4. Telegram Search | 3/8 | In Progress|  |
+| 4. Telegram Search | 4/8 | In Progress|  |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
