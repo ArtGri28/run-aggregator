@@ -16,7 +16,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // Europe/Moscow не зависит от tzdata образа
 
+	"aggregator/internal/bot"
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/marathonec"
 	"aggregator/internal/store"
@@ -60,7 +62,7 @@ func main() {
 	case "healthcheck":
 		err = runHealthcheck(ctx)
 	case "bot":
-		err = runProcess(ctx, subcommand)
+		err = runBot(ctx)
 	case "worker":
 		err = runWorker(ctx, os.Args[2:])
 	default:
@@ -137,18 +139,29 @@ func openStore(ctx context.Context) (*store.Store, error) {
 	return s, nil
 }
 
-// runProcess is the skeleton for bot in this phase: connect, healthcheck,
-// log, wait for the signal-derived context to be cancelled, log, close.
-func runProcess(ctx context.Context, subcommand string) error {
+// runBot запускает Telegram-бота (long polling) до отмены ctx. Конфигурация
+// читается первой: ошибки токена и ADMIN_TG_IDS видны без БД и сети.
+func runBot(ctx context.Context) error {
+	cfg, err := bot.LoadConfig()
+	if err != nil {
+		return err
+	}
 	s, err := openStore(ctx)
 	if err != nil {
 		return err
 	}
 	defer s.Close()
+	b, err := bot.New(cfg, s)
+	if err != nil {
+		return err
+	}
 
-	slog.Info("started", "subcommand", subcommand)
-	<-ctx.Done()
-	slog.Info("stopping", "subcommand", subcommand)
+	slog.Info("started", "subcommand", "bot", "admins", len(cfg.Admins))
+	if len(cfg.Admins) == 0 {
+		slog.Warn("ADMIN_TG_IDS пуст: админ-функции и алерты отключены")
+	}
+	b.Start(ctx)
+	slog.Info("stopping", "subcommand", "bot")
 	return nil
 }
 
