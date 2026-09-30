@@ -2,7 +2,7 @@
 # Печатает однострочники для запуска скриптов на VPS с проверкой полного SHA256.
 # Запускает владелец на Mac после deploy/ship.sh. Ничего не выполняет на VPS.
 #
-# Использование: [TAG=<тег образа>] [AGG_DIR=<каталог на VPS>] deploy/oneliner.sh <ssh-алиас> <файл>...
+# Использование: [TAG=<тег образа>] [AGG_DIR=<каталог на VPS>] [SSH_CONFIG=<файл>] deploy/oneliner.sh <ssh-алиас> <файл>...
 # Для каждого скрипта печатается:
 #   - VPS-форма: хеш сверяется на самом VPS; при несовпадении скрипт не запускается
 #     и печатается «STOP: HASH MISMATCH» (if/else, а не &&/||: сбой самого скрипта
@@ -20,6 +20,13 @@ shift
 [[ $ALIAS =~ ^[A-Za-z0-9._-]+$ ]] || { echo "недопустимый ssh-алиас" >&2; exit 2; }
 DIR=${AGG_DIR:-/root/agg-deploy}
 [[ $DIR =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "недопустимый AGG_DIR" >&2; exit 2; }
+# SSH_CONFIG — отдельный файл настроек ssh: в Mac-формы добавляется -F <файл>.
+SSH_CONFIG=${SSH_CONFIG:-}
+if [ -n "$SSH_CONFIG" ] && ! [[ $SSH_CONFIG =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  echo "недопустимый путь SSH_CONFIG" >&2
+  exit 2
+fi
+SSHF=${SSH_CONFIG:+ -F $SSH_CONFIG}
 TAG=${TAG:-<TAG>}
 if [ "$TAG" != "<TAG>" ] && ! [[ $TAG =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
   echo "недопустимый TAG" >&2
@@ -46,9 +53,9 @@ emit() {
   echo "$vps"
   echo "Mac:"
   if [ "$mode" = ro ]; then
-    echo "ssh $ALIAS \"$vps\" 2>&1 | tee \"\$HOME/run-agg-phase4/${name%.sh}.log\""
+    echo "ssh$SSHF $ALIAS \"$vps\" 2>&1 | tee \"\$HOME/run-agg-phase4/${name%.sh}.log\""
   else
-    echo "ssh -t $ALIAS \"$vps\""
+    echo "ssh$SSHF -t $ALIAS \"$vps\""
   fi
   echo
 }
