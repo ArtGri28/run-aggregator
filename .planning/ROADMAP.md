@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Source Discovery / VPS Audit** - Проверить 2–3 источника с VPS и провести аудит VPS только чтением (логический Phase 0) (completed 2026-09-29)
 - [x] **Phase 2: Foundation** - Модуль Go, схема PostgreSQL 17, домен, `store`, `normalize`, тестовая инфраструктура (completed 2026-09-29)
-- [ ] **Phase 3: First Source** - Сбор данных из первого источника: Fetch/Parse/Validate, `ingest_runs`, контроль качества, алерты
+- [x] **Phase 3: First Source** - Сбор данных из первого источника: Fetch/Parse/Validate, `ingest_runs`, контроль качества, алерты (completed 2026-09-30)
 - [ ] **Phase 4: Telegram Search** - Бот на long polling: фильтры, список, карточка, пагинация, админ-доступ
 - [ ] **Phase 5: Multiple Sources & Deduplication** - Источники 2–3, кандидаты в дубли, `/dupes`, калибровка порогов
 - [ ] **Phase 6: Production** - Docker Compose на VPS, бэкапы и проверка восстановления, heartbeat, runbook
@@ -121,7 +121,8 @@ Plans:
 
 **Goal**: Пользователь находит забег в Telegram по дате, городу, дистанции и типу и переходит на регистрацию
 **Depends on**: Phase 3
-**Requirements**: BOT-01, BOT-02, BOT-03, BOT-04, BOT-05, BOT-06, BOT-07, BOT-08, BOT-09, MON-05
+**Requirements**: BOT-01, BOT-02, BOT-03, BOT-04, BOT-05, BOT-06, BOT-07, BOT-08, BOT-09, MON-05, PRD-01
+**Note**: PRD-01 перенесён из Phase 6 решением владельца 2026-09-30 (D-03 в 04-CONTEXT.md)
 **Success Criteria** (what must be TRUE):
 
   1. Пользователь проходит `/start → Найти забег → фильтры → список → карточка → регистрация` на реальных данных
@@ -130,7 +131,40 @@ Plans:
   4. Скрытые и слитые события в выдаче не появляются; отменённые и перенесённые **не скрываются** и показываются явно с пометкой `[ОТМЕНЁН]` или `[ПЕРЕНЕСЁН]` в списке и в карточке
   5. `/runs` и Telegram-алерты о `failed` и `suspect` прогонах доступны только администратору (`ADMIN_TG_IDS`); о пользователях хранятся только Telegram ID и настройки поиска
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Tracer: `/start → Найти забег → сводка → Показать → список` на реальных событиях через фиктивный Bot API и PostgreSQL 17; go-telegram/bot v1.27.0, кодек callback, users/выдача в store, runBot
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-02-PLAN.md — Фильтры: сводка D-10, пресеты дат и месяцы, город (топ-10 и текст), корзины D-08, типы D-09, «не найдено»/«ничего не нашлось» D-12
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-03-PLAN.md — Листание, карточка с регистрацией и источниками, пометки статуса, скрытые/слитые; ошибки Telegram API без падений (BOT-09)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 04-04-PLAN.md — Миграция 00003_source_alerts, store для алертов и /runs, пакет alert: решение, текст, цикл раз в минуту (MON-05)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 04-05-PLAN.md — `/runs`, принятие прогона кнопкой с подтверждением (D-15), SendAlert, runBot с циклом алертов; общий newRunner для worker и bot
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 04-06-PLAN.md — Dockerfile, docker-compose.yml (PRD-01), smoke.sh, ship.sh, однострочники SHA256, скрипты VPS PREFLIGHT/APPLY/VERIFY, deploy/README.md
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 04-07-PLAN.md — Владелец: BotFather и ID, доставка образа, PREFLIGHT хоста, решение по изменениям хоста (D-04), подготовка хоста и развёртывание
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [ ] 04-08-PLAN.md — Владелец: первый прогон с VPS → алерт → принятие кнопкой (D-07); приёмка пяти критериев ROADMAP на production-боте
 
 ### Phase 5: Multiple Sources & Deduplication
 
@@ -151,7 +185,8 @@ Plans:
 
 **Goal**: Сервис работает на VPS, переживает перезапуск, сообщает о сбоях и восстанавливается из проверенного бэкапа
 **Depends on**: Phase 5
-**Requirements**: MON-03, MON-04, PRD-01, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07
+**Requirements**: MON-03, MON-04, PRD-02, PRD-03, PRD-04, PRD-05, PRD-06, PRD-07
+**Note**: часть PRD-02 (compose-плагин, обновления и перезагрузка) выполняется в Phase 4
 **Success Criteria** (what must be TRUE):
 
   1. `docker compose up` на VPS поднимает `postgres`, `bot`, `worker`; после перезапуска контейнеров и хоста данные целы, а прогоны продолжаются
@@ -171,7 +206,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
-| 3. First Source | 7/7 | In Progress|  |
-| 4. Telegram Search | 0/TBD | Not started | - |
+| 3. First Source | 7/7 | Complete    | 2026-09-30 |
+| 4. Telegram Search | 0/8 | Planned | - |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |

@@ -185,7 +185,7 @@
 | DDP-10 | Phase 5 | Pending |
 | MON-03 | Phase 6 | Pending |
 | MON-04 | Phase 6 | Pending |
-| PRD-01 | Phase 6 | Pending |
+| PRD-01 | Phase 4 | Pending |
 | PRD-02 | Phase 6 | Pending |
 | PRD-03 | Phase 6 | Pending |
 | PRD-04 | Phase 6 | Pending |
