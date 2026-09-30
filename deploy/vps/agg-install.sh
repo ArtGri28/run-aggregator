@@ -43,7 +43,7 @@ for d in / /usr /usr/local /usr/local/sbin /usr/local/lib /etc /etc/sudoers.d; d
 done
 
 # В /usr/local/lib/aggregator — всё из пакета, кроме самой обёртки и скриптов root-консоли.
-LIB=$(awk '{print $2}' SHA256SUMS | grep -vxE 'agg|agg-install\.sh|host-apply\.sh')
+LIB=$(awk '{print $2}' SHA256SUMS | grep -vxE 'agg|agg-install\.sh|host-apply\.sh|load-postgres\.sh')
 for f in agg $LIB; do
   [[ $f =~ ^[a-z-]+(\.sh|\.yml)?$ ]] || stop "недопустимое имя файла в SHA256SUMS"
 done

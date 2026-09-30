@@ -56,7 +56,10 @@
 - **Принятие базы из CLI** (root-консоль), если кнопка недоступна:
   `docker compose -f /opt/aggregator/docker-compose.yml run --rm worker worker accept-baseline --source marathonec`
   Слово `worker` дважды: первое — имя сервиса, дальше аргументы целиком заменяют `command` сервиса.
-- **Перенос `postgres:17` с Mac**, если VPS не достаёт до Docker Hub (`agg deploy` остановится с подсказкой): на Mac `docker pull --platform linux/amd64 postgres:17 && docker save postgres:17 -o postgres17.tar`, скопировать файл в `/home/runagg/agg-deploy/` (`scp -F …`) и загрузить в root-консоли `docker load -i /home/runagg/agg-deploy/postgres17.tar`. `agg load` принимает только `aggregator:<TAG>`.
+- **Перенос `postgres:17` с Mac**, если VPS не достаёт до Docker Hub (`agg deploy` остановится с подсказкой). `agg load` принимает только `aggregator:<TAG>`, поэтому загрузка — в root-консоли и только после сверки SHA256 с Mac:
+  1. Mac: `docker pull --platform linux/amd64 postgres:17 && docker save postgres:17 -o postgres17.tar && shasum -a 256 postgres17.tar` — запомнить хеш.
+  2. Mac: `scp -F ~/.ssh/run_agg.conf postgres17.tar run-agg-vps:agg-deploy/`.
+  3. Root-консоль: однострочник `load-postgres.sh` из вывода `oneliner.sh`, вместо `<SHA256 postgres17.tar с Mac>` — хеш из шага 1. Скрипт копирует архив во временный каталог root, сверяет хеш копии и только тогда делает `docker load` этой копии; при несовпадении — `STOP: HASH MISMATCH`, ничего не загружается. Никогда не делать `docker load` прямо из `/home/runagg`: runagg может подменить файл.
 
 ## Правила
 

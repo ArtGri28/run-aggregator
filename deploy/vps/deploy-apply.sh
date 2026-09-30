@@ -34,6 +34,14 @@ CUR=$(grep -m1 '^IMAGE_TAG=' "$D/.env" | cut -d= -f2- || true)
 OLD_PREV=$(grep -m1 '^IMAGE_PREV=' "$D/.env" | cut -d= -f2- || true)
 PREV=$OLD_PREV
 if [ -n "$CUR" ] && [ "$CUR" != "$TAG" ]; then PREV=$CUR; fi
+
+# Прежний .env хранится до успешного запуска: при ошибке или обрыве (ssh, сигнал)
+# IMAGE_TAG/IMAGE_PREV возвращаются, и последний рабочий тег не выпадает из отката.
+OLD=$(mktemp "$D/.env.prev.XXXXXX")
+cp "$D/.env" "$OLD"
+restore() { if [ -f "$OLD" ]; then mv "$OLD" "$D/.env"; echo "Возвращены IMAGE_TAG=${CUR:-(нет)} и IMAGE_PREV=${OLD_PREV:-(нет)}."; fi; }
+trap restore EXIT
+
 TMP=$(mktemp "$D/.env.XXXXXX")
 { grep -vE '^(IMAGE_TAG|IMAGE_PREV)=' "$D/.env" || true; } > "$TMP"
 printf '%s=%s\n' IMAGE_TAG "$TAG" >> "$TMP"
@@ -42,16 +50,29 @@ chmod 600 "$TMP"
 mv "$TMP" "$D/.env"
 echo "Обновлены IMAGE_TAG=$TAG и IMAGE_PREV=${PREV:-(нет)}."
 
-docker compose -f "$F" config -q
-if ! docker compose -f "$F" pull postgres; then
-  if docker image inspect --format '{{.Id}}' postgres:17 >/dev/null 2>&1; then
-    echo "pull не удался, но postgres:17 уже есть на хосте — продолжаем."
-  else
-    echo "STOP: не удалось получить postgres:17. Запасной путь — перенос образа с Mac, см. deploy/README.md."
-    exit 1
+# start — запуск с текущим .env; внутри «if !» set -e не действует, поэтому каждый шаг явно.
+start() {
+  docker compose -f "$F" config -q || return 1
+  if ! docker compose -f "$F" pull postgres; then
+    if docker image inspect --format '{{.Id}}' postgres:17 >/dev/null 2>&1; then
+      echo "pull не удался, но postgres:17 уже есть на хосте — продолжаем."
+    else
+      echo "Не удалось получить postgres:17. Запасной путь — перенос образа с Mac, см. deploy/README.md."
+      return 1
+    fi
   fi
+  docker compose -f "$F" up -d --wait postgres && docker compose -f "$F" up -d
+}
+
+if ! start; then
+  echo "STOP: запуск aggregator:$TAG не удался."
+  restore
+  if [ -n "$CUR" ]; then
+    echo "Поднимаю прежний образ aggregator:$CUR."
+    docker compose -f "$F" up -d || echo "Прежний образ тоже не поднялся — смотрите agg verify."
+  fi
+  exit 1
 fi
-docker compose -f "$F" up -d --wait postgres
-docker compose -f "$F" up -d
+rm -f "$OLD"
 
 echo "DEPLOY APPLY DONE: проверьте agg verify через 1–2 минуты"

@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 
 BUNDLE="deploy/vps/agg deploy/vps/agg-install.sh deploy/vps/deploy-apply.sh deploy/vps/deploy-preflight.sh
   deploy/vps/deploy-verify.sh deploy/vps/env-init.sh deploy/vps/host-apply.sh deploy/vps/host-preflight.sh
-  deploy/vps/host-verify.sh deploy/vps/rollback.sh docker-compose.yml"
+  deploy/vps/host-verify.sh deploy/vps/load-postgres.sh deploy/vps/rollback.sh docker-compose.yml"
 STAGE=/home/runagg/agg-deploy
 AGG=/usr/local/sbin/agg
 LIB=/usr/local/lib/aggregator
@@ -33,7 +33,7 @@ case "${1:-}" in
   installed)
     # Как в agg-install.sh: agg — в /usr/local/sbin, в lib — всё, кроме скриптов root-консоли.
     sums | awk -v a="$AGG" -v l="$LIB" '$2 == "agg" {print $1 "  " a; next}
-      $2 != "agg-install.sh" && $2 != "host-apply.sh" {print $1 "  " l "/" $2}'
+      $2 != "agg-install.sh" && $2 != "host-apply.sh" && $2 != "load-postgres.sh" {print $1 "  " l "/" $2}'
     exit 0 ;;
 esac
 
@@ -75,6 +75,9 @@ bash agg-install.sh
 $(root bash host-apply.sh updates)
 systemctl reboot   # вручную, когда готовы
 $(root bash host-apply.sh compose)
+
+== Root-консоль: запасной путь postgres:17 (только если agg deploy не смог скачать) ==
+$(root bash load-postgres.sh '<SHA256 postgres17.tar с Mac>')
 
 == Mac, под runagg ==
 host-preflight: $(ro host-preflight host-preflight)

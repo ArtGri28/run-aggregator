@@ -57,6 +57,11 @@ func decide(run store.FinishedRun, st *store.AlertState, now time.Time) action {
 		return none // остановка процесса — не сбой источника
 	case st == nil, st.State != run.Status:
 		return send
+	case run.Status == "suspect" && st.RunID != run.RunID:
+		// Новый suspect-прогон — новая кнопка принятия; кнопка прежнего алерта
+		// уже устарела. Для failed — прежний ритм (раз в сутки), без алерта на
+		// каждый повтор расписания.
+		return send
 	case now.Sub(st.RemindedAt) >= remindEvery:
 		return remind
 	}

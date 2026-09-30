@@ -3,6 +3,7 @@ package alert
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +38,9 @@ func TestDecide(t *testing.T) {
 		{"suspect держится 23:59", run("suspect", "x"), state("suspect", 24*time.Hour-time.Minute), none},
 		{"suspect держится 24 ч", run("suspect", "x"), state("suspect", 24*time.Hour), remind},
 		{"failed держится 30 ч", run("failed", "x"), state("failed", 30*time.Hour), remind},
+		{"новый suspect-прогон", store.FinishedRun{Status: "suspect", RunID: 2}, &store.AlertState{State: "suspect", RunID: 1, RemindedAt: now}, send},
+		{"тот же suspect-прогон", store.FinishedRun{Status: "suspect", RunID: 1}, &store.AlertState{State: "suspect", RunID: 1, RemindedAt: now}, none},
+		{"новый failed-прогон до суток", store.FinishedRun{Status: "failed", RunID: 2, Error: "x"}, &store.AlertState{State: "failed", RunID: 1, RemindedAt: now.Add(-time.Hour)}, none},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -235,6 +239,49 @@ func TestTick(t *testing.T) {
 	}
 	if _, ok := alertState(t, s, src); ok {
 		t.Error("после ok строка source_alerts осталась")
+	}
+}
+
+// Регрессия LO-02: второй suspect-прогон подряд даёт новый алерт с кнопкой
+// нового прогона, а не ждёт суточного напоминания; повтор того же — тишина.
+func TestTickNewSuspectRun(t *testing.T) {
+	s := storetest.Open(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	rec := &recorder{}
+	l := admins(t, rec, s, &now)
+	tick := func() []sent {
+		t.Helper()
+		if err := l.Tick(ctx); err != nil {
+			t.Fatalf("Tick: %v", err)
+		}
+		return rec.take()
+	}
+
+	first := finish(t, s, src, store.RunFinish{Status: "suspect", Parsed: 134, Error: "первый прогон", Snapshot: []byte(`[]`)})
+	if calls := tick(); len(calls) != 2 || calls[0].accept != first {
+		t.Fatalf("первый suspect: %+v", calls)
+	}
+	now = now.Add(6 * time.Hour)
+	second := finish(t, s, src, store.RunFinish{Status: "suspect", Parsed: 135, Error: "первый прогон", Snapshot: []byte(`[]`)})
+	calls := tick()
+	if len(calls) != 2 {
+		t.Fatalf("второй suspect-прогон: вызовы %+v, want 2", calls)
+	}
+	for _, c := range calls {
+		if c.accept != second || strings.HasPrefix(c.text, "Напоминание:") || !strings.Contains(c.text, "(прогон "+strconv.FormatInt(second, 10)+")") {
+			t.Errorf("второй suspect-прогон: %+v", c)
+		}
+	}
+	if st, _ := alertState(t, s, src); st.RunID != second || !st.NotifiedAt.Equal(now) {
+		t.Errorf("source_alerts после второго suspect: %+v", st)
+	}
+	if calls := tick(); len(calls) != 0 {
+		t.Fatalf("повторный тик по тому же прогону: %+v", calls)
 	}
 }
 
