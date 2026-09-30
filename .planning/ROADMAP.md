@@ -131,12 +131,12 @@ Plans:
   4. Скрытые и слитые события в выдаче не появляются; отменённые и перенесённые **не скрываются** и показываются явно с пометкой `[ОТМЕНЁН]` или `[ПЕРЕНЕСЁН]` в списке и в карточке
   5. `/runs` и Telegram-алерты о `failed` и `suspect` прогонах доступны только администратору (`ADMIN_TG_IDS`); о пользователях хранятся только Telegram ID и настройки поиска
 
-**Plans**: 8 plans
+**Plans**: 1/8 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Tracer: `/start → Найти забег → сводка → Показать → список` на реальных событиях через фиктивный Bot API и PostgreSQL 17; go-telegram/bot v1.27.0, кодек callback, users/выдача в store, runBot
+- [x] 04-01-PLAN.md — Tracer: `/start → Найти забег → сводка → Показать → список` на реальных событиях через фиктивный Bot API и PostgreSQL 17; go-telegram/bot v1.27.0, кодек callback, users/выдача в store, runBot
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -207,6 +207,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
-| 4. Telegram Search | 0/8 | Planned | - |
+| 4. Telegram Search | 1/8 | In Progress|  |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
