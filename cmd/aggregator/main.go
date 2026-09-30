@@ -14,10 +14,12 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	_ "time/tzdata" // Europe/Moscow не зависит от tzdata образа
 
+	"aggregator/internal/alert"
 	"aggregator/internal/bot"
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/marathonec"
@@ -139,10 +141,38 @@ func openStore(ctx context.Context) (*store.Store, error) {
 	return s, nil
 }
 
-// runBot запускает Telegram-бота (long polling) до отмены ctx. Конфигурация
-// читается первой: ошибки токена и ADMIN_TG_IDS видны без БД и сети.
+// newSources — единственное место регистрации источников: пакет ingest их
+// не импортирует. f — сетевой загрузчик (боту не нужен: nil).
+func newSources(f *ingest.Fetcher) []ingest.Source {
+	return []ingest.Source{marathonec.New(f)}
+}
+
+// newRunner собирает Runner из настроек наблюдения. Worker и bot строят его
+// одной функцией: принятие из бота должно наблюдать с теми же
+// GoneAfterRuns/GoneAfter, что и worker (Pitfall 11).
+func newRunner(s *store.Store, cfg ingest.Config) *ingest.Runner {
+	return &ingest.Runner{
+		Store:         s,
+		Raw:           &ingest.RawStore{Dir: cfg.RawDir, TTL: cfg.RawTTL, Keep: 2},
+		Thresholds:    cfg.Thresholds,
+		RunTimeout:    cfg.RunTimeout,
+		GoneAfterRuns: cfg.GoneAfterRuns,
+		GoneAfter:     cfg.GoneAfter,
+		Now:           time.Now,
+		Log:           slog.Default(),
+	}
+}
+
+// runBot запускает Telegram-бота (long polling) и цикл алертов до отмены
+// ctx. Конфигурация читается первой: ошибки токена, ADMIN_TG_IDS и настроек
+// наблюдения видны без БД и сети. OWNER_CONTACT боту не нужен: к сайтам он
+// не ходит, принятие прогона использует сохранённый снимок.
 func runBot(ctx context.Context) error {
 	cfg, err := bot.LoadConfig()
+	if err != nil {
+		return err
+	}
+	icfg, err := ingest.LoadConfig(false)
 	if err != nil {
 		return err
 	}
@@ -155,13 +185,18 @@ func runBot(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	b.Runner, b.Sources = newRunner(s, icfg), newSources(nil)
 
 	slog.Info("started", "subcommand", "bot", "admins", len(cfg.Admins))
 	if len(cfg.Admins) == 0 {
 		slog.Warn("ADMIN_TG_IDS пуст: админ-функции и алерты отключены")
 	}
+	loop := &alert.Loop{Store: s, Admins: cfg.Admins, Send: b.SendAlert, Log: slog.Default()}
+	var wg sync.WaitGroup
+	wg.Go(func() { loop.Run(ctx) })
 	b.Start(ctx)
 	slog.Info("stopping", "subcommand", "bot")
+	wg.Wait() // store закрывается только после цикла алертов
 	return nil
 }
 
@@ -193,8 +228,7 @@ func runWorker(ctx context.Context, args []string) error {
 		return err
 	}
 	fetcher := ingest.NewFetcher(cfg.Fetch)
-	// Источники регистрируются здесь: пакет ingest их не импортирует.
-	sources := []ingest.Source{marathonec.New(fetcher)}
+	sources := newSources(fetcher)
 	var codes []string
 	var src ingest.Source
 	for _, s := range sources {
@@ -212,16 +246,7 @@ func runWorker(ctx context.Context, args []string) error {
 		return err
 	}
 	defer s.Close()
-	runner := &ingest.Runner{
-		Store:         s,
-		Raw:           &ingest.RawStore{Dir: cfg.RawDir, TTL: cfg.RawTTL, Keep: 2},
-		Thresholds:    cfg.Thresholds,
-		RunTimeout:    cfg.RunTimeout,
-		GoneAfterRuns: cfg.GoneAfterRuns,
-		GoneAfter:     cfg.GoneAfter,
-		Now:           time.Now,
-		Log:           slog.Default(),
-	}
+	runner := newRunner(s, cfg)
 
 	switch cmd {
 	case "":
