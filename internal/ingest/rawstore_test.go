@@ -82,7 +82,7 @@ func TestRawStorePruneTTL(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.Prune("src", now); err != nil {
+	if err := s.Prune("src", 2, now); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := dirNames(t, dir), []string{"2-0.html", "2-0.meta.json"}; !slices.Equal(got, want) {
@@ -101,5 +101,20 @@ func TestRawStoreBadSource(t *testing.T) {
 	}
 	if got := dirNames(t, root); len(got) != 0 {
 		t.Fatalf("files created: %v", got)
+	}
+}
+
+// LO-01: id прогонов пошли заново (пересозданная БД) — файлы только что
+// сохранённого прогона остаются.
+func TestRawStoreKeepsCurrentRun(t *testing.T) {
+	s := &RawStore{Dir: t.TempDir()}
+	docs := []RawDoc{{URL: "https://example.org/", Body: []byte("x")}}
+	for _, run := range []int64{56, 57, 1} {
+		if err := s.Save("src", run, docs); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.Dir, "src", "1-0.html")); err != nil {
+		t.Fatalf("file of the saved run 1: %v; files %v", err, dirNames(t, filepath.Join(s.Dir, "src")))
 	}
 }

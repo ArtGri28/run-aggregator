@@ -62,11 +62,13 @@ func (s *RawStore) Save(source string, runID int64, docs []RawDoc) error {
 			return err
 		}
 	}
-	return s.Prune(source, time.Now())
+	return s.Prune(source, runID, time.Now())
 }
 
-// Prune удаляет файлы прогонов вне Keep последних и любые файлы старше TTL.
-func (s *RawStore) Prune(source string, now time.Time) error {
+// Prune удаляет файлы прогонов вне Keep последних и любые файлы старше
+// TTL. Файлы прогона current остаются всегда: после пересоздания БД id
+// прогонов идут заново и меньше старых.
+func (s *RawStore) Prune(source string, current int64, now time.Time) error {
 	dir, err := s.dir(source)
 	if err != nil {
 		return err
@@ -85,7 +87,7 @@ func (s *RawStore) Prune(source string, now time.Time) error {
 		}
 	}
 	slices.Sort(runs)
-	keep := runs[max(0, len(runs)-orDefault(s.Keep, 2)):]
+	keep := append(runs[max(0, len(runs)-orDefault(s.Keep, 2)):], current)
 	ttl := orDefault(s.TTL, 14*24*time.Hour)
 
 	var errs []error

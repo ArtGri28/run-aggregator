@@ -17,6 +17,11 @@ var ErrRunInProgress = errors.New("по источнику уже идёт пр�
 // ErrNotAcceptable — прогон не последний, не suspect или без снимка (D-06).
 var ErrNotAcceptable = errors.New("прогон нельзя принять")
 
+// RunInterrupted — причина failed прогона, прерванного остановкой
+// процесса (SIGTERM, Ctrl-C): это не сбой источника, в
+// ConsecutiveFailures он не считается.
+const RunInterrupted = "прерван: остановка процесса"
+
 // maxRunError — предел длины ingest_runs.error в символах; стек паники
 // и подробности — только в лог.
 const maxRunError = 1000
@@ -28,8 +33,11 @@ type Run struct {
 	StartedAt    time.Time
 	FinishedAt   *time.Time
 	Parsed       int
+	Rejected     int
+	OutOfScope   int
 	Upserted     int
 	Error        string
+	Metrics      []byte
 	// Snapshot — разобранные записи прогона suspect (JSON), nil — нет.
 	Snapshot   []byte
 	AcceptedAt *time.Time
@@ -43,6 +51,8 @@ type RunFinish struct {
 	Error string
 	// Metrics — JSON-объект (nil → {}); Snapshot — JSON или nil.
 	Metrics, Snapshot []byte
+	// Accepted — прогон принят вручную (ClaimRun): accepted_at = now().
+	Accepted bool
 }
 
 // BaselineRun — прогон ok из окна базы.
@@ -66,7 +76,7 @@ type Health struct {
 // сначала закрываются как failed (процесс упал, Pitfall 6). Второй живой
 // прогон того же источника → ErrRunInProgress.
 func (s *Store) StartRun(ctx context.Context, sourceID int64, startedAt time.Time, staleAfter time.Duration) (int64, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("start run: begin: %w", err)
 	}
@@ -95,11 +105,12 @@ func (s *Store) StartRun(ctx context.Context, sourceID int64, startedAt time.Tim
 	return id, nil
 }
 
-// FinishRun завершает прогон в running (иначе ErrNotFound) и обнуляет
-// снимки прочих прогонов источника: снимок живёт до принятия или до
-// следующего завершённого прогона (D-06).
+// FinishRun завершает прогон в running — начатый StartRun или занятый
+// ClaimRun (иначе ErrNotFound) — и обнуляет снимки прочих прогонов
+// источника: снимок живёт до принятия или до следующего завершённого
+// прогона (D-06).
 func (s *Store) FinishRun(ctx context.Context, runID int64, f RunFinish) error {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("finish run: begin: %w", err)
 	}
@@ -112,12 +123,13 @@ func (s *Store) FinishRun(ctx context.Context, runID int64, f RunFinish) error {
 	const q = `
 		UPDATE ingest_runs
 		SET status = $2, finished_at = now(), fetched = $3, parsed = $4, rejected = $5,
-		    out_of_scope = $6, upserted = $7, error = NULLIF($8, ''), metrics = $9, snapshot = $10
+		    out_of_scope = $6, upserted = $7, error = NULLIF($8, ''), metrics = $9, snapshot = $10,
+		    accepted_at = CASE WHEN $11 THEN now() ELSE accepted_at END
 		WHERE id = $1 AND status = 'running'
 		RETURNING source_id`
 	var sourceID int64
 	err = tx.QueryRow(ctx, q, runID, f.Status, f.Fetched, f.Parsed, f.Rejected, f.OutOfScope, f.Upserted,
-		truncateRunes(f.Error, maxRunError), metrics, f.Snapshot).Scan(&sourceID)
+		truncateRunes(f.Error, maxRunError), metrics, f.Snapshot, f.Accepted).Scan(&sourceID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("finish run %d: %w", runID, ErrNotFound)
 	}
@@ -137,12 +149,12 @@ func (s *Store) FinishRun(ctx context.Context, runID int64, f RunFinish) error {
 // LastRun — последний прогон источника (по id); нет прогонов → ErrNotFound.
 func (s *Store) LastRun(ctx context.Context, sourceID int64) (Run, error) {
 	const q = `
-		SELECT id, source_id, status, started_at, finished_at, parsed, upserted,
-		       COALESCE(error, ''), snapshot, accepted_at
+		SELECT id, source_id, status, started_at, finished_at, parsed, rejected, out_of_scope, upserted,
+		       COALESCE(error, ''), metrics, snapshot, accepted_at
 		FROM ingest_runs WHERE source_id = $1 ORDER BY id DESC LIMIT 1`
 	var r Run
-	err := s.pool.QueryRow(ctx, q, sourceID).Scan(&r.ID, &r.SourceID, &r.Status, &r.StartedAt, &r.FinishedAt,
-		&r.Parsed, &r.Upserted, &r.Error, &r.Snapshot, &r.AcceptedAt)
+	err := s.db.QueryRow(ctx, q, sourceID).Scan(&r.ID, &r.SourceID, &r.Status, &r.StartedAt, &r.FinishedAt,
+		&r.Parsed, &r.Rejected, &r.OutOfScope, &r.Upserted, &r.Error, &r.Metrics, &r.Snapshot, &r.AcceptedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Run{}, fmt.Errorf("last run of source %d: %w", sourceID, ErrNotFound)
 	}
@@ -160,7 +172,7 @@ func (s *Store) BaselineRuns(ctx context.Context, sourceID int64, limit int) ([]
 		WHERE source_id = $1 AND status = 'ok'
 		  AND id >= COALESCE((SELECT max(id) FROM ingest_runs WHERE source_id = $1 AND accepted_at IS NOT NULL), 0)
 		ORDER BY id DESC LIMIT $2`
-	rows, err := s.pool.Query(ctx, q, sourceID, limit)
+	rows, err := s.db.Query(ctx, q, sourceID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("baseline runs: %w", err)
 	}
@@ -175,38 +187,44 @@ func (s *Store) BaselineRuns(ctx context.Context, sourceID int64, limit int) ([]
 	return out, nil
 }
 
-// AcceptRun принимает последний прогон источника в suspect со снимком
-// (D-06): ok, accepted_at, снимок обнуляется, upserted и note (в error)
-// записываются. Любой другой прогон → ErrNotAcceptable.
-func (s *Store) AcceptRun(ctx context.Context, runID int64, upserted int, note string) error {
+// ClaimRun занимает для принятия (D-06) последний прогон источника в
+// suspect со снимком: переводит его в running до FinishRun с Accepted.
+// Вызывается в InTx до записи: прогон, начатый раньше, делает принятие
+// невозможным (ErrNotAcceptable, ничего не записано), а StartRun,
+// начатый позже, ждёт конца транзакции (ux_ingest_runs_running). При
+// откате прогон остаётся suspect. Любой другой прогон → ErrNotAcceptable;
+// чужой незавершённый StartRun → ErrRunInProgress.
+func (s *Store) ClaimRun(ctx context.Context, runID int64) error {
 	const q = `
-		UPDATE ingest_runs r
-		SET status = 'ok', accepted_at = now(), snapshot = NULL, upserted = $2, error = NULLIF($3, '')
+		UPDATE ingest_runs r SET status = 'running'
 		WHERE r.id = $1 AND r.status = 'suspect' AND r.snapshot IS NOT NULL
 		  AND r.id = (SELECT max(id) FROM ingest_runs WHERE source_id = r.source_id)`
-	cmd, err := s.pool.Exec(ctx, q, runID, upserted, truncateRunes(note, maxRunError))
+	cmd, err := s.db.Exec(ctx, q, runID)
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "23505" {
+		return ErrRunInProgress
+	}
 	if err != nil {
-		return fmt.Errorf("accept run: %w", err)
+		return fmt.Errorf("claim run: %w", err)
 	}
 	if cmd.RowsAffected() == 0 {
-		return fmt.Errorf("accept run %d: %w", runID, ErrNotAcceptable)
+		return fmt.Errorf("claim run %d: %w", runID, ErrNotAcceptable)
 	}
 	return nil
 }
 
 // SourceHealth — последний завершённый прогон источника и число failed
-// подряд после последнего ok/suspect (MON-01).
+// подряд после последнего ok/suspect, кроме прерванных (MON-01).
 func (s *Store) SourceHealth(ctx context.Context, sourceID int64) (Health, error) {
 	const q = `
 		SELECT status, COALESCE(error, ''), started_at,
 		       (SELECT count(*) FROM ingest_runs f
-		        WHERE f.source_id = $1 AND f.status = 'failed'
+		        WHERE f.source_id = $1 AND f.status = 'failed' AND f.error IS DISTINCT FROM $2
 		          AND f.id > COALESCE((SELECT max(id) FROM ingest_runs
 		                               WHERE source_id = $1 AND status IN ('ok', 'suspect')), 0))
 		FROM ingest_runs WHERE source_id = $1 AND status <> 'running'
 		ORDER BY id DESC LIMIT 1`
 	var h Health
-	err := s.pool.QueryRow(ctx, q, sourceID).Scan(&h.LastStatus, &h.LastReason, &h.LastStartedAt, &h.ConsecutiveFailures)
+	err := s.db.QueryRow(ctx, q, sourceID, RunInterrupted).Scan(&h.LastStatus, &h.LastReason, &h.LastStartedAt, &h.ConsecutiveFailures)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Health{}, nil
 	}

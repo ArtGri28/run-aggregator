@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -147,7 +148,8 @@ func retryAfter(h http.Header, now time.Time) (time.Duration, bool) {
 		return 0, false
 	}
 	if s, err := strconv.Atoi(v); err == nil && s >= 0 {
-		return time.Duration(s) * time.Second, true
+		// Без предела большое число секунд переполняет Duration в минус.
+		return min(time.Duration(s), math.MaxInt64/time.Second) * time.Second, true
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		return max(0, t.Sub(now)), true

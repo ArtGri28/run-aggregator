@@ -23,7 +23,8 @@ const (
 		UPDATE source_events SET state = 'active', missed_runs = 0
 		WHERE source_id = $1 AND last_run_id = $2 AND (state <> 'active' OR missed_runs <> 0)`
 
-	// Только записи с событием и start_date >= today; уже gone не трогаются.
+	// Только записи с событием в каталоге и start_date >= today; уже gone
+	// и out_of_scope не трогаются.
 	observeMissingSQL = `
 		UPDATE source_events se
 		SET missed_runs = se.missed_runs + 1,
@@ -31,18 +32,31 @@ const (
 		                 THEN 'gone' ELSE 'missing' END
 		FROM events e
 		WHERE se.source_id = $1 AND se.last_run_id IS DISTINCT FROM $2 AND se.state <> 'gone'
-		  AND se.event_id = e.id AND e.start_date >= $3
+		  AND se.match_state <> 'out_of_scope' AND se.event_id = e.id AND e.start_date >= $3
 		RETURNING se.state`
 
-	// is_listed = не все связанные source_events в gone; updated_at не
+	// is_listed = есть связанная source_events не в gone и не out_of_scope
+	// (она хранит event_id, LO-12); updated_at не
 	// трогается (ING-05), status не меняется никогда (MVP.md §4.4).
 	observeListedSQL = `
 		UPDATE events e SET is_listed = x.listed
-		FROM (SELECT event_id, bool_or(state <> 'gone') AS listed FROM source_events
+		FROM (SELECT event_id, bool_or(state <> 'gone' AND match_state <> 'out_of_scope') AS listed FROM source_events
 		      WHERE event_id IN (SELECT event_id FROM source_events WHERE source_id = $1 AND event_id IS NOT NULL)
 		      GROUP BY event_id) x
 		WHERE e.id = x.event_id AND e.merged_into_id IS NULL AND e.is_listed <> x.listed`
 )
+
+// MarkSeen отмечает строки источника с externalIDs найденными прогоном
+// runID (last_run_id), не меняя payload: запись на странице, отбракованная
+// Validate или прошедшая, — не пропавшая (MVP.md §4.4). Вызывается до
+// Observe.
+func (s *Store) MarkSeen(ctx context.Context, sourceID, runID int64, externalIDs []string) error {
+	const q = "UPDATE source_events SET last_run_id = $2 WHERE source_id = $1 AND external_id = ANY($3)"
+	if _, err := s.db.Exec(ctx, q, sourceID, runID, externalIDs); err != nil {
+		return fmt.Errorf("mark seen: %w", err)
+	}
+	return nil
+}
 
 // Observe ведёт состояние наблюдения source_events источника после
 // здорового прогона runID (ING-08, MVP.md §4.4) одной транзакцией:
@@ -52,7 +66,7 @@ const (
 // Вызывается только для прогона ok и при принятии прогона.
 func (s *Store) Observe(ctx context.Context, sourceID, runID int64, today time.Time, goneAfterRuns int, goneAfter time.Duration) (ObserveStats, error) {
 	var st ObserveStats
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return st, fmt.Errorf("observe: begin: %w", err)
 	}

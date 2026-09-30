@@ -738,8 +738,8 @@ func TestSetOutOfScope(t *testing.T) {
 	if err := s.SetOutOfScope(ctx, se1); err != nil {
 		t.Fatalf("SetOutOfScope: %v", err)
 	}
-	if got := scalar[string](t, "SELECT match_state || ':' || (event_id IS NULL) FROM source_events WHERE id = $1", se1); got != "out_of_scope:true" {
-		t.Fatalf("source event = %q, want out_of_scope:true", got)
+	if got := scalar[string](t, "SELECT match_state || ':' || (event_id IS NULL) FROM source_events WHERE id = $1", se1); got != "out_of_scope:false" {
+		t.Fatalf("source event = %q, want out_of_scope:false (event_id kept, LO-12)", got)
 	}
 	if got := scalar[string](t, "SELECT is_listed || ':' || status FROM events WHERE id = $1", ev1); got != "false:postponed" {
 		t.Fatalf("event = %q, want false:postponed", got)
@@ -815,15 +815,15 @@ func TestRunLifecycle(t *testing.T) {
 	if got := scalar[string](t, "SELECT metrics::text FROM ingest_runs WHERE id = $1", okID); got != "{}" {
 		t.Fatalf("nil metrics stored as %q, want {}", got)
 	}
-	if err := s.AcceptRun(ctx, id, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
-		t.Fatalf("AcceptRun (old run) err = %v, want ErrNotAcceptable", err)
+	if err := s.ClaimRun(ctx, id); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("ClaimRun (old run) err = %v, want ErrNotAcceptable", err)
 	}
-	if err := s.AcceptRun(ctx, okID, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
-		t.Fatalf("AcceptRun (ok run) err = %v, want ErrNotAcceptable", err)
+	if err := s.ClaimRun(ctx, okID); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("ClaimRun (ok run) err = %v, want ErrNotAcceptable", err)
 	}
 	noSnap := finishedRun(t, s, src, RunFinish{Status: "suspect"})
-	if err := s.AcceptRun(ctx, noSnap, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
-		t.Fatalf("AcceptRun (no snapshot) err = %v, want ErrNotAcceptable", err)
+	if err := s.ClaimRun(ctx, noSnap); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("ClaimRun (no snapshot) err = %v, want ErrNotAcceptable", err)
 	}
 
 	withSnap := finishedRun(t, s, src, RunFinish{Status: "suspect", Snapshot: snap})
@@ -831,8 +831,8 @@ func TestRunLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AcceptRun(ctx, withSnap, 0, "x"); !errors.Is(err, ErrNotAcceptable) {
-		t.Fatalf("AcceptRun (not last) err = %v, want ErrNotAcceptable", err)
+	if err := s.ClaimRun(ctx, withSnap); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("ClaimRun (not last) err = %v, want ErrNotAcceptable", err)
 	}
 	if err := s.FinishRun(ctx, running, RunFinish{Status: "suspect", Snapshot: snap, Error: strings.Repeat("я", 1500)}); err != nil {
 		t.Fatal(err)
@@ -842,9 +842,7 @@ func TestRunLifecycle(t *testing.T) {
 	}
 
 	note := "принят вручную; исходная причина: x"
-	if err := s.AcceptRun(ctx, running, 7, note); err != nil {
-		t.Fatalf("AcceptRun: %v", err)
-	}
+	acceptRun(t, s, running, RunFinish{Status: "ok", Upserted: 7, Error: note})
 	run, err = s.LastRun(ctx, src)
 	if err != nil {
 		t.Fatal(err)
@@ -852,8 +850,24 @@ func TestRunLifecycle(t *testing.T) {
 	if run.Status != "ok" || run.AcceptedAt == nil || run.Snapshot != nil || run.Upserted != 7 || run.Error != note {
 		t.Fatalf("LastRun after accept = %+v", run)
 	}
-	if err := s.AcceptRun(ctx, running, 7, note); !errors.Is(err, ErrNotAcceptable) {
-		t.Fatalf("AcceptRun (twice) err = %v, want ErrNotAcceptable", err)
+	if err := s.ClaimRun(ctx, running); !errors.Is(err, ErrNotAcceptable) {
+		t.Fatalf("ClaimRun (twice) err = %v, want ErrNotAcceptable", err)
+	}
+}
+
+// acceptRun принимает прогон, как Runner.Accept: ClaimRun и FinishRun с
+// Accepted одной транзакцией.
+func acceptRun(t *testing.T, s *Store, runID int64, f RunFinish) {
+	t.Helper()
+	f.Accepted = true
+	err := s.InTx(context.Background(), func(tx *Store) error {
+		if err := tx.ClaimRun(context.Background(), runID); err != nil {
+			return err
+		}
+		return tx.FinishRun(context.Background(), runID, f)
+	})
+	if err != nil {
+		t.Fatalf("accept run %d: %v", runID, err)
 	}
 }
 
@@ -930,9 +944,7 @@ func TestBaselineRuns(t *testing.T) {
 	}
 
 	accepted := finishedRun(t, s, src, RunFinish{Status: "suspect", Parsed: 100, Snapshot: []byte(`[]`)})
-	if err := s.AcceptRun(ctx, accepted, 100, "принят вручную"); err != nil {
-		t.Fatal(err)
-	}
+	acceptRun(t, s, accepted, RunFinish{Status: "ok", Parsed: 100, Upserted: 100, Error: "принят вручную"})
 	okRun(101)
 	okRun(102)
 	finishedRun(t, s, src, RunFinish{Status: "suspect", Parsed: 5})
@@ -1073,4 +1085,66 @@ func TestObserve(t *testing.T) {
 	check("stats run 5", st, ObserveStats{Seen: 1, Missing: 1, ListedChanged: 1})
 	check("x after return", state("x"), "active:0")
 	check("x event after return", listed("x"), "true:cancelled")
+}
+
+// LO-12: запись, ушедшая из каталога (out_of_scope) и вернувшаяся,
+// получает своё прежнее событие, а не новое; пока она вне каталога,
+// наблюдение событие не показывает и в missing её не переводит.
+func TestOutOfScopeReturnReusesEvent(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	src, err := s.EnsureSource(ctx, "marathonec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := dateOnly(time.Now())
+	upsert := func(run int64, ext string) int64 {
+		t.Helper()
+		id, _, err := s.UpsertSourceEvent(ctx, src, run, ext, "https://example.test/"+ext, []byte(`{}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	observe := func(seen ...string) {
+		t.Helper()
+		run := newRun(t, s, src)
+		for _, ext := range seen {
+			upsert(run, ext)
+		}
+		if _, err := s.Observe(ctx, src, run, today, 3, 72*time.Hour); err != nil {
+			t.Fatalf("Observe: %v", err)
+		}
+	}
+
+	se := upsert(newRun(t, s, src), "1")
+	e := sampleEvent()
+	e.StartDate, e.EndDate = today.AddDate(0, 1, 0), nil
+	if _, _, err := s.SaveEventFor(ctx, se, e); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetOutOfScope(ctx, se); err != nil {
+		t.Fatal(err)
+	}
+	observe("1")
+	if scalar[bool](t, "SELECT is_listed FROM events WHERE id = $1", e.ID) {
+		t.Fatal("observe listed the event of an out_of_scope row")
+	}
+	observe()
+	if got := scalar[string](t, "SELECT state || ':' || missed_runs FROM source_events WHERE id = $1", se); got != "active:0" {
+		t.Fatalf("out_of_scope row after a run without it = %q, want active:0", got)
+	}
+
+	back := sampleEvent()
+	back.StartDate, back.EndDate = e.StartDate, nil
+	created, _, err := s.SaveEventFor(ctx, se, back)
+	if err != nil || created || back.ID != e.ID {
+		t.Fatalf("SaveEventFor (back in scope) = created %v, id %d, %v; want the old event %d", created, back.ID, err, e.ID)
+	}
+	if got := scalar[int64](t, "SELECT count(*) FROM events"); got != 1 {
+		t.Fatalf("events = %d, want 1", got)
+	}
+	if got := scalar[string](t, "SELECT is_listed || ':' || se.match_state FROM events e JOIN source_events se ON se.event_id = e.id WHERE se.id = $1", se); got != "true:auto" {
+		t.Fatalf("event after return = %q, want true:auto", got)
+	}
 }

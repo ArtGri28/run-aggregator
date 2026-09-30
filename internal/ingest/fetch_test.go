@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -275,6 +276,8 @@ func TestRetryAfter(t *testing.T) {
 		{"7", 7 * time.Second, true},
 		{now.Add(10 * time.Second).Format(http.TimeFormat), 10 * time.Second, true},
 		{"abc", 0, false},
+		// LO-02: переполнение секунд → предел, не отрицательное значение.
+		{"10000000000", time.Duration(math.MaxInt64).Truncate(time.Second), true},
 		{"", 0, false},
 	} {
 		h := http.Header{}

@@ -140,6 +140,11 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 	}
 
 	if reason != "" {
+		if ctx.Err() != nil {
+			// Остановка процесса, а не сбой источника (runTimeout отменяет
+			// только runCtx).
+			reason = store.RunInterrupted
+		}
 		return fail(reason)
 	}
 	prepared, st := Prepare(recs, now, src.Policy())
@@ -163,12 +168,12 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 		return res, finish(store.RunFinish{Metrics: st.Metrics(), Snapshot: snapshot})
 	}
 
-	if err := r.apply(fctx, sourceID, res.RunID, prepared, &res); err != nil {
-		res, _ = fail("запись: " + err.Error())
-		return res, fmt.Errorf("%s: %w", code, err)
-	}
-	if err := r.observe(fctx, sourceID, res.RunID, now, &res); err != nil {
-		res, _ = fail("наблюдение: " + err.Error())
+	if err := r.Store.InTx(fctx, func(tx *store.Store) error {
+		return r.write(fctx, tx, sourceID, res.RunID, recs, prepared, now, &res)
+	}); err != nil {
+		// Транзакция откатилась: каталог не тронут.
+		res.Upserted, res.Created, res.Changed, res.Unchanged, res.Missing, res.Gone = 0, 0, 0, 0, 0, 0
+		res, _ = fail(err.Error())
 		return res, fmt.Errorf("%s: %w", code, err)
 	}
 	return res, finish(store.RunFinish{Metrics: withCounts(st.Metrics(), res)})
@@ -226,7 +231,9 @@ func parseDoc(src Source, d RawDoc, log *slog.Logger) (evs []SourceEvent, err er
 // Accept принимает последний прогон src в suspect (D-06): применяет его
 // снимок без обращения к сайту — Prepare с моментом старта прогона и
 // текущей политикой источника, запись, наблюдение — и помечает прогон
-// ok с accepted_at; он становится началом окна базы (Pitfall 11).
+// ok с accepted_at, счётчиками и metrics этого применения; он становится
+// началом окна базы (Pitfall 11). Всё — одной транзакцией, начатой с
+// ClaimRun: отказ или сбой ничего не записывает.
 // runID = 0 — последний прогон; иначе он обязан быть последним.
 func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, error) {
 	var res Result
@@ -260,20 +267,26 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 	prepared, st := Prepare(recs, last.StartedAt, src.Policy())
 	res.Rejected, res.Expired, res.OutOfScope = st.Rejected, st.Expired, st.OutOfScope
 
-	// ponytail: гонка с демоном между проверкой и AcceptRun не закрыта
-	// блокировкой; AcceptRun откажет, если за это время начался новый
-	// прогон, а уже записанное идемпотентно исправит следующий прогон ok.
 	fctx, cancel := r.finalizeCtx(ctx)
 	defer cancel()
-	if err := r.apply(fctx, sourceID, last.ID, prepared, &res); err != nil {
-		return res, fmt.Errorf("%s: запись: %w", code, err)
-	}
-	if err := r.observe(fctx, sourceID, last.ID, r.now(), &res); err != nil {
-		return res, fmt.Errorf("%s: наблюдение: %w", code, err)
-	}
-	note := "принят вручную; исходная причина: " + last.Error
-	if err := r.Store.AcceptRun(fctx, last.ID, res.Upserted, note); err != nil {
-		return res, fmt.Errorf("%s: %w", code, err)
+	err = r.Store.InTx(fctx, func(tx *store.Store) error {
+		// Прогон, начатый демоном после проверки выше, делает принятие
+		// невозможным до записи; начатый позже ждёт конца транзакции.
+		if err := tx.ClaimRun(fctx, last.ID); err != nil {
+			return err
+		}
+		if err := r.write(fctx, tx, sourceID, last.ID, recs, prepared, r.now(), &res); err != nil {
+			return err
+		}
+		return tx.FinishRun(fctx, last.ID, store.RunFinish{
+			Status: string(StatusOK), Accepted: true,
+			Fetched: res.Fetched, Parsed: res.Parsed, Rejected: res.Rejected, OutOfScope: res.OutOfScope, Upserted: res.Upserted,
+			Error:   "принят вручную; исходная причина: " + last.Error,
+			Metrics: withCounts(st.Metrics(), res),
+		})
+	})
+	if err != nil {
+		return Result{}, fmt.Errorf("%s: прогон %d: %w", code, last.ID, err)
 	}
 	res.Status = StatusOK
 	r.logger().Info("run accepted", "source", code, "run_id", last.ID, "reason", last.Error,
@@ -282,24 +295,48 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 	return res, nil
 }
 
+// write применяет здоровый прогон в транзакции tx: записи, отметка
+// найденных строк, наблюдение. Ошибка откатывает всё: failed-прогон не
+// применяет ничего (MVP.md §5.4).
+func (r *Runner) write(ctx context.Context, tx *store.Store, sourceID, runID int64, recs []SourceEvent, prepared []Prepared, now time.Time, res *Result) error {
+	if err := r.apply(ctx, tx, sourceID, runID, prepared, res); err != nil {
+		return fmt.Errorf("запись: %w", err)
+	}
+	// Отбракованная или прошедшая строка на странице — найдена: без этого
+	// наблюдение увело бы её в missing и gone.
+	var ids []string
+	for _, rec := range recs {
+		if rec.ExternalID != "" {
+			ids = append(ids, rec.ExternalID)
+		}
+	}
+	if err := tx.MarkSeen(ctx, sourceID, runID, ids); err != nil {
+		return fmt.Errorf("запись: %w", err)
+	}
+	if err := r.observe(ctx, tx, sourceID, runID, now, res); err != nil {
+		return fmt.Errorf("наблюдение: %w", err)
+	}
+	return nil
+}
+
 // apply записывает КАЖДУЮ валидную запись прогона, а не только
 // изменённые: иначе событие, не созданное из-за сбоя в прошлом прогоне
 // или до смены политики страны, не появится никогда (Pitfall 9).
-func (r *Runner) apply(ctx context.Context, sourceID, runID int64, prepared []Prepared, res *Result) error {
+func (r *Runner) apply(ctx context.Context, tx *store.Store, sourceID, runID int64, prepared []Prepared, res *Result) error {
 	for i := range prepared {
 		p := &prepared[i]
-		id, _, err := r.Store.UpsertSourceEvent(ctx, sourceID, runID, p.Source.ExternalID, p.Source.URL, p.Payload)
+		id, _, err := tx.UpsertSourceEvent(ctx, sourceID, runID, p.Source.ExternalID, p.Source.URL, p.Payload)
 		if err != nil {
 			return err
 		}
 		res.Upserted++
 		if !p.InScope {
-			if err := r.Store.SetOutOfScope(ctx, id); err != nil {
+			if err := tx.SetOutOfScope(ctx, id); err != nil {
 				return err
 			}
 			continue
 		}
-		created, changed, err := r.Store.SaveEventFor(ctx, id, &p.Event)
+		created, changed, err := tx.SaveEventFor(ctx, id, &p.Event)
 		if err != nil {
 			return fmt.Errorf("external_id %s: %w", p.Source.ExternalID, err)
 		}
@@ -316,8 +353,8 @@ func (r *Runner) apply(ctx context.Context, sourceID, runID int64, prepared []Pr
 }
 
 // observe — наблюдение после записи здорового прогона; today — UTC-дата now.
-func (r *Runner) observe(ctx context.Context, sourceID, runID int64, now time.Time, res *Result) error {
-	obs, err := r.Store.Observe(ctx, sourceID, runID, now.UTC(), orDefault(r.GoneAfterRuns, 3), orDefault(r.GoneAfter, 72*time.Hour))
+func (r *Runner) observe(ctx context.Context, tx *store.Store, sourceID, runID int64, now time.Time, res *Result) error {
+	obs, err := tx.Observe(ctx, sourceID, runID, now.UTC(), orDefault(r.GoneAfterRuns, 3), orDefault(r.GoneAfter, 72*time.Hour))
 	if err != nil {
 		return err
 	}

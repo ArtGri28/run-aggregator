@@ -32,16 +32,10 @@ func TestMain(m *testing.M) {
 	if dsn == "" {
 		os.Exit(m.Run())
 	}
-	// Тесты пишут в базу: только в тестовую, не в dev-БД с данными (D-03).
-	u, err := url.Parse(dsn)
-	if err != nil || !strings.HasSuffix(strings.TrimPrefix(u.Path, "/"), "_test") {
-		fmt.Fprintln(os.Stderr, "TEST_DATABASE_URL: имя базы должно оканчиваться на _test")
-		os.Exit(1)
-	}
 	ctx := context.Background()
-	s, err := store.Open(ctx, dsn)
+	s, err := openTestStore(ctx, dsn)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "open test store:", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	if err := s.Migrate(ctx); err != nil {
@@ -52,6 +46,26 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	s.Close()
 	os.Exit(code)
+}
+
+// openTestStore открывает базу тестов. Тесты пишут в базу: только в
+// тестовую, не в dev-БД с данными (D-03).
+// Имя берётся из current_database(), а не из URL: ?dbname= в строке
+// подключения переопределяет путь.
+func openTestStore(ctx context.Context, dsn string) (*store.Store, error) {
+	s, err := store.Open(ctx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open test store: %w", err)
+	}
+	name, err := s.DatabaseName(ctx)
+	if err == nil && !strings.HasSuffix(name, "_test") {
+		err = errors.New("TEST_DATABASE_URL: имя базы должно оканчиваться на _test")
+	}
+	if err != nil {
+		s.Close()
+		return nil, err
+	}
+	return s, nil
 }
 
 // fixtureSource отдаёт заранее заданное тело без сети. Код источника
@@ -182,6 +196,21 @@ func TestAcceptAfterPolicySwitch(t *testing.T) {
 	if acc.OutOfScope != 0 || acc.Created == 0 || acc.Created != acc.Upserted {
 		t.Fatalf("Accept = %+v, want OutOfScope 0, Created == Upserted > 0 under RUOnlyFallback", acc)
 	}
+	// W-1: строка принятого прогона — счётчики и metrics по политике
+	// принятия, а не по оценке suspect.
+	last := lastRun(t, src.code)
+	var m struct {
+		OutOfScope *int `json:"out_of_scope"`
+		Created    *int `json:"created"`
+	}
+	if err := json.Unmarshal(last.Metrics, &m); err != nil {
+		t.Fatal(err)
+	}
+	if last.OutOfScope != 0 || last.Rejected != acc.Rejected || m.OutOfScope == nil || *m.OutOfScope != 0 ||
+		m.Created == nil || *m.Created != acc.Created {
+		t.Fatalf("accepted run: out_of_scope %d, rejected %d, metrics %s; want 0, %d, out_of_scope 0, created %d",
+			last.OutOfScope, last.Rejected, last.Metrics, acc.Rejected, acc.Created)
+	}
 }
 
 func TestRunStructureNotFound(t *testing.T) {
@@ -208,6 +237,10 @@ type memSource struct {
 	fetchErr   error
 	panicParse bool
 	fetches    int
+	// onPolicy вызывается из Policy — точки между проверкой прогона в
+	// Accept и записью; cancel отменяет контекст прогона внутри Fetch.
+	onPolicy func()
+	cancel   context.CancelFunc
 }
 
 func newMemSource(t *testing.T, recs []ingest.SourceEvent) *memSource {
@@ -217,11 +250,19 @@ func newMemSource(t *testing.T, recs []ingest.SourceEvent) *memSource {
 func (s *memSource) Code() string { return s.code }
 
 func (s *memSource) Policy() ingest.Policy {
+	if f := s.onPolicy; f != nil {
+		s.onPolicy = nil
+		f()
+	}
 	return ingest.Policy{CountryFallback: normalize.RUOnlyFallback}
 }
 
-func (s *memSource) Fetch(context.Context) ([]ingest.RawDoc, error) {
+func (s *memSource) Fetch(ctx context.Context) ([]ingest.RawDoc, error) {
 	s.fetches++
+	if s.cancel != nil {
+		s.cancel()
+		return nil, fmt.Errorf("fetch: %w", ctx.Err())
+	}
 	if s.fetchErr != nil {
 		return nil, s.fetchErr
 	}
@@ -509,5 +550,134 @@ func TestRunSavesRaw(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, src2.code)); !os.IsNotExist(err) {
 		t.Fatalf("Raw == nil wrote files: %v", err)
+	}
+}
+
+// ME-01: прогон, начатый демоном после проверки в Accept, но до записи,
+// делает принятие невозможным — и отказ не должен ничего записать.
+func TestAcceptRefusedWritesNothing(t *testing.T) {
+	r := testRunner(t)
+	src := newMemSource(t, records(1, 10))
+	ctx := context.Background()
+	run(t, r, src, ingest.StatusSuspect)
+
+	var daemon int64
+	var startErr error
+	src.onPolicy = func() {
+		id, err := testStore.EnsureSource(ctx, src.code)
+		if err != nil {
+			startErr = err
+			return
+		}
+		daemon, startErr = testStore.StartRun(ctx, id, fixtureNow, time.Hour)
+	}
+	if _, err := r.Accept(ctx, src, 0); !errors.Is(err, store.ErrNotAcceptable) {
+		t.Fatalf("Accept err = %v, want ErrNotAcceptable", err)
+	}
+	if startErr != nil {
+		t.Fatalf("StartRun during Accept: %v", startErr)
+	}
+	// Прогон демона завершился ok: каталог должен остаться пустым.
+	if err := testStore.FinishRun(ctx, daemon, store.RunFinish{Status: "ok", Parsed: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if res := run(t, r, src, ingest.StatusOK); res.Created != 10 {
+		t.Fatalf("run after refused Accept = %+v, want Created 10: the refused Accept wrote the catalog", res)
+	}
+}
+
+// ME-02: строка на странице, отбракованная или ставшая expired, —
+// найдена прогоном: она не уходит в missing/gone.
+func TestRunRejectedRowStaysSeen(t *testing.T) {
+	r := testRunner(t)
+	r.GoneAfterRuns, r.GoneAfter = 1, time.Nanosecond
+	all := records(1, 10)
+	src := newMemSource(t, all)
+	run(t, r, src, ingest.StatusSuspect)
+	accept(t, r, src)
+
+	src.recs = slices.Clone(all)
+	src.recs[0].Date = "уточняется"
+	src.recs[1].Date = fixtureNow.AddDate(0, 0, -10).Format("02/01/2006")
+	res := run(t, r, src, ingest.StatusOK)
+	if res.Rejected != 1 || res.Expired != 1 || res.Missing != 0 || res.Gone != 0 {
+		t.Fatalf("run with rejected and expired rows = %+v, want Rejected 1, Expired 1, Missing 0, Gone 0", res)
+	}
+}
+
+// ME-03: сбой БД посреди записи прогона не оставляет каталог применённым
+// наполовину: прогон failed, ничего не записано.
+func TestRunWriteFailureAppliesNothing(t *testing.T) {
+	r := testRunner(t)
+	all := records(1, 10)
+	src := newMemSource(t, all)
+	run(t, r, src, ingest.StatusSuspect)
+	accept(t, r, src)
+
+	renamed := slices.Clone(all)
+	for i := range renamed {
+		renamed[i].Title += " (новое название)"
+	}
+	// NUL в названии: jsonb payload последней записи отвергается БД.
+	bad := records(11, 1)
+	bad[0].Title = "Забег\x00"
+	src.recs = append(renamed, bad...)
+	res, err := r.Run(context.Background(), src)
+	if err == nil || res.Status != ingest.StatusFailed {
+		t.Fatalf("Run = %s, %+v, err %v; want failed with an error", statusOf(res), res, err)
+	}
+	if last := lastRun(t, src.code); last.Status != "failed" || last.Upserted != 0 {
+		t.Fatalf("failed run row = %+v, want failed, upserted 0", last)
+	}
+
+	src.recs = all
+	if res := run(t, r, src, ingest.StatusOK); res.Changed != 0 || res.Unchanged != 10 || res.Created != 0 {
+		t.Fatalf("run after failed write = %+v, want Changed 0, Unchanged 10: the failed run changed the catalog", res)
+	}
+}
+
+// LO-08: отмена контекста (SIGTERM) во время загрузки — не сбой
+// источника и не удвоение интервала.
+func TestRunCancelledIsNotFailure(t *testing.T) {
+	r := testRunner(t)
+	src := newMemSource(t, records(1, 5))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	src.cancel = cancel
+
+	res, err := r.Run(ctx, src)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !hasReason(res, "прерван") {
+		t.Fatalf("Run = %s, want the interrupted reason", statusOf(res))
+	}
+	id, err := testStore.EnsureSource(context.Background(), src.code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := testStore.SourceHealth(context.Background(), id)
+	if err != nil || h.ConsecutiveFailures != 0 {
+		t.Fatalf("SourceHealth = %+v, %v; want ConsecutiveFailures 0", h, err)
+	}
+}
+
+// W-3: защита тестовой базы смотрит на current_database(), а не на путь
+// URL: ?dbname= не обходит её.
+func TestTestDBGuard(t *testing.T) {
+	testRunner(t)
+	u, err := url.Parse(os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("dbname", "postgres")
+	u.RawQuery = q.Encode()
+	s, err := openTestStore(context.Background(), u.String())
+	if s != nil {
+		s.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "_test") {
+		t.Fatalf("openTestStore(path *_test, ?dbname=postgres) err = %v, want the _test refusal", err)
 	}
 }

@@ -39,7 +39,7 @@ func (s *Store) EnsureSource(ctx context.Context, code string) (int64, error) {
 		ON CONFLICT (code) DO UPDATE SET code = sources.code
 		RETURNING id`
 	var id int64
-	if err := s.pool.QueryRow(ctx, q, code).Scan(&id); err != nil {
+	if err := s.db.QueryRow(ctx, q, code).Scan(&id); err != nil {
 		return 0, fmt.Errorf("ensure source: %w", err)
 	}
 	return id, nil
@@ -79,7 +79,7 @@ func (s *Store) UpsertSourceEvent(ctx context.Context, sourceID, runID int64, ex
 
 	var id int64
 	var changed bool
-	if err := s.pool.QueryRow(ctx, q, sourceID, externalID, url, payload, hash, runID).Scan(&id, &changed); err != nil {
+	if err := s.db.QueryRow(ctx, q, sourceID, externalID, url, payload, hash, runID).Scan(&id, &changed); err != nil {
 		return 0, false, fmt.Errorf("upsert source event: %w", err)
 	}
 	return id, changed, nil
@@ -139,7 +139,7 @@ type queryRowerMulti interface {
 // GetEvent returns the canonical event and its distances (sorted by
 // meters). A missing id is reported as ErrNotFound.
 func (s *Store) GetEvent(ctx context.Context, id int64) (event.Event, error) {
-	row := s.pool.QueryRow(ctx, "SELECT"+selectEventCols+" FROM events WHERE id = $1", id)
+	row := s.db.QueryRow(ctx, "SELECT"+selectEventCols+" FROM events WHERE id = $1", id)
 	e, err := scanEventRow(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return event.Event{}, fmt.Errorf("get event %d: %w", id, ErrNotFound)
@@ -147,7 +147,7 @@ func (s *Store) GetEvent(ctx context.Context, id int64) (event.Event, error) {
 	if err != nil {
 		return event.Event{}, fmt.Errorf("get event: %w", err)
 	}
-	e.Distances, err = fetchDistances(ctx, s.pool, id)
+	e.Distances, err = fetchDistances(ctx, s.db, id)
 	if err != nil {
 		return event.Event{}, fmt.Errorf("get event: distances: %w", err)
 	}
@@ -283,7 +283,7 @@ func dateOnly(t time.Time) time.Time {
 // canonical field or the distance set actually changed (ING-05);
 // is_listed/merged_into_id are never touched here (Phase 3/5 own those).
 func (s *Store) SaveEvent(ctx context.Context, e *event.Event) (bool, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("save event: begin: %w", err)
 	}
@@ -368,21 +368,23 @@ func saveEventTx(ctx context.Context, tx pgx.Tx, e *event.Event) (bool, error) {
 
 // SaveEventFor saves the event built from one source_events row in a
 // single transaction, so a crash can't leave an event without its link
-// (T-03-10). An unlinked row (event_id NULL — new, or formerly
-// out_of_scope) gets a new event and match_state = 'auto'; a linked row
-// updates its event, keeping the status stored in the database, because
-// a source without an explicit status must not reset cancelled/postponed.
+// (T-03-10). An unlinked row (event_id NULL) gets a new event and
+// match_state = 'auto'; a linked row updates its event, keeping the status
+// stored in the database, because a source without an explicit status
+// must not reset cancelled/postponed. A row back from out_of_scope reuses
+// its event: match_state = 'auto', is_listed recomputed (LO-12).
 // Choosing fields by source priority when an event has several
 // source_events is Phase 5's job. A missing sourceEventID is ErrNotFound.
 func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.Event) (created, changed bool, err error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, false, fmt.Errorf("save event for: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var eventID *int64
-	err = tx.QueryRow(ctx, "SELECT event_id FROM source_events WHERE id = $1 FOR UPDATE", sourceEventID).Scan(&eventID)
+	var matchState string
+	err = tx.QueryRow(ctx, "SELECT event_id, match_state FROM source_events WHERE id = $1 FOR UPDATE", sourceEventID).Scan(&eventID, &matchState)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, false, fmt.Errorf("save event for %d: %w", sourceEventID, ErrNotFound)
 	}
@@ -410,6 +412,14 @@ func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.
 		if changed, err = saveEventTx(ctx, tx, e); err != nil {
 			return false, false, err
 		}
+		if matchState == string(event.MatchOutOfScope) {
+			if _, err := tx.Exec(ctx, "UPDATE source_events SET match_state = 'auto' WHERE id = $1", sourceEventID); err != nil {
+				return false, false, fmt.Errorf("save event for: relink: %w", err)
+			}
+			if _, err := tx.Exec(ctx, listEventSQL, e.ID); err != nil {
+				return false, false, fmt.Errorf("save event for: is_listed: %w", err)
+			}
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -422,7 +432,7 @@ func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.
 // (the source_event → event link, or the out-of-scope path when eventID
 // is nil). A missing sourceEventID is reported as ErrNotFound.
 func (s *Store) SetMatch(ctx context.Context, sourceEventID int64, eventID *int64, state event.MatchState) error {
-	cmd, err := s.pool.Exec(ctx, "UPDATE source_events SET event_id = $2, match_state = $3 WHERE id = $1", sourceEventID, eventID, string(state))
+	cmd, err := s.db.Exec(ctx, "UPDATE source_events SET event_id = $2, match_state = $3 WHERE id = $1", sourceEventID, eventID, string(state))
 	if err != nil {
 		return fmt.Errorf("set match: %w", err)
 	}
@@ -432,12 +442,21 @@ func (s *Store) SetMatch(ctx context.Context, sourceEventID int64, eventID *int6
 	return nil
 }
 
-// SetOutOfScope marks a source_events row out_of_scope (event_id NULL)
-// in one transaction. If it was linked to an event and no other linked
-// row outside gone remains, the event gets is_listed = false; the
-// event's status is never changed. A missing id is ErrNotFound.
+// listEventSQL recomputes one event's is_listed: listed while a linked
+// source_events row is neither gone nor out_of_scope (as Observe does);
+// status and updated_at are never changed.
+const listEventSQL = `
+	UPDATE events SET is_listed = EXISTS (
+		SELECT 1 FROM source_events WHERE event_id = $1 AND state <> 'gone' AND match_state <> 'out_of_scope')
+	WHERE id = $1 AND merged_into_id IS NULL`
+
+// SetOutOfScope marks a source_events row out_of_scope in one
+// transaction, keeping its event_id so a row back in scope reuses the
+// event (LO-12). If no other linked row outside gone and out_of_scope
+// remains, the event gets is_listed = false; the event's status is never
+// changed. A missing id is ErrNotFound.
 func (s *Store) SetOutOfScope(ctx context.Context, sourceEventID int64) error {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("set out of scope: begin: %w", err)
 	}
@@ -451,16 +470,12 @@ func (s *Store) SetOutOfScope(ctx context.Context, sourceEventID int64) error {
 	if err != nil {
 		return fmt.Errorf("set out of scope: select: %w", err)
 	}
-	const unlink = "UPDATE source_events SET event_id = NULL, match_state = 'out_of_scope' WHERE id = $1"
-	if _, err := tx.Exec(ctx, unlink, sourceEventID); err != nil {
-		return fmt.Errorf("set out of scope: unlink: %w", err)
+	const mark = "UPDATE source_events SET match_state = 'out_of_scope' WHERE id = $1"
+	if _, err := tx.Exec(ctx, mark, sourceEventID); err != nil {
+		return fmt.Errorf("set out of scope: mark: %w", err)
 	}
 	if eventID != nil {
-		const hide = `
-			UPDATE events SET is_listed = false
-			WHERE id = $1 AND is_listed
-			  AND NOT EXISTS (SELECT 1 FROM source_events WHERE event_id = $1 AND state <> 'gone')`
-		if _, err := tx.Exec(ctx, hide, *eventID); err != nil {
+		if _, err := tx.Exec(ctx, listEventSQL, *eventID); err != nil {
 			return fmt.Errorf("set out of scope: hide event: %w", err)
 		}
 	}
