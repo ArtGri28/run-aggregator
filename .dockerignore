@@ -1,0 +1,12 @@
+# Вторая линия защиты после узкого COPY в Dockerfile: секреты и служебные
+# файлы не попадают в контекст сборки.
+.env
+.env.*
+!.env.example
+.git
+.planning
+.idea
+data
+deploy
+*.md
+.DS_Store

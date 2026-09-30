@@ -2,7 +2,7 @@
 # (docker-compose.test.yml). Порт только на 127.0.0.1, данные на
 # именованном томе (переживают `down`; удаляются только `down -v`),
 # пароль — из .env (DEV_POSTGRES_PASSWORD), в файле его нет.
-# Это не production-состав MVP.md §10.2 — он появляется в Phase 6.
+# Это не production-состав: production-состав — docker-compose.yml (Phase 4).
 name: aggregator-dev
 
 services:

@@ -1,0 +1,100 @@
+# Production-состав MVP.md §10.2 (PRD-01): postgres, одноразовый migrate, bot, worker.
+# Лежит на VPS в /opt/aggregator рядом с .env (права 600); значения секретов
+# подставляются из .env интерполяцией ${VAR}, в этом файле их нет.
+#
+# Наружу ничего не публикуется: порты Docker обходят ufw, а PostgreSQL нужна
+# только соседним контейнерам по внутренней сети проекта.
+# Каждому сервису передаются только нужные ему переменные (общий файл
+# переменных не подключается): токен бота есть только у bot, контакт владельца
+# только у worker. Необязательные OBSERVE_* и QUALITY_* при необходимости
+# добавляются одинаково в bot и worker (Pitfall 11: принятие прогона ботом
+# должно наблюдать так же, как worker).
+#
+# Пароль Postgres действует только при первой инициализации тома: смена в .env
+# без ALTER ROLE приведёт к отказу аутентификации.
+# Тома pgdata и raw НЕ удаляются никогда (без флага -v у down): бэкапов до
+# Phase 6 нет. Откат образа — сменой IMAGE_TAG в .env.
+name: aggregator
+
+x-logging: &log
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-db-env: &db-env
+  DATABASE_URL: postgres://aggregator@postgres:5432/aggregator?sslmode=disable
+  PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+  LOG_FORMAT: ${LOG_FORMAT:-}
+
+x-app: &app
+  image: aggregator:${IMAGE_TAG:?задайте IMAGE_TAG в .env}
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging: *log
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aggregator
+      POSTGRES_DB: aggregator
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U aggregator -d aggregator"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    logging: *log
+
+  migrate:
+    image: aggregator:${IMAGE_TAG:?задайте IMAGE_TAG в .env}
+    command: ["migrate"]
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      <<: *db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *log
+
+  bot:
+    <<: *app
+    command: ["bot"]
+    environment:
+      <<: *db-env
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?задайте TELEGRAM_BOT_TOKEN в .env}
+      ADMIN_TG_IDS: ${ADMIN_TG_IDS:?задайте ADMIN_TG_IDS в .env}
+    healthcheck:
+      test: ["CMD", "/aggregator", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    stop_grace_period: 30s
+    volumes:
+      - raw:/data/raw
+    environment:
+      <<: *db-env
+      OWNER_CONTACT: ${OWNER_CONTACT:?задайте OWNER_CONTACT в .env}
+      RAW_DIR: /data/raw
+
+volumes:
+  pgdata:
+  raw:
