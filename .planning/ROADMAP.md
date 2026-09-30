@@ -131,7 +131,7 @@ Plans:
   4. Скрытые и слитые события в выдаче не появляются; отменённые и перенесённые **не скрываются** и показываются явно с пометкой `[ОТМЕНЁН]` или `[ПЕРЕНЕСЁН]` в списке и в карточке
   5. `/runs` и Telegram-алерты о `failed` и `suspect` прогонах доступны только администратору (`ADMIN_TG_IDS`); о пользователях хранятся только Telegram ID и настройки поиска
 
-**Plans**: 6/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -160,11 +160,11 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 04-07-PLAN.md — Владелец: BotFather и ID, доставка образа, PREFLIGHT хоста, решение по изменениям хоста (D-04), подготовка хоста и развёртывание
+- [x] 04-07-PLAN.md — Владелец: BotFather и ID, доставка образа, PREFLIGHT хоста, решение по изменениям хоста (D-04), подготовка хоста и развёртывание
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 04-08-PLAN.md — Владелец: первый прогон с VPS → алерт → принятие кнопкой (D-07); приёмка пяти критериев ROADMAP на production-боте
+- [x] 04-08-PLAN.md — Владелец: первый прогон с VPS → алерт → принятие кнопкой (D-07); приёмка пяти критериев ROADMAP на production-боте
 
 ### Phase 5: Multiple Sources & Deduplication
 
@@ -207,6 +207,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
-| 4. Telegram Search | 6/8 | In Progress|  |
+| 4. Telegram Search | 8/8 | In Progress|  |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
