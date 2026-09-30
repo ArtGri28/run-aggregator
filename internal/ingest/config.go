@@ -82,6 +82,9 @@ func LoadConfig(needContact bool) (Config, error) {
 	if strings.ContainsFunc(contact, unicode.IsControl) {
 		return Config{}, errors.New("OWNER_CONTACT содержит управляющие символы")
 	}
+	if strings.ContainsAny(contact, "<>") {
+		return Config{}, errors.New("OWNER_CONTACT похож на заглушку из инструкции (есть < или >): укажите настоящий контакт")
+	}
 	if contact == "" && needContact {
 		return Config{}, errors.New("OWNER_CONTACT не задан (нужен для User-Agent)")
 	}

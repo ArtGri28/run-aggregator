@@ -90,5 +90,10 @@ func TestLoadConfig(t *testing.T) {
 		if _, err := LoadConfig(false); err == nil || strings.Contains(err.Error(), "me@example") {
 			t.Fatalf("err = %v, want error without the value", err)
 		}
+		// Placeholder copied from instructions instead of a real contact.
+		t.Setenv("OWNER_CONTACT", "<ваш контакт>")
+		if _, err := LoadConfig(false); err == nil || strings.Contains(err.Error(), "ваш") {
+			t.Fatalf("err = %v, want placeholder error without the value", err)
+		}
 	})
 }
