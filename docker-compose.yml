@@ -29,6 +29,9 @@ x-db-env: &db-env
 
 x-app: &app
   image: aggregator:${IMAGE_TAG:?задайте IMAGE_TAG в .env}
+  # Пользователь задаётся здесь, а не только в образе: образ приходит через agg load,
+  # и объявленный в нём USER root не должен действовать.
+  user: "65532:65532"
   restart: unless-stopped
   read_only: true
   cap_drop: [ALL]
@@ -59,6 +62,7 @@ services:
   migrate:
     image: aggregator:${IMAGE_TAG:?задайте IMAGE_TAG в .env}
     command: ["migrate"]
+    user: "65532:65532"
     restart: "no"
     read_only: true
     cap_drop: [ALL]

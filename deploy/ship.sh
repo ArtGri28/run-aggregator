@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Доставка образа и скриптов на VPS (D-05). Запускает владелец на Mac:
-#   deploy/ship.sh <ssh-алиас>          [TAG=<тег>] — иначе короткий хеш коммита
-#   [SSH_CONFIG=<файл>] — отдельный файл настроек ssh (ssh -F), если алиас описан не
-#   в ~/.ssh/config; передаётся в ssh, scp и в напечатанные однострочники.
-# Порядок: локальная проверка образа (smoke.sh, linux/amd64) -> каталог на VPS ->
-# docker save | gzip | ssh ... docker load -> копирование compose-файла и скриптов ->
-# однострочники с SHA256. На VPS ничего не запускается, кроме создания каталога и
-# загрузки образа; исходники, Go и реестр образов на VPS не нужны.
+# Доставка образа и пакета скриптов на VPS под runagg (D-05). Запускает владелец на Mac:
+#   [TAG=<тег>] [SSH_CONFIG=<файл>] deploy/ship.sh <ssh-алиас runagg>
+# TAG — иначе короткий хеш коммита; SSH_CONFIG — отдельный файл настроек ssh (ssh -F),
+# передаётся в ssh, scp и в напечатанные команды.
+# Порядок: smoke.sh (linux/amd64) -> пакет скриптов и SHA256SUMS в /home/runagg/agg-deploy ->
+# сверка SHA256 установленных /usr/local/sbin/agg и /usr/local/lib/aggregator/* с
+# репозиторием (не установлено или отличается — STOP и команда разовой установки для
+# root-консоли; образ не передаётся) -> docker save | gzip | ssh ... 'gunzip | sudo -n
+# /usr/local/sbin/agg load <TAG>' -> команды для следующих шагов. Root по ssh не нужен:
+# runagg может через sudo только /usr/local/sbin/agg.
 set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")/.."
@@ -33,7 +35,9 @@ if [ -z "$TAG" ]; then
   fi
   TAG=$(git rev-parse --short=12 HEAD)
 fi
-[[ $TAG =~ ^[A-Za-z0-9._-]{1,64}$ ]] || { echo "недопустимый TAG" >&2; exit 2; }
+# Тот же формат, что проверяет agg на VPS: TAG попадает в строку удалённой команды, поэтому
+# в нём нет пробелов, кавычек, $, ;, / и ведущего «-».
+[[ $TAG =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || { echo "недопустимый TAG" >&2; exit 2; }
 
 mkdir -p "$HOME/run-agg-phase4"
 chmod 700 "$HOME/run-agg-phase4"
@@ -41,9 +45,27 @@ chmod 700 "$HOME/run-agg-phase4"
 # Без успешной локальной проверки образ на VPS не уходит (set -e).
 deploy/smoke.sh "$TAG"
 
-ssh_ "$ALIAS" 'install -d -m 700 /root/agg-deploy'
-docker save "aggregator:$TAG" | gzip | ssh_ "$ALIAS" 'gunzip | docker load'
-scp ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} docker-compose.yml deploy/vps/*.sh "$ALIAS:/root/agg-deploy/"
+B=$(mktemp -d)
+trap 'rm -rf "$B"' EXIT
+cp $(deploy/oneliner.sh files) "$B"/
+deploy/oneliner.sh sums > "$B/SHA256SUMS"
+(cd "$B" && shasum -a 256 -c --quiet SHA256SUMS)
 
-TAG=$TAG SSH_CONFIG=$SSH_CONFIG deploy/oneliner.sh "$ALIAS" deploy/vps/*.sh
+STAGE=$(ssh_ "$ALIAS" 'install -d -m 700 agg-deploy && cd agg-deploy && pwd')
+[ "$STAGE" = /home/runagg/agg-deploy ] || { echo "STOP: каталог пакета на VPS не /home/runagg/agg-deploy — алиас не runagg?" >&2; exit 1; }
+scp ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$B"/* "$ALIAS:agg-deploy/"
+
+if ! deploy/oneliner.sh installed | ssh_ "$ALIAS" 'sha256sum -c --quiet -'; then
+  echo
+  echo "STOP: /usr/local/sbin/agg или /usr/local/lib/aggregator на VPS не установлены или отличаются от"
+  echo "репозитория. Образ не передавался. Выполните разовую установку в root-консоли провайдера"
+  echo "(пакет уже в /home/runagg/agg-deploy), затем повторите deploy/ship.sh."
+  echo
+  TAG=$TAG SSH_CONFIG=$SSH_CONFIG deploy/oneliner.sh "$ALIAS"
+  exit 1
+fi
+
+docker save "aggregator:$TAG" | gzip | ssh_ "$ALIAS" "gunzip | sudo -n /usr/local/sbin/agg load $TAG"
+
+TAG=$TAG SSH_CONFIG=$SSH_CONFIG deploy/oneliner.sh "$ALIAS"
 echo "IMAGE_TAG=$TAG"

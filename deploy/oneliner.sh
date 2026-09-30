@@ -1,26 +1,45 @@
 #!/usr/bin/env bash
-# Печатает однострочники для запуска скриптов на VPS с проверкой полного SHA256.
-# Запускает владелец на Mac после deploy/ship.sh. Ничего не выполняет на VPS.
-#
-# Использование: [TAG=<тег образа>] [AGG_DIR=<каталог на VPS>] [SSH_CONFIG=<файл>] deploy/oneliner.sh <ssh-алиас> <файл>...
-# Для каждого скрипта печатается:
-#   - VPS-форма: хеш сверяется на самом VPS; при несовпадении скрипт не запускается
-#     и печатается «STOP: HASH MISMATCH» (if/else, а не &&/||: сбой самого скрипта
-#     не выдаётся за несовпадение хеша);
-#   - Mac-форма: команда ssh для запуска с Mac. Скрипты только чтения пишут вывод
-#     в $HOME/run-agg-phase4/ вне репозитория; меняющие хост идут через ssh -t
-#     (интерактивное подтверждение) без tee.
+# Команды для VPS после deploy/ship.sh; сам ничего не выполняет.
+#   deploy/oneliner.sh files                   — файлы пакета (для ship.sh)
+#   deploy/oneliner.sh sums                    — содержимое SHA256SUMS пакета
+#   deploy/oneliner.sh installed               — ожидаемые SHA256 установленных agg и lib
+#   [TAG=<тег>] [SSH_CONFIG=<файл>] deploy/oneliner.sh <ssh-алиас runagg>
+# Два вида команд:
+#   - root-консоль провайдера (разовая установка и изменения хоста): пакет из
+#     /home/runagg/agg-deploy копируется во временный каталог root, сверяется SHA256
+#     файла SHA256SUMS и по нему всех файлов; при несовпадении — «STOP: HASH MISMATCH»,
+#     ничего не запускается;
+#   - Mac: ssh под runagg и «sudo -n /usr/local/sbin/agg <команда>»; вывод команд
+#     только чтения — в $HOME/run-agg-phase4/ вне репозитория.
 set -euo pipefail
 export LC_ALL=C
+cd "$(dirname "$0")/.."
 
-usage() { echo "usage: [TAG=..] [AGG_DIR=..] $0 <ssh-alias> <file>..." >&2; exit 2; }
-[ $# -ge 2 ] || usage
+BUNDLE="deploy/vps/agg deploy/vps/agg-install.sh deploy/vps/deploy-apply.sh deploy/vps/deploy-preflight.sh
+  deploy/vps/deploy-verify.sh deploy/vps/env-init.sh deploy/vps/host-apply.sh deploy/vps/host-preflight.sh
+  deploy/vps/host-verify.sh deploy/vps/rollback.sh docker-compose.yml"
+STAGE=/home/runagg/agg-deploy
+AGG=/usr/local/sbin/agg
+LIB=/usr/local/lib/aggregator
+
+sha() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$@"; else sha256sum "$@"; fi | cut -d' ' -f1
+}
+sums() { for f in $BUNDLE; do printf '%s  %s\n' "$(sha "$f")" "${f##*/}"; done; }
+
+case "${1:-}" in
+  files) echo $BUNDLE; exit 0 ;;
+  sums) sums; exit 0 ;;
+  installed)
+    # Как в agg-install.sh: agg — в /usr/local/sbin, в lib — всё, кроме скриптов root-консоли.
+    sums | awk -v a="$AGG" -v l="$LIB" '$2 == "agg" {print $1 "  " a; next}
+      $2 != "agg-install.sh" && $2 != "host-apply.sh" {print $1 "  " l "/" $2}'
+    exit 0 ;;
+esac
+
+[ $# -eq 1 ] || { echo "usage: [TAG=..] [SSH_CONFIG=..] $0 <ssh-alias> | files | sums | installed" >&2; exit 2; }
 ALIAS=$1
-shift
 [[ $ALIAS =~ ^[A-Za-z0-9._-]+$ ]] || { echo "недопустимый ssh-алиас" >&2; exit 2; }
-DIR=${AGG_DIR:-/root/agg-deploy}
-[[ $DIR =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "недопустимый AGG_DIR" >&2; exit 2; }
-# SSH_CONFIG — отдельный файл настроек ssh: в Mac-формы добавляется -F <файл>.
 SSH_CONFIG=${SSH_CONFIG:-}
 if [ -n "$SSH_CONFIG" ] && ! [[ $SSH_CONFIG =~ ^[A-Za-z0-9._/-]+$ ]]; then
   echo "недопустимый путь SSH_CONFIG" >&2
@@ -28,50 +47,41 @@ if [ -n "$SSH_CONFIG" ] && ! [[ $SSH_CONFIG =~ ^[A-Za-z0-9._/-]+$ ]]; then
 fi
 SSHF=${SSH_CONFIG:+ -F $SSH_CONFIG}
 TAG=${TAG:-<TAG>}
-if [ "$TAG" != "<TAG>" ] && ! [[ $TAG =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
+if [ "$TAG" != "<TAG>" ] && ! [[ $TAG =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
   echo "недопустимый TAG" >&2
   exit 2
 fi
 
-sha() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | cut -d' ' -f1
-  else
-    sha256sum "$1" | cut -d' ' -f1
-  fi
+H=$(sums | sha)
+# root <команда>: однострочник для root-консоли; if/else — сбой самого скрипта не выдаётся
+# за несовпадение хеша.
+root() {
+  echo "T=\$(mktemp -d) && cp $STAGE/* \"\$T\"/ && cd \"\$T\" && if echo '$H  SHA256SUMS' | sha256sum -c --quiet - && sha256sum -c --quiet SHA256SUMS; then $*; else echo 'STOP: HASH MISMATCH'; fi"
 }
+ro() { echo "ssh$SSHF $ALIAS 'sudo -n $AGG $1' 2>&1 | tee \"\$HOME/run-agg-phase4/$2.log\""; }
+rw() { echo "ssh$SSHF $ALIAS 'sudo -n $AGG $1'"; }
 
-# emit <файл> <режим: ro|rw> [аргументы скрипта...]
-emit() {
-  local file=$1 mode=$2 name hash vps
-  shift 2
-  name=$(basename "$file")
-  hash=$(sha "$file")
-  vps="cd $DIR && if printf '%s  %s\\n' $hash $name | sha256sum -c --quiet -; then bash $name${*:+ $*}; else echo 'STOP: HASH MISMATCH'; fi"
-  echo "== $name${*:+ $*} =="
-  echo "VPS:"
-  echo "$vps"
-  echo "Mac:"
-  if [ "$mode" = ro ]; then
-    echo "ssh$SSHF $ALIAS \"$vps\" 2>&1 | tee \"\$HOME/run-agg-phase4/${name%.sh}.log\""
-  else
-    echo "ssh$SSHF -t $ALIAS \"$vps\""
-  fi
-  echo
-}
+cat <<EOF
+== Root-консоль провайдера: разовая установка (слово INSTALL) ==
+SHA256 SHA256SUMS: $H
+$(root bash agg-install.sh)
 
-for f in "$@"; do
-  [ -f "$f" ] || { echo "нет файла: $f" >&2; exit 2; }
-  case "$(basename "$f")" in
-    host-apply.sh)
-      emit "$f" rw updates
-      emit "$f" rw compose ;;
-    deploy-apply.sh) emit "$f" rw "$TAG" ;;
-    rollback.sh) emit "$f" rw ;;
-    deploy-preflight.sh) emit "$f" ro "$TAG" ;;
-    *) emit "$f" ro ;;
-  esac
-done
+Если вставка в консоли не работает — две короткие команды; сверьте напечатанный хеш
+SHA256SUMS с строкой выше глазами, при «FILES OK» запустите вторую:
+T=\$(mktemp -d) && cp $STAGE/* "\$T"/ && cd "\$T" && sha256sum SHA256SUMS && sha256sum -c --quiet SHA256SUMS && echo FILES OK
+bash agg-install.sh
 
-COMPOSE="$(dirname "$0")/../docker-compose.yml"
-[ ! -f "$COMPOSE" ] || echo "SHA256 docker-compose.yml: $(sha "$COMPOSE")"
+== Root-консоль: изменения хоста, только по решению владельца ==
+$(root bash host-apply.sh updates)
+systemctl reboot   # вручную, когда готовы
+$(root bash host-apply.sh compose)
+
+== Mac, под runagg ==
+host-preflight: $(ro host-preflight host-preflight)
+host-verify:    $(ro host-verify host-verify)
+.env (разово): ${SSH_CONFIG:+SSH_CONFIG=$SSH_CONFIG }deploy/secrets.sh $ALIAS
+preflight:      $(ro "preflight $TAG" deploy-preflight)
+deploy:         $(rw "deploy $TAG")    # слово DEPLOY
+verify:         $(ro verify deploy-verify)
+rollback:       $(rw rollback)    # слово ROLLBACK
+EOF

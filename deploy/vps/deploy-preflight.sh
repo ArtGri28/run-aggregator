@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # B0 PREFLIGHT развёртывания: ТОЛЬКО ЧТЕНИЕ, хост не меняется.
-# Использование: deploy-preflight.sh <TAG>. Запускает владелец с Mac однострочником
-# из deploy/oneliner.sh (от root); вывод — в $HOME/run-agg-phase4/ вне репозитория.
+# Использование: deploy-preflight.sh <TAG>. Вызывается как «sudo -n /usr/local/sbin/agg preflight <TAG>»
+# с Mac (однострочник из deploy/oneliner.sh); вывод — в $HOME/run-agg-phase4/ вне репозитория.
 # Значения из .env не читаются в переменные и не печатаются: только «есть/нет».
 set -u
 export LC_ALL=C
@@ -52,8 +52,8 @@ else
   echo "пропущено: нет .env или compose-файла в $D"
 fi
 
-sec "SHA256 compose-файла (сравните с выводом oneliner.sh на Mac)"
-for f in /root/agg-deploy/docker-compose.yml "$F"; do
+sec "SHA256 compose-файла (установленный и развёрнутый; сравните с SHA256SUMS на Mac)"
+for f in /usr/local/lib/aggregator/docker-compose.yml "$F"; do
   if [ -f "$f" ]; then sha256sum "$f"; else echo "нет файла: $f"; fi
 done
 

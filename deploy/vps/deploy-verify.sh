@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# B2 VERIFY развёртывания: ТОЛЬКО ЧТЕНИЕ. Запускает владелец с Mac однострочником
-# из deploy/oneliner.sh через 1–2 минуты после deploy-apply.sh; вывод — в
+# B2 VERIFY развёртывания: ТОЛЬКО ЧТЕНИЕ. Вызывается как «sudo -n /usr/local/sbin/agg verify»
+# с Mac через 1–2 минуты после agg deploy; вывод — в
 # $HOME/run-agg-phase4/. Секреты не печатаются: состояние берётся из compose ps
 # и запросов внутри контейнера БД (пароль для них не нужен).
 set -u
@@ -35,9 +35,21 @@ res port-not-published $RC
 if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq ':5432$'; then RC=1; else RC=0; fi
 res port-not-listening $RC
 
-sec "Права .env"
-[ "$(stat -c '%a' "$D/.env" 2>/dev/null)" = 600 ]
+sec "Владельцы и права (runagg не может подменить)"
+# own <путь> <владелец:группа права>
+own() { [ "$(stat -c '%U:%G %a' "$1" 2>/dev/null)" = "$2" ]; }
+own "$D/.env" "root:root 600"
 res env-perms $?
+RC=0
+own "$D" "root:root 750" || RC=1
+own "$F" "root:root 640" || RC=1
+own /usr/local/sbin/agg "root:root 755" || RC=1
+own /usr/local/lib/aggregator "root:root 755" || RC=1
+for f in /usr/local/lib/aggregator/*; do own "$f" "root:root 644" || RC=1; done
+own /etc/sudoers.d/runagg-aggregator "root:root 440" || RC=1
+res root-owned $RC
+if id -nG runagg 2>/dev/null | tr ' ' '\n' | grep -qx docker; then RC=1; else RC=0; fi
+res runagg-not-in-docker $RC
 
 sec "Сводка БД"
 q() { docker compose -f "$F" exec -T postgres psql -U aggregator -d aggregator -Atc "$1"; }

@@ -1,0 +1,115 @@
+#!/bin/bash
+# Обёртка развёртывания: единственная команда, которую runagg может запускать через
+# sudo (/etc/sudoers.d/runagg-aggregator). Ставится разово root-ом (agg-install.sh) в
+# /usr/local/sbin/agg (root:root 755); вызываемые скрипты и compose-файл лежат в
+# /usr/local/lib/aggregator (root:root) и runagg на запись недоступны. Подкоманды —
+# только из списка ниже, TAG — только [A-Za-z0-9][A-Za-z0-9._-]{0,63} (нет путей,
+# пробелов, кавычек и ведущего «-»); окружение вызывающего не передаётся дальше.
+#   agg load <TAG>       stdin: несжатый архив docker save ровно одного образа aggregator:<TAG>
+#   agg env-init         stdin: токен, ADMIN_TG_IDS, OWNER_CONTACT (три строки); только если .env нет
+#   agg preflight <TAG> | deploy <TAG> | verify | rollback | host-preflight | host-verify
+set -euo pipefail
+
+# Сначала — перезапуск с пустым окружением и из «/»: ни одна переменная вызывающего
+# (HOME и ~/.docker с плагинами и хуками CLI, DOCKER_*, COMPOSE_*, PYTHON*, BASH_ENV, LD_*)
+# и ни один файл его рабочего каталога (.env для compose) не влияют на root-команды ниже.
+# Признак «уже очищено» — первый аргумент, а не переменная: sudoers разрешает runagg первым
+# аргументом только подкоманды, поэтому подделать его нельзя даже без env_reset в sudo.
+if [ "${1:-}" = --clean-env ]; then
+  shift
+else
+  cd /
+  exec /usr/bin/env -i HOME=/root LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    /bin/bash /usr/local/sbin/agg --clean-env "$@"
+fi
+umask 077
+
+L=/usr/local/lib/aggregator
+MAX=$((1024 * 1024 * 1024)) # предел размера архива образа, байт
+
+usage() {
+  echo "usage: agg load|preflight|deploy <TAG> | env-init | verify | rollback | host-preflight | host-verify" >&2
+  exit 2
+}
+tag() { [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || { echo "STOP: неверный TAG" >&2; exit 2; }; }
+# Скрипт из $L: имя — только литерал из case ниже, окружение уже очищено.
+run() { exec /bin/bash "$L/$1" "${@:2}"; }
+
+# load: архив сохраняется во временный каталог root и проверяется до docker load —
+# иначе поддельный архив мог бы подменить чужие образы хоста (например, postgres:17).
+load() {
+  # w — глобальная: trap EXIT срабатывает уже после выхода из функции.
+  w=$(mktemp -d /var/tmp/agg-load.XXXXXX)
+  trap 'rm -rf "$w"' EXIT
+  head -c $((MAX + 1)) > "$w/image.tar"
+  [ "$(stat -c %s "$w/image.tar")" -le "$MAX" ] || { echo "STOP: архив больше 1 ГиБ, docker load не выполнялся" >&2; exit 1; }
+  python3 -I - "$w/image.tar" "$1" <<'PY' || { echo "STOP: архив — не ровно образ aggregator:$1, docker load не выполнялся" >&2; exit 1; }
+import json, re, sys, tarfile
+
+path, tag = sys.argv[1], sys.argv[2]
+ref = "aggregator:" + tag
+blob = re.compile(r"blobs/sha256/[0-9a-f]{64}")
+meta = {"index.json", "manifest.json", "oci-layout", "repositories"}
+
+
+def fail(msg):
+    print("проверка архива:", msg, file=sys.stderr)
+    sys.exit(1)
+
+
+with tarfile.open(path, "r:") as t:
+    files = {}
+    for m in t.getmembers():
+        n = m.name[2:] if m.name.startswith("./") else m.name
+        if m.isdir():
+            if n.rstrip("/") not in ("blobs", "blobs/sha256"):
+                fail("лишний каталог")
+        elif m.isfile():
+            if n in files or not (n in meta or blob.fullmatch(n)):
+                fail("лишний или повторный файл")
+            files[n] = m
+        else:
+            fail("ссылка или спецфайл")
+
+    def js(n):
+        if n not in files:
+            return None
+        if files[n].size > 1 << 20:
+            fail("слишком большой " + n)
+        return json.load(t.extractfile(files[n]))
+
+    man, idx, repo = js("manifest.json"), js("index.json"), js("repositories")
+
+if man is None and idx is None:
+    fail("нет manifest.json и index.json")
+if man is not None and not (isinstance(man, list) and len(man) == 1 and man[0].get("RepoTags") == [ref]):
+    fail("manifest.json: нужен ровно один образ " + ref)
+if idx is not None:
+    ms = idx.get("manifests")
+    if not (isinstance(ms, list) and len(ms) == 1):
+        fail("index.json: образов не один")
+    a = ms[0].get("annotations") or {}
+    if a.get("io.containerd.image.name") != "docker.io/library/" + ref or a.get("org.opencontainers.image.ref.name") != tag:
+        fail("index.json: имя образа не " + ref)
+if repo is not None and repo != {"aggregator": {tag: repo.get("aggregator", {}).get(tag)}}:
+    fail("repositories: лишние имена")
+PY
+  docker load -i "$w/image.tar"
+  [ "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "aggregator:$1")" = linux/amd64 ] \
+    || { echo "STOP: aggregator:$1 не linux/amd64" >&2; exit 1; }
+  echo "AGG LOAD OK: aggregator:$1"
+}
+
+[ "$(id -u)" -eq 0 ] || { echo "STOP: запускайте через sudo" >&2; exit 1; }
+[ $# -ge 1 ] || usage
+case "$1" in
+  load)           [ $# -eq 2 ] || usage; tag "$2"; load "$2" ;;
+  preflight)      [ $# -eq 2 ] || usage; tag "$2"; run deploy-preflight.sh "$2" ;;
+  deploy)         [ $# -eq 2 ] || usage; tag "$2"; run deploy-apply.sh "$2" ;;
+  env-init)       [ $# -eq 1 ] || usage; run env-init.sh ;;
+  verify)         [ $# -eq 1 ] || usage; run deploy-verify.sh ;;
+  rollback)       [ $# -eq 1 ] || usage; run rollback.sh ;;
+  host-preflight) [ $# -eq 1 ] || usage; run host-preflight.sh ;;
+  host-verify)    [ $# -eq 1 ] || usage; run host-verify.sh ;;
+  *) usage ;;
+esac
