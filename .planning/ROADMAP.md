@@ -131,7 +131,7 @@ Plans:
   4. Скрытые и слитые события в выдаче не появляются; отменённые и перенесённые **не скрываются** и показываются явно с пометкой `[ОТМЕНЁН]` или `[ПЕРЕНЕСЁН]` в списке и в карточке
   5. `/runs` и Telegram-алерты о `failed` и `suspect` прогонах доступны только администратору (`ADMIN_TG_IDS`); о пользователях хранятся только Telegram ID и настройки поиска
 
-**Plans**: 1/8 plans executed
+**Plans**: 2/8 plans executed
 
 Plans:
 **Wave 1**
@@ -140,7 +140,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-02-PLAN.md — Фильтры: сводка D-10, пресеты дат и месяцы, город (топ-10 и текст), корзины D-08, типы D-09, «не найдено»/«ничего не нашлось» D-12
+- [x] 04-02-PLAN.md — Фильтры: сводка D-10, пресеты дат и месяцы, город (топ-10 и текст), корзины D-08, типы D-09, «не найдено»/«ничего не нашлось» D-12
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -207,6 +207,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
-| 4. Telegram Search | 1/8 | In Progress|  |
+| 4. Telegram Search | 2/8 | In Progress|  |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
