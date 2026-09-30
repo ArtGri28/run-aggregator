@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"aggregator/internal/event"
 	"aggregator/internal/store"
 )
 
@@ -54,4 +55,45 @@ func Open(t testing.TB) *store.Store {
 		t.Fatalf("truncate: %v", err)
 	}
 	return s
+}
+
+// HideEvent снимает событие с публикации (is_listed = false).
+func HideEvent(t testing.TB, id int64) {
+	t.Helper()
+	exec(t, "UPDATE events SET is_listed = false WHERE id = $1", id)
+}
+
+// MergeEvent помечает событие id слитым в into.
+func MergeEvent(t testing.TB, id, into int64) {
+	t.Helper()
+	exec(t, "UPDATE events SET merged_into_id = $1 WHERE id = $2", into, id)
+}
+
+// SetStatus меняет статус события.
+func SetStatus(t testing.TB, id int64, status event.Status) {
+	t.Helper()
+	exec(t, "UPDATE events SET status = $1 WHERE id = $2", string(status), id)
+}
+
+// exec выполняет запрос отдельным соединением с той же проверкой базы,
+// что и Open: правки идут только в базу с именем на _test.
+func exec(t testing.TB, q string, args ...any) {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Fatal("TEST_DATABASE_URL не задан")
+	}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatalf("storetest: connect: %v", err)
+	}
+	defer conn.Close(ctx)
+	var name string
+	if err := conn.QueryRow(ctx, "SELECT current_database()").Scan(&name); err != nil || !strings.HasSuffix(name, "_test") {
+		t.Fatal("TEST_DATABASE_URL: имя базы должно оканчиваться на _test")
+	}
+	if _, err := conn.Exec(ctx, q, args...); err != nil {
+		t.Fatalf("storetest: %v", err)
+	}
 }

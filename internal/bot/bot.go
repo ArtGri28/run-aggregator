@@ -49,6 +49,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithMessageTextHandler("start", tgbot.MatchTypeCommandStartOnly, b.onStart),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
 		tgbot.WithCallbackQueryDataHandler("p:", tgbot.MatchTypePrefix, b.cb(b.onList)),
+		tgbot.WithCallbackQueryDataHandler("e:", tgbot.MatchTypePrefix, b.cb(b.onCard)),
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {

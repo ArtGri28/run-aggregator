@@ -46,7 +46,18 @@ type fakeAPI struct {
 	calls []call
 }
 
-func fakeTelegram(t *testing.T) *fakeAPI {
+// script подменяет ответ фиктивного API: получает вызов и его порядковый
+// номер среди вызовов того же метода (с 1); пустая строка — ответ по
+// умолчанию (успех).
+type script func(c call, n int) string
+
+// apiErr — тело ответа Bot API с ошибкой.
+func apiErr(code int, desc string, retryAfter int) string {
+	return `{"ok":false,"error_code":` + strconv.Itoa(code) + `,"description":` + strconv.Quote(desc) +
+		`,"parameters":{"retry_after":` + strconv.Itoa(retryAfter) + `}}`
+}
+
+func fakeTelegram(t *testing.T, scripts ...script) *fakeAPI {
 	t.Helper()
 	f := &fakeAPI{}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +70,19 @@ func fakeTelegram(t *testing.T) *fakeAPI {
 		}
 		f.mu.Lock()
 		f.calls = append(f.calls, c)
+		n := 0
+		for _, x := range f.calls {
+			if x.Method == c.Method {
+				n++
+			}
+		}
 		f.mu.Unlock()
+		for _, sc := range scripts {
+			if body := sc(c, n); body != "" {
+				_, _ = w.Write([]byte(body))
+				return
+			}
+		}
 		result := `{"message_id":5,"date":1,"chat":{"id":1,"type":"private"}}`
 		if c.Method == "answerCallbackQuery" {
 			result = `true`
@@ -187,7 +210,7 @@ func seedMarathonec(t *testing.T, s *store.Store) int {
 	return res.Created
 }
 
-var listLineRE = regexp.MustCompile(`^\d{2}\.\d{2} · .+ · .+`)
+var listLineRE = regexp.MustCompile(`^\d\. \d{2}\.\d{2} · .+ · .+`)
 
 func TestTracerSearch(t *testing.T) {
 	s := storetest.Open(t)
@@ -264,7 +287,7 @@ func TestTracerSearch(t *testing.T) {
 		if !listLineRE.MatchString(l) {
 			t.Fatalf("row %d = %q, want ДД.ММ · Город · Название", i, l)
 		}
-		if !strings.HasPrefix(l, items[i].StartDate.Format("02.01")+" · ") || !strings.Contains(l, " · "+html.EscapeString(items[i].Title)) {
+		if !strings.HasPrefix(l, strconv.Itoa(i+1)+". "+items[i].StartDate.Format("02.01")+" · ") || !strings.Contains(l, " · "+html.EscapeString(items[i].Title)) {
 			t.Fatalf("row %d = %q, want event %d (%s)", i, l, items[i].ID, items[i].Title)
 		}
 	}

@@ -2,21 +2,32 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-telegram/bot/models"
 
+	"aggregator/internal/event"
 	"aggregator/internal/store"
 )
 
-const pageSize = 5
+const (
+	pageSize     = 5
+	maxListTitle = 60   // рун в строке списка
+	maxURLLen    = 2048 // предел Telegram для URL-кнопки
+	goneNotice   = "Событие больше не доступно"
+)
 
 // onList показывает страницу списка (p:<стр>:v<N>). Версия фильтров
 // устарела — вместо страницы кнопки открывается первая страница
-// актуальной выдачи.
+// актуальной выдачи; страница за пределами выдачи зажимается до последней.
 func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) string {
 	if c.Kind != cbPage {
 		return staleNotice
@@ -39,6 +50,7 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 	}
 	sc := emptyScreen(f, v)
 	if total > 0 {
+		page = min(page, (total+pageSize-1)/pageSize)
 		items, err := b.Store.ListEvents(ctx, flt, pageSize, (page-1)*pageSize)
 		if err != nil {
 			b.logger().Error("list", "err", err)
@@ -52,21 +64,43 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 	return notice
 }
 
-// listScreen — страница списка: строка на событие и навигация. Кнопки
-// карточек и пометки статуса добавит 04-03.
+// statusMark — пометка статуса в начале названия.
+func statusMark(s event.Status) string {
+	switch s {
+	case event.StatusCancelled:
+		return "[ОТМЕНЁН] "
+	case event.StatusPostponed:
+		return "[ПЕРЕНЕСЁН] "
+	}
+	return ""
+}
+
+// cut обрезает строку до n рун, последняя — «…».
+func cut(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n-1]) + "…"
+}
+
+// listScreen — страница списка (D-11): пронумерованные строки, кнопки
+// карточек 1…5, навигация и «Фильтры».
 func listScreen(items []store.ListItem, total, page, v int) screen {
 	pages := (total + pageSize - 1) / pageSize
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Найдено %d · страница %d/%d\n", total, page, pages)
-	for _, it := range items {
+	var cards row
+	for i, it := range items {
 		city := it.City
 		if city == "" {
 			city = "—"
 		}
-		fmt.Fprintf(&sb, "\n%s · %s · %s", it.StartDate.Format("02.01"), html.EscapeString(city), html.EscapeString(it.Title))
+		fmt.Fprintf(&sb, "\n%d. %s · %s · %s%s", i+1, it.StartDate.Format("02.01"), html.EscapeString(city),
+			statusMark(it.Status), html.EscapeString(cut(it.Title, maxListTitle)))
 		if km := kmList(it.Distances); km != "" {
 			sb.WriteString(" · " + km)
 		}
+		cards.add(strconv.Itoa(i+1), callback{Kind: cbCard, ID: it.ID, Page: page, V: v})
 	}
 	var nav row
 	if page > 1 {
@@ -76,9 +110,131 @@ func listScreen(items []store.ListItem, total, page, v int) screen {
 	if page < pages {
 		nav.add("→", callback{Kind: cbPage, Page: page + 1, V: v})
 	}
-	var filters row
-	filters.add("Фильтры", callback{Kind: cbSummary})
-	return screen{text: sb.String(), kb: keyboard(nav, filters)}
+	return screen{text: sb.String(), kb: keyboard(cards, nav, btn("Фильтры", back))}
+}
+
+// onCard показывает карточку события (e:<id>:<стр>:v<N>). Скрытое и слитое
+// событие по старой кнопке недоступно (BOT-06); отменённое и перенесённое
+// показывается с пометкой.
+func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) string {
+	if c.Kind != cbCard {
+		return staleNotice
+	}
+	e, err := b.Store.GetEvent(ctx, c.ID)
+	var sc screen
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		sc = goneScreen(c.Page, c.V)
+	case err != nil:
+		b.logger().Error("get event", "err", err)
+		return errNotice
+	case !e.IsListed || e.MergedIntoID != nil:
+		sc = goneScreen(c.Page, c.V)
+	default:
+		srcs, err := b.Store.EventSources(ctx, e.ID)
+		if err != nil {
+			b.logger().Error("event sources", "err", err)
+			return errNotice
+		}
+		sc = cardScreen(e, srcs, c.Page, c.V)
+	}
+	if err := b.show(ctx, q, sc); err != nil {
+		b.logger().Warn("show card", "err", err)
+	}
+	return ""
+}
+
+func goneScreen(page, v int) screen {
+	return screen{text: goneNotice, kb: keyboard(btn("К списку", callback{Kind: cbPage, Page: page, V: v}))}
+}
+
+// monthsGen — месяцы в родительном падеже.
+var monthsGen = [...]string{"января", "февраля", "марта", "апреля", "мая", "июня",
+	"июля", "августа", "сентября", "октября", "ноября", "декабря"}
+
+// sourceNames — подпись источника по коду; неизвестный код показывается как есть.
+var sourceNames = map[string]string{"marathonec": "Марафонец"}
+
+func sourceName(code string) string {
+	if n, ok := sourceNames[code]; ok {
+		return n
+	}
+	return code
+}
+
+func ruDate(t time.Time) string {
+	return fmt.Sprintf("%d %s %d", t.Day(), monthsGen[t.Month()-1], t.Year())
+}
+
+// cardScreen — карточка события (BOT-05, HTML): всё динамическое
+// экранировано, ссылки только из validURL. Пустые поля строк не дают.
+func cardScreen(e event.Event, srcs []store.EventSource, page, v int) screen {
+	esc := func(s string, n int) string { return html.EscapeString(cut(s, n)) }
+	var sb strings.Builder
+	sb.WriteString("<b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n")
+	sb.WriteString(ruDate(e.StartDate))
+	if e.EndDate != nil && !e.EndDate.Equal(e.StartDate) {
+		sb.WriteString(" – " + ruDate(*e.EndDate))
+	}
+	sb.WriteString("\n")
+	if e.StartTime != "" {
+		sb.WriteString("Старт в " + esc(e.StartTime, 5) + " (местное время)\n")
+	}
+	place := "город не указан"
+	if e.City != "" {
+		place = esc(e.City, 100)
+	}
+	if e.Address != "" {
+		place += ", " + esc(e.Address, 200)
+	}
+	sb.WriteString(place + "\n" + typeLabel(string(e.Type)) + "\n")
+	if len(e.Distances) > 0 {
+		parts := make([]string, len(e.Distances))
+		for i, d := range e.Distances {
+			parts[i] = km(d.Meters) + " км"
+			if d.Label != "" {
+				parts[i] += " (" + esc(d.Label, 40) + ")"
+			}
+		}
+		sb.WriteString("Дистанции: " + strings.Join(parts, " · ") + "\n")
+	}
+	if e.Description != "" {
+		sb.WriteString("\n" + esc(e.Description, 1000) + "\n")
+	}
+	if len(srcs) > 0 {
+		names := make([]string, len(srcs))
+		for i, s := range srcs {
+			names[i] = html.EscapeString(sourceName(s.Code))
+			if validURL(s.URL) {
+				names[i] = `<a href="` + html.EscapeString(s.URL) + `">` + names[i] + "</a>"
+			}
+		}
+		sb.WriteString("\nИсточники: " + strings.Join(names, ", "))
+	}
+	var reg row
+	if validURL(e.RegistrationURL) {
+		reg = row{{Text: "Регистрация", URL: e.RegistrationURL}}
+	}
+	return screen{text: strings.TrimRight(sb.String(), "\n"),
+		kb: keyboard(reg, btn("К списку", callback{Kind: cbPage, Page: page, V: v}))}
+}
+
+// validURL — ссылка, которую можно показать: http/https с хостом, без
+// пробелов и управляющих символов, не длиннее maxURLLen (Pitfall 5).
+func validURL(s string) bool {
+	if s == "" || len(s) > maxURLLen || strings.IndexFunc(s, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+		return false
+	}
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != ""
+}
+
+// km — километры: целые без дроби, иначе одна цифра после запятой.
+func km(m int) string {
+	if m%1000 == 0 {
+		return strconv.Itoa(m / 1000)
+	}
+	return strings.Replace(strconv.FormatFloat(float64(m)/1000, 'f', 1, 64), ".", ",", 1)
 }
 
 // kmList — «5/10/21 км»; "" без дистанций.
@@ -88,11 +244,7 @@ func kmList(meters []int) string {
 	}
 	parts := make([]string, len(meters))
 	for i, m := range meters {
-		if m%1000 == 0 {
-			parts[i] = strconv.Itoa(m / 1000)
-		} else {
-			parts[i] = strings.Replace(strconv.FormatFloat(float64(m)/1000, 'f', 1, 64), ".", ",", 1)
-		}
+		parts[i] = km(m)
 	}
 	return strings.Join(parts, "/") + " км"
 }

@@ -120,3 +120,37 @@ func TestListEvents(t *testing.T) {
 		}
 	})
 }
+
+func TestEventSources(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	id := listEvent(t, s, "2026-10-01", "Москва", "moscow", event.TypeRoad, 5000)
+	empty := listEvent(t, s, "2026-10-02", "Москва", "moscow", event.TypeRoad, 5000)
+
+	add := func(code, ext, url, state, match string) {
+		t.Helper()
+		src, err := s.EnsureSource(ctx, code)
+		if err != nil {
+			t.Fatalf("EnsureSource: %v", err)
+		}
+		exec(t, `INSERT INTO source_events (source_id, external_id, url, content_hash, state, match_state, event_id)
+			VALUES ($1, $2, $3, 'h', $4, $5, $6)`, src, ext, url, state, match, id)
+	}
+	add("b-src", "1", "https://b.example.test/1", "active", "auto")
+	add("a-src", "1", "https://a.example.test/1", "missing", "manual")
+	add("c-src", "1", "https://c.example.test/1", "gone", "auto")
+	add("d-src", "1", "https://d.example.test/1", "active", "out_of_scope")
+
+	got, err := s.EventSources(ctx, id)
+	if err != nil {
+		t.Fatalf("EventSources: %v", err)
+	}
+	want := []EventSource{{"a-src", "https://a.example.test/1"}, {"b-src", "https://b.example.test/1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("EventSources = %+v, want %+v", got, want)
+	}
+	if got, err := s.EventSources(ctx, empty); err != nil || len(got) != 0 {
+		t.Fatalf("EventSources without sources = %+v, %v; want empty", got, err)
+	}
+}

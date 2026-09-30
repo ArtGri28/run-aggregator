@@ -93,3 +93,28 @@ func (s *Store) CountEvents(ctx context.Context, f event.Filter) (int, error) {
 	}
 	return n, nil
 }
+
+// EventSource — источник события со ссылкой на его страницу.
+type EventSource struct{ Code, URL string }
+
+// EventSources возвращает источники события для карточки: без исчезнувших
+// (state = 'gone') и вне охвата (match_state = 'out_of_scope'), по коду.
+func (s *Store) EventSources(ctx context.Context, eventID int64) ([]EventSource, error) {
+	const q = `
+		SELECT s.code, se.url
+		FROM source_events se JOIN sources s ON s.id = se.source_id
+		WHERE se.event_id = $1 AND se.state <> 'gone' AND se.match_state <> 'out_of_scope'
+		ORDER BY s.code, se.id`
+	rows, err := s.db.Query(ctx, q, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("event sources: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (EventSource, error) {
+		var es EventSource
+		return es, row.Scan(&es.Code, &es.URL)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("event sources: %w", err)
+	}
+	return out, nil
+}
