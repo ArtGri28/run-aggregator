@@ -235,6 +235,103 @@ func (s *Store) SourceHealth(ctx context.Context, sourceID int64) (Health, error
 	return h, nil
 }
 
+// FinishedRun — последний завершённый прогон источника для цикла алертов.
+type FinishedRun struct {
+	SourceID   int64
+	Code       string
+	RunID      int64
+	Status     string
+	FinishedAt time.Time
+	Error      string
+	// Unrecognized — metrics.unrecognized_region.
+	Parsed, Rejected, OutOfScope, Unrecognized int
+	// HasSnapshot — есть снимок для принятия.
+	HasSnapshot bool
+}
+
+// LatestFinishedRuns — по одному последнему завершённому (не running)
+// прогону на источник; источники без завершённых прогонов не попадают.
+func (s *Store) LatestFinishedRuns(ctx context.Context) ([]FinishedRun, error) {
+	const q = `
+		SELECT DISTINCT ON (r.source_id) r.source_id, s.code, r.id, r.status, r.finished_at, COALESCE(r.error, ''),
+		       r.parsed, r.rejected, r.out_of_scope, COALESCE((r.metrics->>'unrecognized_region')::int, 0),
+		       (r.snapshot IS NOT NULL)
+		FROM ingest_runs r JOIN sources s ON s.id = r.source_id
+		WHERE r.status <> 'running' AND r.finished_at IS NOT NULL
+		ORDER BY r.source_id, r.id DESC`
+	rows, err := s.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("latest finished runs: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (FinishedRun, error) {
+		var f FinishedRun
+		err := row.Scan(&f.SourceID, &f.Code, &f.RunID, &f.Status, &f.FinishedAt, &f.Error,
+			&f.Parsed, &f.Rejected, &f.OutOfScope, &f.Unrecognized, &f.HasSnapshot)
+		return f, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("latest finished runs: %w", err)
+	}
+	return out, nil
+}
+
+// RecentRun — строка истории прогонов для /runs.
+type RecentRun struct {
+	Code       string
+	ID         int64
+	Status     string
+	StartedAt  time.Time
+	FinishedAt *time.Time
+	Parsed     int
+	Rejected   int
+	OutOfScope int
+	Upserted   int
+	Error      string
+	// HasSnapshot — есть снимок для принятия.
+	HasSnapshot bool
+}
+
+// RecentRuns — последние perSource прогонов каждого источника (в том числе
+// running): по коду источника, внутри источника новые первыми.
+func (s *Store) RecentRuns(ctx context.Context, perSource int) ([]RecentRun, error) {
+	const q = `
+		SELECT code, id, status, started_at, finished_at, parsed, rejected, out_of_scope, upserted, err, has_snapshot
+		FROM (
+		    SELECT s.code, r.id, r.status, r.started_at, r.finished_at, r.parsed, r.rejected, r.out_of_scope,
+		           r.upserted, COALESCE(r.error, '') AS err, (r.snapshot IS NOT NULL) AS has_snapshot,
+		           row_number() OVER (PARTITION BY r.source_id ORDER BY r.id DESC) AS rn
+		    FROM ingest_runs r JOIN sources s ON s.id = r.source_id) t
+		WHERE rn <= $1 ORDER BY code, id DESC`
+	rows, err := s.db.Query(ctx, q, perSource)
+	if err != nil {
+		return nil, fmt.Errorf("recent runs: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (RecentRun, error) {
+		var r RecentRun
+		err := row.Scan(&r.Code, &r.ID, &r.Status, &r.StartedAt, &r.FinishedAt, &r.Parsed, &r.Rejected,
+			&r.OutOfScope, &r.Upserted, &r.Error, &r.HasSnapshot)
+		return r, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("recent runs: %w", err)
+	}
+	return out, nil
+}
+
+// RunSource — код источника прогона; нет прогона → ErrNotFound.
+func (s *Store) RunSource(ctx context.Context, runID int64) (string, error) {
+	const q = "SELECT s.code FROM ingest_runs r JOIN sources s ON s.id = r.source_id WHERE r.id = $1"
+	var code string
+	err := s.db.QueryRow(ctx, q, runID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("run %d source: %w", runID, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("run source: %w", err)
+	}
+	return code, nil
+}
+
 // truncateRunes обрезает s до n символов (не байт).
 func truncateRunes(s string, n int) string {
 	if r := []rune(s); len(r) > n {
