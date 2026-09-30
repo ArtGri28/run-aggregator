@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"html"
 	"log/slog"
 	"net/http"
@@ -346,6 +347,35 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(old) })
 	return &buf
+}
+
+// Токен бота не попадает в лог ни из текста ошибки, ни из групп и атрибутов With,
+// в том числе при настоящей сетевой ошибке запроса к Bot API.
+func TestLogRedactsToken(t *testing.T) {
+	const tok = "123456:SECRETtokenValue_abcdefghijklmnopq"
+	logs := captureLogs(t)
+	b, err := New(Config{Token: tok}, nil,
+		tgbot.WithServerURL("http://127.0.0.1:1"), tgbot.WithSkipGetMe())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw := errors.New(`Post "https://api.telegram.org/bot` + tok + `/getUpdates": dial tcp: refused`)
+	b.logger().Error("telegram "+tok, "err", raw, slog.Group("g", "url", "bot"+tok))
+	b.logger().With("tok", tok).WithGroup("w").Warn("with", "x", tok)
+	_, sendErr := b.api.SendMessage(context.Background(), &tgbot.SendMessageParams{ChatID: 1, Text: "x"})
+	if sendErr == nil {
+		t.Fatal("sendMessage на закрытый порт: нет ошибки")
+	}
+	b.logger().Warn("send runs", "err", sendErr)
+
+	out := logs.String()
+	if strings.Contains(out, tok) || strings.Contains(out, "SECRETtoken") {
+		t.Fatalf("токен в логе:\n%s", out)
+	}
+	if strings.Count(out, "***") < 5 || !strings.Contains(out, "getUpdates") {
+		t.Fatalf("маскирование не видно или потерян текст:\n%s", out)
+	}
 }
 
 // BOT-08: в логах нет текста сообщений, имён и username.

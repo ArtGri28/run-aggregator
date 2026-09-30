@@ -29,6 +29,7 @@ type Bot struct {
 	admins map[int64]bool
 	loc    *time.Location
 	log    *slog.Logger
+	token  string // только для маскирования в логах (redactHandler)
 }
 
 // New собирает бота. Дополнительные opts добавляются последними (тесты
@@ -39,7 +40,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("часовой пояс Europe/Moscow: %w", err)
 	}
-	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc}
+	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc, token: cfg.Token}
 	for _, id := range cfg.Admins {
 		b.admins[id] = true
 	}
@@ -59,7 +60,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {
-		// Библиотека маскирует токен в своих ошибках; на всякий случай
+		// Библиотека маскирует токен в URL сетевой ошибки; на всякий случай
 		// значение не выводится и здесь.
 		return nil, fmt.Errorf("создание бота: %s", strings.ReplaceAll(err.Error(), cfg.Token, "***"))
 	}
@@ -72,12 +73,64 @@ func (b *Bot) Start(ctx context.Context) { b.api.Start(ctx) }
 
 func (b *Bot) isAdmin(id int64) bool { return b.admins[id] }
 
+// logger — логгер бота с маскированием токена. Библиотека сама заменяет токен
+// в URL сетевой ошибки; здесь — вторая линия для любых других текстов.
 func (b *Bot) logger() *slog.Logger {
-	if b.log != nil {
-		return b.log
+	l := b.log
+	if l == nil {
+		l = slog.Default()
 	}
-	return slog.Default()
+	if b.token == "" {
+		return l
+	}
+	return slog.New(redactHandler{Handler: l.Handler(), secret: b.token})
 }
+
+// redactHandler заменяет secret на *** в сообщении и во всех значениях записи
+// (включая группы и атрибуты из With).
+type redactHandler struct {
+	slog.Handler
+	secret string
+}
+
+func (h redactHandler) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, h.mask(r.Message), r.PC)
+	r.Attrs(func(a slog.Attr) bool {
+		nr.AddAttrs(h.attr(a))
+		return true
+	})
+	return h.Handler.Handle(ctx, nr)
+}
+
+func (h redactHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	out := make([]slog.Attr, len(as))
+	for i, a := range as {
+		out[i] = h.attr(a)
+	}
+	return redactHandler{Handler: h.Handler.WithAttrs(out), secret: h.secret}
+}
+
+func (h redactHandler) WithGroup(name string) slog.Handler {
+	return redactHandler{Handler: h.Handler.WithGroup(name), secret: h.secret}
+}
+
+func (h redactHandler) attr(a slog.Attr) slog.Attr {
+	v := a.Value.Resolve()
+	if v.Kind() == slog.KindGroup {
+		g := v.Group()
+		out := make([]any, len(g))
+		for i, x := range g {
+			out[i] = h.attr(x)
+		}
+		return slog.Group(a.Key, out...)
+	}
+	if s := v.String(); strings.Contains(s, h.secret) {
+		return slog.String(a.Key, h.mask(s))
+	}
+	return slog.Attr{Key: a.Key, Value: v}
+}
+
+func (h redactHandler) mask(s string) string { return strings.ReplaceAll(s, h.secret, "***") }
 
 func (b *Bot) now() time.Time {
 	if b.Now != nil {

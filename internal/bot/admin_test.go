@@ -134,6 +134,34 @@ func TestRunsAdmin(t *testing.T) {
 	}
 }
 
+// Регрессия: без прогонов suspect кнопок нет — reply_markup не отправляется
+// (пустой "inline_keyboard": null Telegram отклонял с 400, /runs молчал).
+func TestRunsWithoutButtons(t *testing.T) {
+	e := newAdminEnv(t)
+	ctx := context.Background()
+	runs := func(what string) call {
+		t.Helper()
+		e.api.reset()
+		e.b.api.ProcessUpdate(ctx, commandUpdate(1, "/runs"))
+		sends := e.api.of("sendMessage")
+		if len(sends) != 1 {
+			t.Fatalf("%s: sendMessage = %+v, want one", what, sends)
+		}
+		if rm, ok := sends[0].Form["reply_markup"]; ok {
+			t.Fatalf("%s: reply_markup = %q, want absent", what, rm)
+		}
+		return sends[0]
+	}
+
+	runs("без прогонов")
+	id := e.firstRun(t)
+	e.press(1, "r:a:"+run(id))
+	e.press(1, "r:y:"+run(id))
+	if got := runs("все прогоны ok"); !strings.Contains(got.Form["text"], "#"+run(id)+" ok") {
+		t.Fatalf("/runs после принятия: %q", got.Form["text"])
+	}
+}
+
 func TestAcceptFlow(t *testing.T) {
 	e := newAdminEnv(t)
 	id := e.firstRun(t)

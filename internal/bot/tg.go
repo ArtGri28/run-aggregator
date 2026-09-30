@@ -30,13 +30,17 @@ func (r *row) add(text string, c callback) {
 	*r = append(*r, models.InlineKeyboardButton{Text: text, CallbackData: data})
 }
 
-// keyboard собирает клавиатуру из непустых рядов.
+// keyboard собирает клавиатуру из непустых рядов; без кнопок — nil, чтобы
+// reply_markup не отправлялся: `"inline_keyboard": null` Telegram отклоняет (400).
 func keyboard(rows ...row) *models.InlineKeyboardMarkup {
 	kb := &models.InlineKeyboardMarkup{}
 	for _, r := range rows {
 		if len(r) > 0 {
 			kb.InlineKeyboard = append(kb.InlineKeyboard, r)
 		}
+	}
+	if len(kb.InlineKeyboard) == 0 {
+		return nil
 	}
 	return kb
 }
@@ -119,10 +123,7 @@ func dropURLButtons(sc screen) (screen, bool) {
 	if !found {
 		return sc, false
 	}
-	sc.kb = nil
-	if kb := keyboard(rows...); len(kb.InlineKeyboard) > 0 {
-		sc.kb = kb
-	}
+	sc.kb = keyboard(rows...)
 	return sc, true
 }
 
