@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Source Discovery / VPS Audit** - Проверить 2–3 источника с VPS и провести аудит VPS только чтением (логический Phase 0) (completed 2026-09-29)
 - [x] **Phase 2: Foundation** - Модуль Go, схема PostgreSQL 17, домен, `store`, `normalize`, тестовая инфраструктура (completed 2026-09-29)
 - [x] **Phase 3: First Source** - Сбор данных из первого источника: Fetch/Parse/Validate, `ingest_runs`, контроль качества, алерты (completed 2026-09-30)
-- [ ] **Phase 4: Telegram Search** - Бот на long polling: фильтры, список, карточка, пагинация, админ-доступ
+- [x] **Phase 4: Telegram Search** - Бот на long polling: фильтры, список, карточка, пагинация, админ-доступ (completed 2026-09-30)
 - [ ] **Phase 5: Multiple Sources & Deduplication** - Источники 2–3, кандидаты в дубли, `/dupes`, калибровка порогов
 - [ ] **Phase 6: Production** - Docker Compose на VPS, бэкапы и проверка восстановления, heartbeat, runbook
 
@@ -207,6 +207,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Source Discovery / VPS Audit | 3/3 | Complete    | 2026-09-29 |
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
-| 4. Telegram Search | 8/8 | In Progress|  |
+| 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
 | 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
 | 6. Production | 0/TBD | Not started | - |
