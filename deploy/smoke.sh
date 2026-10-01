@@ -78,6 +78,8 @@ cp docker-compose.yml "$T/docker-compose.yml"
 # Переменные оболочки с теми же именами снимаются: иначе compose подставил бы чужие значения.
 DC=(env -u TELEGRAM_BOT_TOKEN -u ADMIN_TG_IDS -u POSTGRES_PASSWORD -u OWNER_CONTACT
   -u IMAGE_TAG -u DATABASE_URL -u PGPASSWORD -u LOG_FORMAT
+  -u DEDUP_HIGH -u DEDUP_LOW -u DEDUP_AUTO_MERGE -u DEDUP_LINK_BONUS
+  -u DEDUP_MAX_PER_EVENT -u DEDUP_DISTANCE_TOL_M -u DEDUP_SOURCE_PRIORITY -u DEDUP_DIGEST_AT
   docker compose -p aggregator-smoke --project-directory "$T" -f "$T/docker-compose.yml")
 
 STEP="compose config"
@@ -115,3 +117,19 @@ out=$("${DC[@]}" port postgres 5432 2>/dev/null || true)
 # Compose v5 для неопубликованного порта печатает «invalid IP:0», опубликованный оканчивается на :<порт>.
 if grep -Eq ':[1-9][0-9]*$' <<<"$out"; then exit 1; fi
 ok "порт 5432 не опубликован"
+
+# Конфигурация дедупликации читается до БД и сети (05-06), поэтому бот
+# с фиктивным токеном к Telegram не обращается.
+STEP="DEDUP_* в bot и worker"
+printf 'DEDUP_HIGH=x9q\n' >> "$T/.env"
+rc=0
+out=$("${DC[@]}" run --rm --no-deps worker worker sanity-report --source marathonec 2>&1) || rc=$?
+[ "$rc" -eq 1 ]
+grep -q 'DEDUP_HIGH' <<<"$out"
+if grep -q 'x9q' <<<"$out"; then exit 1; fi
+rc=0
+out=$("${DC[@]}" run --rm --no-deps bot bot 2>&1) || rc=$?
+[ "$rc" -eq 1 ]
+grep -q 'DEDUP_HIGH' <<<"$out"
+if grep -q 'x9q' <<<"$out"; then exit 1; fi
+ok "DEDUP_* доходят до bot и worker (ошибка называет DEDUP_HIGH без значения)"

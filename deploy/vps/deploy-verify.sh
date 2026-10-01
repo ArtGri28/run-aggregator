@@ -3,6 +3,8 @@
 # с Mac через 1–2 минуты после agg deploy; вывод — в
 # $HOME/run-agg-phase4/. Секреты не печатаются: состояние берётся из compose ps
 # и запросов внутри контейнера БД (пароль для них не нужен).
+# Раздел «Дедупликация» (Phase 5): прогоны по источникам, заполненность fields,
+# очередь кандидатов, слияния и режим автослияния из строки started каждого сервиса.
 set -u
 export LC_ALL=C
 
@@ -60,6 +62,20 @@ q "SELECT 'users=' || count(*) FROM users" || DB_OK=1
 q "SELECT 'users_columns=' || string_agg(column_name, ',' ORDER BY column_name) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users'" || DB_OK=1
 q "SELECT 'source_alerts=' || count(*) FROM source_alerts" || DB_OK=1
 res db-summary $DB_OK
+
+sec "Дедупликация"
+DD_OK=0
+q "SELECT DISTINCT ON (r.source_id) 'source_run=' || s.code || '|' || r.id || '|' || r.status || '|' || r.parsed || '|accepted=' || CASE WHEN r.accepted_at IS NOT NULL THEN 't' ELSE 'f' END FROM ingest_runs r JOIN sources s ON s.id = r.source_id ORDER BY r.source_id, r.id DESC" || DD_OK=1
+q "SELECT 'fields_null=' || s.code || '|' || count(se.id) FROM sources s LEFT JOIN source_events se ON se.source_id = s.id AND se.event_id IS NOT NULL AND se.state = 'active' AND se.match_state <> 'out_of_scope' AND se.fields IS NULL GROUP BY s.code ORDER BY s.code" || DD_OK=1
+q "SELECT 'dedup_candidates=pending:' || count(*) FILTER (WHERE state = 'pending') || '|confirmed:' || count(*) FILTER (WHERE state = 'confirmed') || '|rejected:' || count(*) FILTER (WHERE state = 'rejected') || '|fresh:' || count(*) FILTER (WHERE state = 'pending' AND notified_at IS NULL) FROM dedup_candidates" || DD_OK=1
+q "SELECT 'events_merged=' || count(*) FROM events WHERE merged_into_id IS NOT NULL" || DD_OK=1
+q "SELECT 'merged=' || m.id || '>' || r.id || '|' || m.start_date || '|' || translate(left(m.title, 60), E'\n\r|', '   ') || '|' || translate(left(r.title, 60), E'\n\r|', '   ') FROM events m JOIN events r ON r.id = m.merged_into_id ORDER BY m.id DESC LIMIT 10" || DD_OK=1
+# Режим автослияния — из последней строки started текущего контейнера (окружение не печатается).
+for s in bot worker; do
+  v=$(docker compose -f "$F" logs --no-color "$s" 2>/dev/null | grep -F '"msg":"started"' | tail -1 | grep -oE '"dedup_auto_merge":(true|false)' | cut -d: -f2)
+  echo "dedup_auto_merge_$s=${v:-unknown}"
+done
+res dedup-summary $DD_OK
 
 sec "Логи bot (последние 15 строк)"
 docker compose -f "$F" logs --no-color --tail 15 bot 2>&1

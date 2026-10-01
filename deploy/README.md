@@ -1,4 +1,4 @@
-# Развёртывание на VPS (Phase 4, PRD-01)
+# Развёртывание на VPS (Phase 4–5, PRD-01)
 
 Памятка владельца. Скрипты лежат в репозитории и не содержат IP-адресов, имён хостов и секретов. Исходники, Go и реестр образов на VPS не нужны: образ собирается на Mac и передаётся по ssh.
 
@@ -39,6 +39,34 @@
 
 Повторные обновления: `ship.sh` (шаг 7), затем B0 по желанию, B1 с новым `<TAG>`, B2. Прежний тег сохраняется как `IMAGE_PREV`; откат — `agg rollback` (слово `ROLLBACK`). Если изменились `agg`, скрипты VPS или `docker-compose.yml`, `ship.sh` остановится на сверке SHA256 — повторите шаг 2.
 
+## Phase 5: ПроБЕГ и дедупликация
+
+Каждая команда — одной строкой. Mac — из корня репозитория; root-консоль — консоль провайдера.
+
+1. **Пакет и образ.** Закоммитить изменения фазы, затем `SSH_CONFIG=~/.ssh/run_agg.conf deploy/ship.sh run-agg-vps`. Изменились `docker-compose.yml` и `deploy-verify.sh`, поэтому `ship.sh` остановится на сверке SHA256 — однострочник разовой установки из его вывода в root-консоли (слово `INSTALL`), затем снова `ship.sh` → `AGG LOAD OK` и `IMAGE_TAG=<TAG>`.
+2. **Deploy.** Mac: `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg deploy <TAG>'` (слово `DEPLOY`), через 2 минуты `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg verify' 2>&1 | tee "$HOME/run-agg-phase4/p5-deploy-verify.log"`. `DEDUP_*` в `.env` не добавлять: значения по умолчанию из кода, автослияние выключено (`dedup_auto_merge_bot=false`, `dedup_auto_merge_worker=false`).
+3. **Первый прогон ПроБЕГа.** У источника нет прогонов, демон worker запускает его сразу → `suspect`, алерт с `[Принять как базу]`. Пока не принимать. Если прогон failed (403/429/451, «структура не найдена») или в причинах есть что-то кроме первого прогона — ничего не повторять и не принимать.
+4. **Поля Марафонца.** Если в `/runs` нет прогона marathonec, начатого после выката, — root-консоль: `docker compose -f /opt/aggregator/docker-compose.yml run --rm --no-deps worker worker run-once --source marathonec`. Заполняет `source_events.fields` (без них проход дедупликации события не оценивает); один запрос к сайту.
+5. **Санити-отчёт ПроБЕГа.** Root-консоль: `docker compose -f /opt/aggregator/docker-compose.yml run --rm --no-deps -T worker worker sanity-report --source probeg 2>&1 | sed -n 1,20p`. Сверить «Строк» и «Страна и серии» с `internal/ingest/sources/probeg/testdata/README.md` (раздел «Prepare на фикстуре»).
+6. **Принятие.** Кнопка `[Принять как базу]` → `[Да, принять]` или root-консоль: `docker compose -f /opt/aggregator/docker-compose.yml run --rm --no-deps worker worker accept-baseline --source probeg`. Принятие запускает проход дедупликации.
+7. **Проверка.** `agg verify` (как в шаге 2, лог `p5-verify-accepted.log`): ожидаются `fields_null=marathonec|0`, `fields_null=probeg|0`, `dedup_auto_merge_*=false`. Кандидаты — в `/dupes`; сводка «ожидают решения N, из них новых M» приходит в `DEDUP_DIGEST_AT` (10:00 МСК) или в течение минуты после прохода, если это время уже прошло; кандидатов нет — сводки нет.
+
+Раздел «Дедупликация» в `agg verify`: `source_run=` — последний прогон каждого источника, `fields_null=` — активные записи без полей, `dedup_candidates=` — очередь (`fresh` — ещё не попавшие в сводку), `events_merged=` и до 10 строк `merged=<слитое>><корень>|…` — слияния, `dedup_auto_merge_bot=`/`_worker=` — режим из строки `started` каждого сервиса.
+
+### Автослияние (D-08)
+
+Включать только если `internal/dedup/testdata/README.md` («Проверка владельцем») и SUMMARY калибровки фиксируют 0 ложных слияний, и только отдельным решением. Слияние скрывает событие для всех пользователей; «разлияния» нет — выключение останавливает только новые слияния.
+
+1. Root-консоль (меняет только строку `DEDUP_AUTO_MERGE`, печатает её): `test -s /opt/aggregator/.env && T=$(mktemp /opt/aggregator/.env.XXXXXX) && { grep -v '^DEDUP_AUTO_MERGE=' /opt/aggregator/.env; echo DEDUP_AUTO_MERGE=true; } > "$T" && mv "$T" /opt/aggregator/.env && grep '^DEDUP_AUTO_MERGE=' /opt/aggregator/.env`
+2. Mac: `agg deploy` с тем же `<TAG>`, что развёрнут (`IMAGE_PREV` не меняется), затем `agg verify` — ожидается `dedup_auto_merge_bot=true` и `dedup_auto_merge_worker=true`.
+3. После ближайшего прогона любого источника — снова `agg verify` и просмотр строк `merged=`.
+
+Выключение — root-консоль: `test -s /opt/aggregator/.env && T=$(mktemp /opt/aggregator/.env.XXXXXX) && { grep -v '^DEDUP_AUTO_MERGE=' /opt/aggregator/.env; echo DEDUP_AUTO_MERGE=false; } > "$T" && mv "$T" /opt/aggregator/.env && grep '^DEDUP_AUTO_MERGE=' /opt/aggregator/.env`, затем `agg deploy` того же `<TAG>` и `agg verify` (`dedup_auto_merge_*=false`). Уже выполненные слияния выключение не отменяет.
+
+### Откат Phase 5
+
+`agg rollback` (слово `ROLLBACK`) возвращает прежний образ. Схема 00004 остаётся: goose старого образа не требует неизвестных ему версий, новые колонки допускают NULL. `goose down` не делать. События ПроБЕГа остаются в выдаче, но не обновляются; `DEDUP_*` старый образ не читает.
+
 ## Хеши
 
 `SHA256SUMS` — хеши всех файлов пакета; его собственный хеш печатается в однострочнике для root-консоли. Однострочник работает только с копией пакета во временном каталоге root: файлы в `/home/runagg` после проверки уже не читаются. Если вставка в консоли не работает, `oneliner.sh` печатает вариант из двух коротких команд: сверить хеш `SHA256SUMS` глазами, затем `bash agg-install.sh`.
@@ -55,7 +83,7 @@
 
 - **Принятие базы из CLI** (root-консоль), если кнопка недоступна:
   `docker compose -f /opt/aggregator/docker-compose.yml run --rm worker worker accept-baseline --source marathonec`
-  Слово `worker` дважды: первое — имя сервиса, дальше аргументы целиком заменяют `command` сервиса.
+  Для любого источника — `--source <код>` (`marathonec`, `probeg`). Слово `worker` дважды: первое — имя сервиса, дальше аргументы целиком заменяют `command` сервиса.
 - **Перенос `postgres:17` с Mac**, если VPS не достаёт до Docker Hub (`agg deploy` остановится с подсказкой). `agg load` принимает только `aggregator:<TAG>`, поэтому загрузка — в root-консоли и только после сверки SHA256 с Mac:
   1. Mac: `docker pull --platform linux/amd64 postgres:17 && docker save postgres:17 -o postgres17.tar && shasum -a 256 postgres17.tar` — запомнить хеш.
   2. Mac: `scp -F ~/.ssh/run_agg.conf postgres17.tar run-agg-vps:agg-deploy/`.

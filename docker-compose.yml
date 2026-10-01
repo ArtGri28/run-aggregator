@@ -9,6 +9,9 @@
 # только у worker. Необязательные OBSERVE_* и QUALITY_* при необходимости
 # добавляются одинаково в bot и worker (Pitfall 11: принятие прогона ботом
 # должно наблюдать так же, как worker).
+# DEDUP_* объявлены в якоре x-app-env, общем для bot и worker: проход
+# дедупликации в worker и принятие кнопкой в боте видят одну конфигурацию;
+# туда же при необходимости добавляются OBSERVE_* и QUALITY_*.
 #
 # Пароль Postgres действует только при первой инициализации тома: смена в .env
 # без ALTER ROLE приведёт к отказу аутентификации.
@@ -26,6 +29,19 @@ x-db-env: &db-env
   DATABASE_URL: postgres://aggregator@postgres:5432/aggregator?sslmode=disable
   PGPASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
   LOG_FORMAT: ${LOG_FORMAT:-}
+
+# Пустое значение DEDUP_* = значение по умолчанию из кода (dedup.DefaultConfig),
+# автослияние выключено.
+x-app-env: &app-env
+  <<: *db-env
+  DEDUP_HIGH: ${DEDUP_HIGH:-}
+  DEDUP_LOW: ${DEDUP_LOW:-}
+  DEDUP_AUTO_MERGE: ${DEDUP_AUTO_MERGE:-}
+  DEDUP_LINK_BONUS: ${DEDUP_LINK_BONUS:-}
+  DEDUP_MAX_PER_EVENT: ${DEDUP_MAX_PER_EVENT:-}
+  DEDUP_DISTANCE_TOL_M: ${DEDUP_DISTANCE_TOL_M:-}
+  DEDUP_SOURCE_PRIORITY: ${DEDUP_SOURCE_PRIORITY:-}
+  DEDUP_DIGEST_AT: ${DEDUP_DIGEST_AT:-}
 
 x-app: &app
   image: aggregator:${IMAGE_TAG:?задайте IMAGE_TAG в .env}
@@ -78,7 +94,7 @@ services:
     <<: *app
     command: ["bot"]
     environment:
-      <<: *db-env
+      <<: *app-env
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?задайте TELEGRAM_BOT_TOKEN в .env}
       ADMIN_TG_IDS: ${ADMIN_TG_IDS:?задайте ADMIN_TG_IDS в .env}
     healthcheck:
@@ -95,7 +111,7 @@ services:
     volumes:
       - raw:/data/raw
     environment:
-      <<: *db-env
+      <<: *app-env
       OWNER_CONTACT: ${OWNER_CONTACT:?задайте OWNER_CONTACT в .env}
       RAW_DIR: /data/raw
 
