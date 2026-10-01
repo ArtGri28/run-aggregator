@@ -44,6 +44,7 @@ actuals:
   tasks: 4
   commits: 0
 plan_head_before: 86bdc42
+requirements-completed: [ING-12, DDP-05]
 ---
 
 # Phase 5 Plan 01: Контракт ingest для второго источника Summary

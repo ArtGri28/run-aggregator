@@ -28,6 +28,7 @@ key-decisions:
 metrics:
   duration: "~40 мин"
   completed: null
+requirements-completed: [DDP-02, DDP-09]
 ---
 
 # Phase 5 Plan 07: Калибровочный набор — черновик (ждёт проверки меток владельцем)

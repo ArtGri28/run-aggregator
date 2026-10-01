@@ -179,7 +179,28 @@ Plans:
   4. Администратор подтверждает и отклоняет кандидатов, получает ежедневную сводку; отклонённая пара не возвращается
   5. Пороги откалиброваны на размеченном наборе реальных пар и настраиваются без правки кода
 
-**Plans**: TBD
+**Plans**: 8/8 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 05-01-PLAN.md — Общий конвейер под второй источник: справочник городов РФ и префиксы поселений, `EndDate`/`GroupKey`, сворачивание серий в `Prepare`, `Policy.OutOfScopeMax`, `Runner.PostApply`, строки санити-отчёта; LO-01
+- [x] 05-02-PLAN.md — Чистое ядро дедупликации: `event.Fold`, `dedup` (схожесть названий, `Decide`, `DEDUP_*`)
+- [x] 05-03-PLAN.md — Карточка слитого события открывает корень (`store.RootEventID`), подпись «ПроБЕГ»; долг Phase 4: LO-03, LO-05, IN-01, IN-02, IN-04
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 05-04-PLAN.md — Адаптер ПроБЕГа через `ingest.Source`: один GET `/races/year_ahead/`, чистый `Parse`, фикстура и golden, регистрация в `newSources`
+- [x] 05-05-PLAN.md — Миграция `00004_dedup.sql`, `source_events.fields`, `SaveEventFor` через `event.Fold`, слияния и кандидаты в `store`, `dedup.Pass`
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 05-06-PLAN.md — `/dupes`, ежедневная сводка 10:00 МСК, проводка в `cmd/aggregator`; IN-03, IN-08
+- [x] 05-07-PLAN.md — Калибровочный набор пар, `TestCalibration`, проверка меток владельцем, итоговые пороги по умолчанию
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 05-08-PLAN.md — Выкат на VPS: `DEDUP_*` в compose и `agg verify`, принятие ПроБЕГа и «Лиги Героев», разбор `/dupes`; автослияние оставлено выключенным (D-23)
 
 ### Phase 6: Production
 
@@ -208,5 +229,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
-| 5. Multiple Sources & Deduplication | 0/TBD | Not started | - |
+| 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |

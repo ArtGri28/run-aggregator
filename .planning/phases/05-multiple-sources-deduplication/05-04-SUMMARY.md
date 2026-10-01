@@ -39,6 +39,7 @@ actuals:
   tasks: 3
   commits: 0
 plan_head_before: 86bdc42
+requirements-completed: [ING-12, DDP-05]
 ---
 
 # Phase 5 Plan 04: Источник ПроБЕГ Summary

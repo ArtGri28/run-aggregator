@@ -10,7 +10,7 @@ provides:
   - "dedup.SourceRef, Side, Pair, Verdict (Separate/Candidate/AutoMerge), Reasons, Decide"
   - "dedup.Config, DefaultConfig, LoadConfig (DEDUP_*), (Config).Fold"
 affects: [05-05, 05-06, 05-07]
-plan_head_before: 8a7dad9
+plan_head_before: 86bdc42
 actuals:
   tokens: 11100
   tasks: 3

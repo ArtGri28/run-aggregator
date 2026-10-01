@@ -43,6 +43,7 @@ actuals:
   tasks: 4
   commits: 0
 plan_head_before: 86bdc42
+requirements-completed: [DDP-01, DDP-03, DDP-05, DDP-06, DDP-07, DDP-10]
 ---
 
 # Phase 5 Plan 05: хранение и проход дедупликации Summary

@@ -9,6 +9,7 @@ provides:
   - "(*Store).RootEventID(ctx, id) (int64, error), maxMergeHops = 32"
   - "sourceNames[\"probeg\"] = \"ПроБЕГ\""
 affects: [05-04, 05-05, 05-06]
+plan_head_before: 86bdc42
 tech-stack:
   added: []
   patterns: ["WITH RECURSIVE с пределом глубины для цепочки merged_into_id", "предел ожидания 429 через ключ ctx"]
@@ -38,6 +39,7 @@ actuals:
   tokens: 9000
   tasks: 3
   commits: 0
+requirements-completed: [DDP-06]
 ---
 
 # Phase 5 Plan 03: резолвер корня, карточка слитого события, долг Phase 4 в боте

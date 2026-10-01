@@ -46,6 +46,7 @@ actuals:
   tasks: 3
   commits: 0
 plan_head_before: 86bdc42
+requirements-completed: [DDP-07, DDP-08]
 ---
 
 # Phase 5 Plan 06: /dupes, ежедневная сводка и проводка дедупликации Summary

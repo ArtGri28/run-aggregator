@@ -4,11 +4,11 @@ milestone: v1.27.0
 current_phase: 5
 current_phase_name: multiple-sources-deduplication
 status: executing
-stopped_at: 05-07 complete; waiting owner decision on 05-08
-last_updated: "2026-10-01T05:25:15.560Z"
-last_activity: 2026-09-30
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: 473421d4dab667301d96b662bfd2bfdb2521522d
+stopped_at: все планы Phase 5 выполнены; ожидаются проверка безопасности, верификация и решение владельца о закрытии
+last_updated: "2026-10-01T15:19:48.000Z"
+last_activity: 2026-10-01
+last_activity_desc: Phase 5 — планы 05-01…05-07 завершены (bdb7025), 05-08 (выкат) в работе
+state_head: 6d9efa3e5be579424f5414050a0d55b700bca3e7
 progress:
   total_phases: 6
   completed_phases: 4
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-25)
 
 **Core value:** Полный, актуальный и без дублей каталог забегов
-**Current focus:** Phase 4 — Telegram Search
+**Current focus:** Phase 5 — Multiple Sources & Deduplication (выкат и приёмка)
 
 ## Current Position
 
 Phase: 5 (multiple-sources-deduplication) — EXECUTING
-Plan: 05-01…05-07 выполнены (рабочее дерево, не закоммичено); 05-08 (выкат) — не начат, ждёт решения владельца
-Status: Ожидание решения по 05-08; DEDUP_AUTO_MERGE=false; решения D-18…D-20 в 05-CONTEXT.md
-Last activity: 2026-09-30 — Phase 4 complete, transitioned to Phase 5
+Plan: 05-01…05-07 выполнены и закоммичены (bdb7025); 05-08 (выкат): задачи 1–2 закоммичены (faa8ee5), задачи 3–4 выполнены владельцем, задача 5 — keep-off (D-23), задача 6 не выполнялась. По сохранённым локальным логам `agg verify` на VPS развёрнуты faa8ee511c52 (01.10 10:42) и e8005e8f2940 (01.10 13:55), ПроБЕГ и heroleague приняты, в `/dupes` confirmed 86 и rejected 8, очередь пуста; оговорки приёмки — в 05-08-SUMMARY.md
+Status: In Progress — все 8 планов выполнены; до закрытия: 05-SECURITY.md, 05-VERIFICATION.md, решение владельца о закрытии. DEDUP_AUTO_MERGE=false (D-23); решения D-18…D-23 в 05-CONTEXT.md; D-21 перенесён в Phase 6
+Last activity: 2026-10-01 — Phase 5: планы 05-01…05-07 завершены, 05-08 в работе
 
 Progress: [███████░░░] 67%
 
@@ -38,7 +38,7 @@ Progress: [███████░░░] 67%
 
 **Velocity:**
 
-- Total plans completed: 20
+- Total plans completed: 28
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -50,6 +50,7 @@ Progress: [███████░░░] 67%
 | 1 | 3 | - | - |
 | 3 | 7 | - | - |
 | 4 | 8 | - | - |
+| 5 | 8 | - | - |
 
 **Recent Trend:**
 
@@ -113,6 +114,9 @@ Recent decisions affecting current work:
 
 - [Phase 1 cleanup, не позже Phase 6, только с отдельного разрешения владельца]: удалить строку `run-agg-phase1` из `authorized_keys` на VPS, решить судьбу пользователя `runagg` и `/etc/sudoers.d/run-agg`, удалить локальные `~/.ssh/run_agg_*`, `~/run-agg-phase1/local.conf` и `approved.sha256` (MVP §7.4 п.1; 01-SECURITY.md T-01-07)
 - [Phase 3]: отложенные находки ревью Phase 2 — ME-04 «Russian Federation», ME-05 `5K`/`10K`, правило римских цифр («MIX RUN»), проверка правдоподобия дистанции в Validate (склейка «100 200 400 м»), low-находки 02-REVIEW.md
+- [Phase 6, D-23]: D-21 — потенциальные автослияния (`would_auto`) независимо от `DEDUP_AUTO_MERGE`, видимость в `/dupes` и `agg verify`, тест полноты AUTO-пар калибровки, пары heroleague в калибровке, счётчик ошибок прохода; обязательное условие включения автослияния (05-CONTEXT.md, 05-REVIEW.md)
+- [Phase 6, D-23]: дизайн и UX Telegram-бота — навигация, карточки забегов, пользовательский путь. Сейчас Phase 6 в ROADMAP — «Production»: расширение состава оформить при обсуждении Phase 6
+- [Phase 6]: замечания ревью Phase 5 — L1…L5, сортировка `/dupes` по оценке, SQL-рунбук отмены слияния (05-REVIEW.md)
 - [Phase 5+]: часовой пояс по субъекту РФ (сейчас timezone пуст у 118 из 133 событий Марафонца; известны только Москва и СПб) — справочник «субъект → IANA-зона» в normalize/regions.go
 
 ### Blockers/Concerns
@@ -132,6 +136,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T19:07:03.431Z
-Stopped at: 05-07 complete — owner decides on 05-08
-Resume file: .planning/phases/05-multiple-sources-deduplication/05-07-SUMMARY.md
+Last session: 2026-10-01T15:19:48.000Z
+Stopped at: все планы Phase 5 выполнены; ожидаются проверка безопасности, верификация и решение владельца о закрытии
+Resume file: .planning/phases/05-multiple-sources-deduplication/05-08-SUMMARY.md
