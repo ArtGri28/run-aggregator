@@ -56,10 +56,10 @@ func TestCountryButtonDefaultRU(t *testing.T) {
 	s, api, b := countryFixture(t)
 	setUserFilters(t, s, `{}`)
 	c := press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "Страна: 🇷🇺 Россия · Дата:") {
+	if !strings.Contains(c.Form["text"], "🌍 Страна: 🇷🇺 Россия\n📍 Город:") {
 		t.Errorf("в сводке нет страны:\n%s", c.Form["text"])
 	}
-	if got := buttonText(t, c, "f:k"); got != "🌍 Страна: Россия" {
+	if got := buttonText(t, c, "f:k"); got != "🌍 Страна" {
 		t.Errorf("кнопка страны = %q", got)
 	}
 	if first := c.buttons(t)[0]; first.CallbackData != "f:k" {
@@ -121,7 +121,7 @@ func TestCountrySelect(t *testing.T) {
 	setUserFilters(t, s, `{"date":"nm","dist":[1],"city":"moscow"}`)
 
 	c := press(t, b, api, "f:k:BY")
-	if !strings.Contains(c.Form["text"], "Страна: 🇧🇾 Беларусь") || buttonText(t, c, "f:k") != "🌍 Страна: Беларусь" {
+	if !strings.Contains(c.Form["text"], "🌍 Страна: 🇧🇾 Беларусь") || buttonText(t, c, "f:k") != "🌍 Страна" {
 		t.Errorf("сводка после выбора BY:\n%s", c.Form["text"])
 	}
 	f, _ := filtersV(t, b)
@@ -166,7 +166,7 @@ func TestCountryAllMode(t *testing.T) {
 	setUserFilters(t, s, `{"country":"*"}`)
 
 	c := press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "Страна: 🌍 Все страны") || buttonText(t, c, "f:k") != "🌍 Страна: Все страны" || showCount(t, c) != 4 {
+	if !strings.Contains(c.Form["text"], "🌍 Страна: 🌍 Все страны") || buttonText(t, c, "f:k") != "🌍 Страна" || showCount(t, c) != 4 {
 		t.Errorf("сводка:\n%s", c.Form["text"])
 	}
 
@@ -234,7 +234,7 @@ func TestCardCountryLines(t *testing.T) {
 	if text := card(`{"country":"BY"}`); !strings.Contains(text, "\n📍 Минск\n") || strings.Contains(text, "🌍") || strings.Contains(text, "Беларусь") {
 		t.Errorf("страна выбрана:\n%s", text)
 	}
-	if text := card(`{"country":"*"}`); !strings.Contains(text, "\n🌍 Беларусь\n📍 Минск\n") || areaRE.MatchString(text) {
+	if text := card(`{"country":"*"}`); !strings.Contains(text, "\n📍 Минск\n🌍 Беларусь\n") || areaRE.MatchString(text) {
 		t.Errorf("все страны:\n%s", text)
 	}
 	// Страна по умолчанию при нескольких странах в каталоге — тоже «📍».
@@ -244,7 +244,7 @@ func TestCardCountryLines(t *testing.T) {
 }
 
 // F. Одна страна в каталоге: прежний интерфейс без страны.
-func TestSingleCountryUXUnchanged(t *testing.T) {
+func TestSingleCountryUX(t *testing.T) {
 	s := storetest.Open(t)
 	seedCountryEvent(t, s, "RU", "2026-10-10", "Москва", "moscow", event.TypeRoad, "Московский забег")
 	seedCountryEvent(t, s, "RU", "2026-10-11", "Казань", "kazan", event.TypeTrail, "Казанский забег")
@@ -252,15 +252,15 @@ func TestSingleCountryUXUnchanged(t *testing.T) {
 	b := newTestBot(t, api, s)
 
 	c := press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "Дата: все будущие · Город: вся Россия · Дистанция: любая · Тип: любой") ||
+	if !strings.Contains(c.Form["text"], "📍 Город: Все города\n📅 Дата: Все будущие\n📏 Дистанция: Любая\n🏃 Тип: Любой") ||
 		strings.Contains(c.Form["text"], "Страна") {
 		t.Errorf("сводка:\n%s", c.Form["text"])
 	}
-	if got := datas(t, c); !reflect.DeepEqual(got, []string{"f:d", "f:c", "f:b", "f:t", "p:1:v1", "f:x"}) {
+	if got := datas(t, c); !reflect.DeepEqual(got, []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "f:x"}) {
 		t.Errorf("кнопки сводки: %v", got)
 	}
-	if buttonText(t, press(t, b, api, "f:c"), "f:c:-") != "Вся Россия" {
-		t.Error("в меню города нет «Вся Россия»")
+	if buttonText(t, press(t, b, api, "f:c"), "f:c:-") != "Все города" {
+		t.Error("в меню города нет «Все города»")
 	}
 	_, v := filtersV(t, b)
 	text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]
@@ -269,13 +269,13 @@ func TestSingleCountryUXUnchanged(t *testing.T) {
 	}
 	items, _ := s.ListEvents(context.Background(), event.Filter{From: fixtureToday}, 5, 0)
 	card := press(t, b, api, "e:"+strconv.FormatInt(items[0].ID, 10)+":1:v"+strconv.Itoa(v)).Form["text"]
-	if strings.Contains(card, "📍") || strings.Contains(card, "🌍") || !strings.Contains(card, "\nМосква\n") {
+	if strings.Contains(card, "🌍") || !strings.Contains(card, "\n📍 Москва\n") {
 		t.Errorf("карточка:\n%s", card)
 	}
 	// Приветствие прежнее.
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
-	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "в России") {
+	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "Найди свой следующий старт!") {
 		t.Errorf("приветствие: %+v", s)
 	}
 
@@ -283,12 +283,12 @@ func TestSingleCountryUXUnchanged(t *testing.T) {
 	// предлагает снять страну.
 	setUserFilters(t, s, `{"country":"BY"}`)
 	c = press(t, b, api, "f:s")
-	if buttonText(t, c, "f:k") != "🌍 Страна: Беларусь" || showCount(t, c) != 0 {
+	if !strings.Contains(c.Form["text"], "🌍 Страна: 🇧🇾 Беларусь") || showCount(t, c) != 0 {
 		t.Errorf("сводка с BY без событий:\n%s", c.Form["text"])
 	}
 	_, v = filtersV(t, b)
 	empty := press(t, b, api, "p:1:v"+strconv.Itoa(v))
-	if empty.Form["text"] != "Ничего не нашлось" || buttonText(t, empty, "f:x:k") != "Снять страну" {
+	if empty.Form["text"] != "Ничего не нашлось\n\nПопробуйте снять ограничение:" || buttonText(t, empty, "f:x:k") != "Снять страну" {
 		t.Errorf("пустая выдача: %q, кнопки %v", empty.Form["text"], datas(t, empty))
 	}
 	press(t, b, api, "f:x:k")
@@ -302,7 +302,121 @@ func TestStartGreetingMultiCountry(t *testing.T) {
 	_, api, b := countryFixture(t)
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	s := api.of("sendMessage")
-	if len(s) != 1 || strings.Contains(s[0].Form["text"], "в России") || !strings.Contains(s[0].Form["text"], "стране") {
+	if len(s) != 1 || strings.Contains(s[0].Form["text"], "в России") || !strings.Contains(s[0].Form["text"], "КАТАЛОГ ЗАБЕГОВ") {
 		t.Errorf("приветствие: %+v", s)
+	}
+}
+
+// Беларусь только в прошлом: стран в будущем каталоге одна — кнопки страны нет.
+func TestCountryButtonIgnoresPast(t *testing.T) {
+	s := storetest.Open(t)
+	seedCountryEvent(t, s, "RU", "2026-10-10", "Москва", "moscow", event.TypeRoad, "Московский забег")
+	seedCountryEvent(t, s, "BY", "2026-09-01", "Минск", "minsk", event.TypeRoad, "Прошедший минский забег")
+	api := fakeTelegram(t)
+	b := newTestBot(t, api, s)
+	c := press(t, b, api, "f:s")
+	if buttonText(t, c, "f:k") != "" || strings.Contains(c.Form["text"], "Страна") {
+		t.Errorf("кнопка страны при одной будущей стране:\n%s %v", c.Form["text"], datas(t, c))
+	}
+}
+
+// Меню показывает все страны будущего каталога, даже если текущие фильтры не
+// оставляют в стране событий; числа — при текущих фильтрах, включая (0).
+func TestCountryMenuIgnoresFilters(t *testing.T) {
+	s, api, b := countryFixture(t)
+	for _, tc := range []struct {
+		filters         string
+		ru, by, all     string
+		wantMenuButtons []string
+	}{
+		{`{}`, "✓ 🇷🇺 Россия (2)", "🇧🇾 Беларусь (2)", "🌍 Все страны (4)", nil},
+		{`{"type":"road"}`, "✓ 🇷🇺 Россия (1)", "🇧🇾 Беларусь (1)", "🌍 Все страны (2)", nil},
+		{`{"type":"trail"}`, "✓ 🇷🇺 Россия (1)", "🇧🇾 Беларусь (0)", "🌍 Все страны (1)", nil}, // у Беларуси трейлов нет
+		{`{"type":"obstacle"}`, "✓ 🇷🇺 Россия (0)", "🇧🇾 Беларусь (1)", "🌍 Все страны (1)", nil},
+		{`{"date":"m202612"}`, "✓ 🇷🇺 Россия (0)", "🇧🇾 Беларусь (0)", "🌍 Все страны (0)", nil}, // ни одного события
+	} {
+		setUserFilters(t, s, tc.filters)
+		c := press(t, b, api, "f:k")
+		got := []string{buttonText(t, c, "f:k:RU"), buttonText(t, c, "f:k:BY"), buttonText(t, c, "f:k:*")}
+		if want := []string{tc.ru, tc.by, tc.all}; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: меню %q, want %q", tc.filters, got, want)
+		}
+		if d := datas(t, c); !reflect.DeepEqual(d, []string{"f:k:BY", "f:k:RU", "f:k:*", "f:s"}) {
+			t.Errorf("%s: кнопки %v (порядок не должен зависеть от фильтров)", tc.filters, d)
+		}
+	}
+	// Переключение на Беларусь при фильтре, где её 0 событий, работает.
+	setUserFilters(t, s, `{"type":"trail"}`)
+	press(t, b, api, "f:k:BY")
+	if f, _ := filtersV(t, b); f.Country != "BY" || f.Type != "trail" {
+		t.Errorf("после выбора BY: %+v", f)
+	}
+}
+
+// «Все страны»: строка списка — флаг и город, без названия страны.
+func TestCountryAllListFormat(t *testing.T) {
+	s, api, b := countryFixture(t)
+	setUserFilters(t, s, `{"country":"*"}`)
+	_, v := filtersV(t, b)
+	text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]
+	for _, want := range []string{"🇧🇾 Минск", "🇧🇾 Любань", "🇷🇺 Москва", "🇷🇺 Любань"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("нет %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "Беларусь") || strings.Contains(text, "Россия") {
+		t.Errorf("в списке названия стран:\n%s", text)
+	}
+}
+
+// Каталог из одной страны BY, у пользователя страна по умолчанию (RU): кнопка
+// страны есть, меню предлагает Беларусь, после выбора — события.
+func TestCountryOnlyBYDefaultRU(t *testing.T) {
+	s := storetest.Open(t)
+	seedCountryEvent(t, s, "BY", "2026-10-12", "Минск", "minsk", event.TypeRoad, "Минский забег")
+	api := fakeTelegram(t)
+	b := newTestBot(t, api, s)
+	setUserFilters(t, s, `{"date":"30","type":"road"}`)
+
+	c := press(t, b, api, "f:s")
+	if buttonText(t, c, "f:k") != "🌍 Страна" || !strings.Contains(c.Form["text"], "🌍 Страна: 🇷🇺 Россия") || showCount(t, c) != 0 {
+		t.Fatalf("сводка: %q кнопки %v", c.Form["text"], datas(t, c))
+	}
+	cm := press(t, b, api, "f:k")
+	if !reflect.DeepEqual(datas(t, cm), []string{"f:k:BY", "f:k:RU", "f:k:*", "f:s"}) ||
+		buttonText(t, cm, "f:k:BY") != "🇧🇾 Беларусь (1)" || buttonText(t, cm, "f:k:RU") != "✓ 🇷🇺 Россия (0)" {
+		t.Fatalf("меню: %v", datas(t, cm))
+	}
+	c = press(t, b, api, "f:k:BY")
+	if showCount(t, c) != 1 || !strings.Contains(c.Form["text"], "🌍 Страна: 🇧🇾 Беларусь") {
+		t.Fatalf("после выбора BY: %q", c.Form["text"])
+	}
+	if f, _ := filtersV(t, b); f.Country != "BY" || f.Date != "30" || f.Type != "road" { // остальные фильтры целы
+		t.Fatalf("фильтры: %+v", f)
+	}
+	_, v := filtersV(t, b)
+	if rows := listRows(press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]); len(rows) != 1 || !strings.Contains(rows[0], "Минск") {
+		t.Fatalf("выдача BY: %v", rows)
+	}
+	// Страна выбрана явно: кнопка остаётся и когда Беларусь единственная.
+	if buttonText(t, press(t, b, api, "f:s"), "f:k") != "🌍 Страна" {
+		t.Error("кнопка страны пропала после выбора единственной страны")
+	}
+}
+
+// Каталог из одной страны RU при умолчании RU — кнопки страны нет; при
+// «Все страны» и единственной стране кнопка остаётся.
+func TestCountryOnlyRUDefaultRU(t *testing.T) {
+	s := storetest.Open(t)
+	seedCountryEvent(t, s, "RU", "2026-10-12", "Москва", "moscow", event.TypeRoad, "Московский забег")
+	api := fakeTelegram(t)
+	b := newTestBot(t, api, s)
+	c := press(t, b, api, "f:s")
+	if buttonText(t, c, "f:k") != "" || strings.Contains(c.Form["text"], "Страна") {
+		t.Errorf("RU-only: кнопка страны есть: %q %v", c.Form["text"], datas(t, c))
+	}
+	setUserFilters(t, s, `{"country":"*"}`)
+	if buttonText(t, press(t, b, api, "f:s"), "f:k") != "🌍 Страна" {
+		t.Error("«Все страны»: кнопки страны нет")
 	}
 }

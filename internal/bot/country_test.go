@@ -45,7 +45,7 @@ func countryFixture(t *testing.T) (*store.Store, *fakeAPI, *Bot) {
 func showCount(t *testing.T, c call) int {
 	t.Helper()
 	for _, bt := range c.buttons(t) {
-		if n, ok := strings.CutPrefix(bt.Text, "Показать "); ok {
+		if n, ok := strings.CutPrefix(bt.Text, "🔎 Показать "); ok {
 			v, err := strconv.Atoi(n)
 			if err != nil {
 				t.Fatalf("кнопка %q: %v", bt.Text, err)
@@ -309,11 +309,11 @@ func TestNoAreaInTelegram(t *testing.T) {
 				}
 			}
 		}
-		// Фильтры верхнего уровня — только Дата, Город, Дистанция, Тип.
+		// Фильтры верхнего уровня — только Страна, Город, Дата, Дистанция, Тип.
 		for _, bt := range screens["сводка"].buttons(t) {
 			switch {
-			case bt.Text == "Дата", bt.Text == "Город", bt.Text == "Дистанция", bt.Text == "Тип",
-				bt.Text == "Сбросить", strings.HasPrefix(bt.Text, "Показать "), strings.HasPrefix(bt.Text, "🌍 Страна: "):
+			case bt.Text == "📅 Дата", bt.Text == "📍 Город", bt.Text == "📏 Дистанция", bt.Text == "🏃 Тип",
+				bt.Text == "🔄 Сбросить", strings.HasPrefix(bt.Text, "🔎 Показать "), bt.Text == "🌍 Страна":
 			default:
 				t.Errorf("%s: неожиданная кнопка сводки %q", filters, bt.Text)
 			}

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	tgbot "github.com/go-telegram/bot"
@@ -325,22 +326,34 @@ func typeLabel(t string) string {
 	return html.EscapeString(t)
 }
 
-// summaryLine — строка сводки фильтров (HTML); cityName — написание города.
-// showCountry: страна в сводке и нейтральный текст города (в каталоге больше
-// одной страны или страна выбрана явно); иначе прежний текст «вся Россия».
-func summaryLine(f userFilters, cityName string, showCountry bool) string {
-	city := "вся Россия"
-	if showCountry {
-		city = "все"
+// upperFirst — первая буква заглавная (значения фильтров в сводке).
+func upperFirst(s string) string {
+	r := []rune(s)
+	if len(r) == 0 {
+		return s
 	}
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
+}
+
+// summaryLine — строки сводки фильтров (HTML) по одной на фильтр; cityName —
+// написание города. showCountry: первой строкой страна (в каталоге доступен
+// выбор страны или страна выбрана явно).
+func summaryLine(f userFilters, cityName string, showCountry bool) string {
+	city := "Все города"
 	if f.City != "" {
 		city = html.EscapeString(cityName)
 	}
-	line := "Дата: " + dateLabel(f.Date) + " · Город: " + city + " · Дистанция: " + distLabel(f.Dist) + " · Тип: " + typeLabel(f.Type)
-	if showCountry {
-		line = "Страна: " + countryLabel(f.effectiveCountry()) + " · " + line
+	lines := []string{
+		"📍 Город: " + city,
+		"📅 Дата: " + upperFirst(dateLabel(f.Date)),
+		"📏 Дистанция: " + upperFirst(distLabel(f.Dist)),
+		"🏃 Тип: " + upperFirst(typeLabel(f.Type)),
 	}
-	return line
+	if showCountry {
+		lines = append([]string{"🌍 Страна: " + countryLabel(f.effectiveCountry())}, lines...)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // btn — ряд из одной кнопки.
@@ -352,29 +365,31 @@ func btn(text string, c callback) row {
 
 var back = callback{Kind: cbSummary}
 
-// summaryScreen — сводка фильтров (D-10) с кнопкой «Показать N»; showCountry
-// добавляет кнопку страны над остальными.
+// summaryScreen — экран поиска (D-10): значения фильтров в тексте, в кнопках
+// только названия; «Показать N»; showCountry добавляет страну над остальными.
 func summaryScreen(f userFilters, cityName string, v, n int, showCountry bool) screen {
 	var r1, r2 row
-	r1.add("Дата", callback{Kind: cbDate})
-	r1.add("Город", callback{Kind: cbCity})
-	r2.add("Дистанция", callback{Kind: cbBucket})
-	r2.add("Тип", callback{Kind: cbType})
+	r1.add("📍 Город", callback{Kind: cbCity})
+	r1.add("📅 Дата", callback{Kind: cbDate})
+	r2.add("📏 Дистанция", callback{Kind: cbBucket})
+	r2.add("🏃 Тип", callback{Kind: cbType})
 	var rows []row
 	if showCountry {
-		rows = append(rows, btn("🌍 Страна: "+countryName(f.effectiveCountry()), callback{Kind: cbCountry}))
+		rows = append(rows, btn("🌍 Страна", callback{Kind: cbCountry}))
 	}
 	rows = append(rows, r1, r2,
-		btn("Показать "+strconv.Itoa(n), callback{Kind: cbPage, Page: 1, V: v}),
-		btn("Сбросить", callback{Kind: cbReset}))
+		btn("🔎 Показать "+strconv.Itoa(n), callback{Kind: cbPage, Page: 1, V: v}),
+		btn("🔄 Сбросить", callback{Kind: cbReset}))
 	return screen{
-		text: "<b>Найти забег</b>\n\n" + summaryLine(f, cityName, showCountry),
+		text: "🔎 <b>ПОИСК ЗАБЕГА</b>\n\n" + summaryLine(f, cityName, showCountry),
 		kb:   keyboard(rows...),
 	}
 }
 
-// emptyScreen — пустая выдача (D-12): кнопки снимают только заданные фильтры.
-func emptyScreen(f userFilters) screen {
+// emptyScreen — пустая выдача (D-12): кнопки снимают только заданные фильтры;
+// при заданных фильтрах текст подсказывает, что их можно снять. pickCountry —
+// страна не выбрана явно, но выбор доступен: кнопка «Выбрать страну».
+func emptyScreen(f userFilters, pickCountry bool) screen {
 	var rows []row
 	if f.Country != "" {
 		rows = append(rows, btn("Снять страну", callback{Kind: cbReset, Value: "k"}))
@@ -391,8 +406,15 @@ func emptyScreen(f userFilters) screen {
 	if f.Type != "" {
 		rows = append(rows, btn("Снять тип", callback{Kind: cbReset, Value: "t"}))
 	}
-	rows = append(rows, btn("Фильтры", back))
-	return screen{text: "Ничего не нашлось", kb: keyboard(rows...)}
+	text := "Ничего не нашлось"
+	if len(rows) > 0 {
+		text += "\n\nПопробуйте снять ограничение:"
+	}
+	if pickCountry {
+		rows = append(rows, btn("🌍 Выбрать страну", callback{Kind: cbCountry}))
+	}
+	rows = append(rows, btn("⬅️ К фильтрам", back))
+	return screen{text: text, kb: keyboard(rows...)}
 }
 
 // dateMenu — пресеты и 12 месяцев.
@@ -410,7 +432,7 @@ func dateMenu(today time.Time) screen {
 			rows, mr = append(rows, mr), nil
 		}
 	}
-	return screen{text: "Выберите даты", kb: keyboard(append(rows, btn("Назад", back))...)}
+	return screen{text: "Выберите даты", kb: keyboard(append(rows, btn("⬅️ Назад", back))...)}
 }
 
 // bucketMenu — корзины дистанций; выбранные отмечены «✓».
@@ -437,7 +459,7 @@ func (b *Bot) cityMenu(ctx context.Context, f userFilters) (screen, error) {
 	for _, c := range cities {
 		rows = append(rows, btn(fmt.Sprintf("%s (%d)", c.Name, c.N), callback{Kind: cbCity, Value: c.Key}))
 	}
-	rows = append(rows, btn("Вся Россия", callback{Kind: cbCity, Value: "-"}), btn("Назад", back))
+	rows = append(rows, btn("Все города", callback{Kind: cbCity, Value: "-"}), btn("⬅️ Назад", back))
 	return screen{text: "Выберите город или напишите его название сообщением", kb: keyboard(rows...)}, nil
 }
 
@@ -451,24 +473,34 @@ func (b *Bot) typeMenu(ctx context.Context, f userFilters) (screen, error) {
 	for _, t := range types {
 		rows = append(rows, btn(typeLabel(string(t)), callback{Kind: cbType, Value: string(t)}))
 	}
-	rows = append(rows, btn("Любой", callback{Kind: cbType, Value: "-"}), btn("Назад", back))
+	rows = append(rows, btn("Любой", callback{Kind: cbType, Value: "-"}), btn("⬅️ Назад", back))
 	return screen{text: "Выберите тип забега", kb: keyboard(rows...)}, nil
 }
 
-// multiCountry — в каталоге есть будущие события минимум двух стран: тогда
-// страна доступна пользователю явно. Одна страна — прежний интерфейс.
-func (b *Bot) multiCountry(ctx context.Context) (bool, error) {
+// countryAvailable — кнопка страны нужна: в будущем каталоге минимум две
+// страны либо одна, но не совпадающая со страной фильтра (иначе пользователь
+// с умолчанием «Россия» не увидел бы каталог одной Беларуси). Одна страна,
+// равная эффективной, — прежний компактный интерфейс.
+func (b *Bot) countryAvailable(ctx context.Context, f userFilters) (bool, error) {
 	cs, err := b.Store.Countries(ctx, event.Filter{From: b.today()})
-	return len(cs) >= 2, err
+	switch {
+	case err != nil:
+		return false, err
+	case len(cs) >= 2:
+		return true, nil
+	case len(cs) == 1:
+		return cs[0].Code != f.effectiveCountry(), nil
+	}
+	return false, nil
 }
 
-// showCountry — показывать ли страну в сводке и карточке: страна выбрана явно
-// или стран несколько.
+// showCountry — показывать ли страну в сводке фильтров: страна выбрана явно
+// или кнопка страны доступна.
 func (b *Bot) showCountry(ctx context.Context, f userFilters) (bool, error) {
 	if f.Country != "" {
 		return true, nil
 	}
-	return b.multiCountry(ctx)
+	return b.countryAvailable(ctx, f)
 }
 
 // summary строит сводку: число событий и написание выбранного города.
@@ -495,23 +527,36 @@ func (b *Bot) summary(ctx context.Context, f userFilters, v int) (screen, error)
 	return summaryScreen(f, name, v, n, show), nil
 }
 
-// countryMenu — страны, в которых есть события при остальных фильтрах (город
-// не учитывается: он принадлежит стране и сбрасывается при её смене), и «Все
-// страны». Текущая страна остаётся в списке, даже если событий нет.
+// countryMenu — все страны будущего каталога (без пользовательских фильтров:
+// иначе страну с нулём событий при текущих фильтрах не выбрать) с числом
+// событий при остальных фильтрах, в том числе (0), и «Все страны». Город в
+// счёт не входит: он принадлежит стране и сбрасывается при её смене. Порядок
+// не зависит от фильтров; текущая страна остаётся в списке, даже если её нет
+// в каталоге.
 func (b *Bot) countryMenu(ctx context.Context, f userFilters) (screen, error) {
-	q := f.query(b.today())
-	q.CityKey = ""
-	cs, err := b.Store.Countries(ctx, q)
+	catalog, err := b.Store.Countries(ctx, event.Filter{From: b.today()})
 	if err != nil {
 		return screen{}, err
 	}
+	q := f.query(b.today())
+	q.CityKey = ""
+	filtered, err := b.Store.Countries(ctx, q)
+	if err != nil {
+		return screen{}, err
+	}
+	n := map[string]int{}
 	total := 0
-	for _, c := range cs {
+	for _, c := range filtered {
+		n[c.Code] = c.N
 		total += c.N
 	}
+	cs := slices.Clone(catalog)
 	cur := f.effectiveCountry()
 	if cur != allCountries && !slices.ContainsFunc(cs, func(c store.CountryCount) bool { return c.Code == cur }) {
 		cs = append(cs, store.CountryCount{Code: cur})
+	}
+	for i := range cs {
+		cs[i].N = n[cs[i].Code]
 	}
 	label := func(code string, n int) string {
 		l := fmt.Sprintf("%s (%d)", countryLabel(code), n)
@@ -524,7 +569,7 @@ func (b *Bot) countryMenu(ctx context.Context, f userFilters) (screen, error) {
 	for _, c := range cs {
 		rows = append(rows, btn(label(c.Code, c.N), callback{Kind: cbCountry, Value: c.Code}))
 	}
-	rows = append(rows, btn(label(allCountries, total), callback{Kind: cbCountry, Value: allCountries}), btn("Назад", back))
+	rows = append(rows, btn(label(allCountries, total), callback{Kind: cbCountry, Value: allCountries}), btn("⬅️ Назад", back))
 	return screen{text: "🌍 Страна", kb: keyboard(rows...)}, nil
 }
 
@@ -547,13 +592,7 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		b.logger().Error("start", "err", err)
 		return
 	}
-	hello := "Привет! Помогу найти забег в России по дате, городу, дистанции и типу."
-	if multi, err := b.multiCountry(ctx); err != nil {
-		b.logger().Warn("start countries", "err", err)
-	} else if multi {
-		hello = "Привет! Помогу найти забег по дате, стране, городу, дистанции и типу."
-	}
-	sc := screen{text: hello, kb: keyboard(btn("Найти забег", back))}
+	sc := screen{text: "🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>\n\nНайди свой следующий старт!", kb: keyboard(btn("🔎 Найти забег", back))}
 	if err := b.send(ctx, u.Message.Chat.ID, sc); err != nil {
 		b.logger().Warn("send start", "err", err)
 	}
@@ -688,6 +727,6 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	for _, c := range similar {
 		rows = append(rows, btn(fmt.Sprintf("%s (%d)", c.Name, c.N), callback{Kind: cbCity, Value: c.Key}))
 	}
-	rows = append(rows, btn("Назад", back))
+	rows = append(rows, btn("⬅️ Назад", back))
 	say(screen{text: "В каталоге нет забегов в «" + html.EscapeString(text) + "»", kb: keyboard(rows...)})
 }

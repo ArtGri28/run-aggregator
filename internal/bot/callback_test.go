@@ -79,7 +79,7 @@ func TestCallbackLength(t *testing.T) {
 		"summary": summaryScreen(f, "Город", math.MaxInt32, math.MaxInt32, true),
 		"list":    listScreen(items, 50000, 10000, math.MaxInt32, true),
 		"list1":   listScreen(items, 1, 1, 1, false),
-		"empty":   emptyScreen(f),
+		"empty":   emptyScreen(f, false),
 	} {
 		if sc.kb == nil || len(sc.kb.InlineKeyboard) == 0 {
 			t.Errorf("%s: нет клавиатуры", name)

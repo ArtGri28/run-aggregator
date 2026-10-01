@@ -183,9 +183,9 @@ func TestCard(t *testing.T) {
 	var reg, list string
 	for _, bt := range card.buttons(t) {
 		switch bt.Text {
-		case "Регистрация":
+		case "🔗 Регистрация":
 			reg = bt.URL
-		case "К списку":
+		case "⬅️ К списку":
 			list = bt.CallbackData
 		}
 	}
@@ -197,7 +197,7 @@ func TestCard(t *testing.T) {
 	noReg := eventWith(t, s, func(e event.Event) bool { return e.RegistrationURL == "" })
 	card = press(t, b, api, fmt.Sprintf("e:%d:1:v1", noReg.ID))
 	text = card.Form["text"]
-	if hasURLButton(t, card) || card.button(t, "К списку") != "p:1:v1" {
+	if hasURLButton(t, card) || card.button(t, "⬅️ К списку") != "p:1:v1" {
 		t.Fatalf("card without registration: buttons %+v", card.buttons(t))
 	}
 	if !strings.Contains(text, "Источники: ") {
@@ -231,12 +231,12 @@ func TestHiddenAndMerged(t *testing.T) {
 			t.Fatalf("list still has a button for event %d", id)
 		}
 	}
-	if gone := press(t, b, api, btnHidden); gone.Form["text"] != "Событие больше не доступно" || gone.button(t, "К списку") != "p:1:v1" {
+	if gone := press(t, b, api, btnHidden); gone.Form["text"] != "Событие больше не доступно" || gone.button(t, "⬅️ К списку") != "p:1:v1" {
 		t.Fatalf("%s: text %q buttons %v", btnHidden, gone.Form["text"], datas(t, gone))
 	}
 	// Слитое событие открывает карточку того, в которое слито (D-16).
-	if card := press(t, b, api, btnMerged); !strings.HasPrefix(card.Form["text"], "<b>"+html.EscapeString(before[2].Title)+"</b>") ||
-		card.button(t, "К списку") != "p:1:v1" {
+	if card := press(t, b, api, btnMerged); !strings.HasPrefix(card.Form["text"], "🏃 <b>"+html.EscapeString(before[2].Title)+"</b>") ||
+		card.button(t, "⬅️ К списку") != "p:1:v1" {
 		t.Fatalf("%s: text %q buttons %v", btnMerged, card.Form["text"], datas(t, card))
 	}
 	// Несуществующий id — то же сообщение.
@@ -254,14 +254,14 @@ func TestMergedCardOpensRoot(t *testing.T) {
 	storetest.MergeEvent(t, x, y)
 	storetest.MergeEvent(t, y, root)
 
-	want := "<b>" + html.EscapeString(items[2].Title) + "</b>"
+	want := "🏃 <b>" + html.EscapeString(items[2].Title) + "</b>"
 	for _, c := range []struct{ data, list string }{
 		{fmt.Sprintf("e:%d:2:v1", x), "p:2:v1"},
 		{fmt.Sprintf("e:%d:1:v1", y), "p:1:v1"},
 	} {
 		card := press(t, b, api, c.data)
 		text := card.Form["text"]
-		if !strings.HasPrefix(text, want) || !strings.Contains(text, "Источники: ") || card.button(t, "К списку") != c.list {
+		if !strings.HasPrefix(text, want) || !strings.Contains(text, "Источники: ") || card.button(t, "⬅️ К списку") != c.list {
 			t.Fatalf("%s: text %q buttons %v; want root card and %s", c.data, text, datas(t, card), c.list)
 		}
 	}
@@ -317,7 +317,7 @@ func TestStatusMarks(t *testing.T) {
 
 	for i, mark := range []string{"[ОТМЕНЁН]", "[ПЕРЕНЕСЁН]"} {
 		text := press(t, b, api, fmt.Sprintf("e:%d:1:v1", items[i].ID)).Form["text"]
-		if !strings.HasPrefix(strings.TrimPrefix(text, "<b>"), mark) {
+		if !strings.HasPrefix(strings.TrimPrefix(text, "🏃 <b>"), mark) {
 			t.Fatalf("card %d starts with %q, want %s", i, text[:20], mark)
 		}
 	}
@@ -410,7 +410,7 @@ func TestListScreenShape(t *testing.T) {
 			got = append(got, bt.Text+"="+bt.CallbackData)
 		}
 	}
-	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "Фильтры=f:s"}
+	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "⬅️ К фильтрам=f:s"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buttons = %v, want %v", got, want)
 	}

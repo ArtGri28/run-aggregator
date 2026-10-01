@@ -228,7 +228,7 @@ func TestTracerSearch(t *testing.T) {
 	if len(sends) != 1 || sends[0].Form["chat_id"] != "42" {
 		t.Fatalf("/start: sendMessage = %+v, want one to chat 42", sends)
 	}
-	if got := sends[0].button(t, "Найти забег"); got != "f:s" {
+	if got := sends[0].button(t, "🔎 Найти забег"); got != "f:s" {
 		t.Fatalf("/start: button callback = %q, want f:s", got)
 	}
 	if _, v, err := s.Filters(ctx, 42); err != nil || v != 1 {
@@ -246,12 +246,12 @@ func TestTracerSearch(t *testing.T) {
 	if len(edits) != 1 || edits[0].Form["message_id"] != "7" {
 		t.Fatalf("f:s: editMessageText = %+v, want one for message 7", edits)
 	}
-	for _, part := range []string{"Дата: все будущие", "Город: вся Россия"} {
+	for _, part := range []string{"Дата: Все будущие", "Город: Все города"} {
 		if !strings.Contains(edits[0].Form["text"], part) {
 			t.Fatalf("summary text %q lacks %q", edits[0].Form["text"], part)
 		}
 	}
-	if got := edits[0].button(t, "Показать "+strconv.Itoa(want)); got != "p:1:v1" {
+	if got := edits[0].button(t, "🔎 Показать "+strconv.Itoa(want)); got != "p:1:v1" {
 		t.Fatalf("summary: «Показать %d» callback = %q, want p:1:v1", want, got)
 	}
 	if n := len(api.of("answerCallbackQuery")); n != 1 {

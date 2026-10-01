@@ -49,8 +49,16 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 		b.logger().Error("count", "err", err)
 		return errNotice
 	}
-	sc := emptyScreen(f)
-	if total > 0 {
+	var sc screen
+	if total == 0 {
+		var pick bool
+		if f.Country == "" {
+			if pick, err = b.countryAvailable(ctx, f); err != nil {
+				b.logger().Warn("countries", "err", err)
+			}
+		}
+		sc = emptyScreen(f, pick)
+	} else {
 		page = min(page, (total+pageSize-1)/pageSize)
 		items, err := b.Store.ListEvents(ctx, flt, pageSize, (page-1)*pageSize)
 		if err != nil {
@@ -115,7 +123,7 @@ func listScreen(items []store.ListItem, total, page, v int, flags bool) screen {
 	if page < pages {
 		nav.add("→", callback{Kind: cbPage, Page: page + 1, V: v})
 	}
-	return screen{text: sb.String(), kb: keyboard(cards, nav, btn("Фильтры", back))}
+	return screen{text: sb.String(), kb: keyboard(cards, nav, btn("⬅️ К фильтрам", back))}
 }
 
 // onCard показывает карточку события (e:<id>:<стр>:v<N>). Слитое событие
@@ -164,27 +172,21 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	return ""
 }
 
-// cardPlaceStyle — как показать место в карточке по фильтрам пользователя:
-// прежний текст (одна страна), «📍 город» (страна выбрана) или «🌍 страна» и
-// «📍 город» (все страны).
+// cardPlaceStyle — как показать место в карточке: «📍 город», а при «всех
+// странах» ещё и «🌍 страна».
 func (b *Bot) cardPlaceStyle(ctx context.Context, tgID int64) (placeStyle, error) {
 	raw, _, err := b.Store.Filters(ctx, tgID)
 	if err != nil {
 		return placePlain, err
 	}
-	f := loadFilters(raw, b.today())
-	if f.Country == allCountries {
+	if loadFilters(raw, b.today()).Country == allCountries {
 		return placeWithCountry, nil
 	}
-	show, err := b.showCountry(ctx, f)
-	if show {
-		return placePinned, err
-	}
-	return placePlain, err
+	return placePlain, nil
 }
 
 func goneScreen(page, v int) screen {
-	return screen{text: goneNotice, kb: keyboard(btn("К списку", callback{Kind: cbPage, Page: page, V: v}))}
+	return screen{text: goneNotice, kb: keyboard(btn("⬅️ К списку", callback{Kind: cbPage, Page: page, V: v}))}
 }
 
 // monthsGen — месяцы в родительном падеже.
@@ -209,8 +211,7 @@ func ruDate(t time.Time) string {
 type placeStyle int
 
 const (
-	placePlain       placeStyle = iota // «Минск» — одна страна в каталоге, прежний текст
-	placePinned                        // «📍 Минск» — страна выбрана
+	placePlain       placeStyle = iota // «📍 Минск»
 	placeWithCountry                   // «🇧🇾 Беларусь» и «📍 Минск» — все страны
 )
 
@@ -219,14 +220,14 @@ const (
 func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style placeStyle) screen {
 	esc := func(s string, n int) string { return html.EscapeString(cut(s, n)) }
 	var sb strings.Builder
-	sb.WriteString("<b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n")
-	sb.WriteString(ruDate(e.StartDate))
+	sb.WriteString("🏃 <b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n\n")
+	sb.WriteString("📅 " + ruDate(e.StartDate))
 	if e.EndDate != nil && !e.EndDate.Equal(e.StartDate) {
 		sb.WriteString(" – " + ruDate(*e.EndDate))
 	}
 	sb.WriteString("\n")
 	if e.StartTime != "" {
-		sb.WriteString("Старт в " + esc(e.StartTime, 5) + " (местное время)\n")
+		sb.WriteString("🕒 Старт в " + esc(e.StartTime, 5) + " (местное время)\n")
 	}
 	place := "город не указан"
 	if e.City != "" {
@@ -235,13 +236,10 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 	if a := visibleAddress(e); a != "" {
 		place += ", " + esc(a, 200)
 	}
+	sb.WriteString("📍 " + place + "\n")
 	if style == placeWithCountry {
 		sb.WriteString("🌍 " + esc(countryName(e.CountryCode), 60) + "\n")
 	}
-	if style != placePlain {
-		place = "📍 " + place
-	}
-	sb.WriteString(place + "\n" + typeLabel(string(e.Type)) + "\n")
 	if len(e.Distances) > 0 {
 		parts := make([]string, len(e.Distances))
 		for i, d := range e.Distances {
@@ -250,8 +248,9 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 				parts[i] += " (" + esc(d.Label, 40) + ")"
 			}
 		}
-		sb.WriteString("Дистанции: " + strings.Join(parts, " · ") + "\n")
+		sb.WriteString("📏 Дистанции: " + strings.Join(parts, " · ") + "\n")
 	}
+	sb.WriteString("🏷 " + typeLabel(string(e.Type)) + "\n")
 	if e.Description != "" {
 		sb.WriteString("\n" + esc(e.Description, 1000) + "\n")
 	}
@@ -267,10 +266,10 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 	}
 	var reg row
 	if validURL(e.RegistrationURL) {
-		reg = row{{Text: "Регистрация", URL: e.RegistrationURL}}
+		reg = row{{Text: "🔗 Регистрация", URL: e.RegistrationURL}}
 	}
 	return screen{text: strings.TrimRight(sb.String(), "\n"),
-		kb: keyboard(reg, btn("К списку", callback{Kind: cbPage, Page: page, V: v}))}
+		kb: keyboard(reg, btn("⬅️ К списку", callback{Kind: cbPage, Page: page, V: v}))}
 }
 
 // validURL — ссылка, которую можно показать: http/https с хостом, без

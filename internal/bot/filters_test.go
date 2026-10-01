@@ -84,7 +84,7 @@ func TestMonthOptions(t *testing.T) {
 }
 
 func TestFilterLabels(t *testing.T) {
-	if got, want := summaryLine(userFilters{}, "", false), "Дата: все будущие · Город: вся Россия · Дистанция: любая · Тип: любой"; got != want {
+	if got, want := summaryLine(userFilters{}, "", false), "📍 Город: Все города\n📅 Дата: Все будущие\n📏 Дистанция: Любая\n🏃 Тип: Любой"; got != want {
 		t.Fatalf("summaryLine(default) = %q, want %q", got, want)
 	}
 	for date, want := range map[string]string{"": "все будущие", "a": "все будущие", "30": "30 дней",
@@ -94,7 +94,7 @@ func TestFilterLabels(t *testing.T) {
 		}
 	}
 	got := summaryLine(userFilters{Dist: []int{0, 3}, Type: "trail", City: "x"}, "<b>Тула&", false)
-	want := "Дата: все будущие · Город: &lt;b&gt;Тула&amp; · Дистанция: до 5 км, 30–43 км, марафон · Тип: Трейл"
+	want := "📍 Город: &lt;b&gt;Тула&amp;\n📅 Дата: Все будущие\n📏 Дистанция: До 5 км, 30–43 км, марафон\n🏃 Тип: Трейл"
 	if got != want {
 		t.Fatalf("summaryLine = %q, want %q", got, want)
 	}
@@ -197,22 +197,22 @@ func TestFilterFlow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return "Показать " + strconv.Itoa(n)
+		return "🔎 Показать " + strconv.Itoa(n)
 	}
 
 	// Сводка: шесть кнопок D-10.
 	c := press(t, b, api, "f:s")
-	if got, want := datas(t, c), []string{"f:d", "f:c", "f:b", "f:t", "p:1:v1", "f:x"}; !reflect.DeepEqual(got, want) {
+	if got, want := datas(t, c), []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "f:x"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("f:s: кнопки %v, want %v", got, want)
 	}
 
-	// Город: топ по данным, «Вся Россия».
+	// Город: топ по данным, «Все города».
 	c = press(t, b, api, "f:c")
 	if bt := c.buttons(t)[0]; bt.Text != "Москва (9)" || bt.CallbackData != "f:c:moscow" {
 		t.Fatalf("f:c: первая кнопка %+v, want «Москва (9)» f:c:moscow", bt)
 	}
-	if c.button(t, "Вся Россия") != "f:c:-" {
-		t.Fatalf("f:c: нет «Вся Россия» f:c:-: %v", datas(t, c))
+	if c.button(t, "Все города") != "f:c:-" {
+		t.Fatalf("f:c: нет «Все города» f:c:-: %v", datas(t, c))
 	}
 	c = press(t, b, api, "f:c:moscow")
 	if !strings.Contains(c.Form["text"], "Город: Москва") {
@@ -247,7 +247,7 @@ func TestFilterFlow(t *testing.T) {
 	c = press(t, b, api, "f:t")
 	var labels []string
 	for _, bt := range c.buttons(t) {
-		if bt.Text != "Назад" {
+		if bt.Text != "⬅️ Назад" {
 			labels = append(labels, bt.Text)
 		}
 	}
@@ -297,7 +297,7 @@ func TestFilterFlow(t *testing.T) {
 	nm := road
 	nm.From, nm.To = day(2026, 10, 1), day(2026, 10, 31)
 	c = press(t, b, api, "f:d:nm")
-	if !strings.Contains(c.Form["text"], "Дата: следующий месяц") || c.button(t, count(nm)) != "p:1:v5" {
+	if !strings.Contains(c.Form["text"], "Дата: Следующий месяц") || c.button(t, count(nm)) != "p:1:v5" {
 		t.Fatalf("f:d:nm: текст %q, кнопки %v, want %q и p:1:v5", c.Form["text"], datas(t, c), count(nm))
 	}
 	if f, v := filtersV(t, b); v != 5 || f.Date != "nm" {
@@ -369,18 +369,18 @@ func TestEmptyResult(t *testing.T) {
 
 	press(t, b, api, "f:c:moscow")
 	c := press(t, b, api, "f:t:track")
-	if c.button(t, "Показать 0") != "p:1:v3" {
+	if c.button(t, "🔎 Показать 0") != "p:1:v3" {
 		t.Fatalf("сводка: кнопки %v, want «Показать 0» p:1:v3", datas(t, c))
 	}
 	c = press(t, b, api, "p:1:v3")
-	if c.Form["text"] != "Ничего не нашлось" {
+	if c.Form["text"] != "Ничего не нашлось\n\nПопробуйте снять ограничение:" {
 		t.Fatalf("пустая выдача: текст %q", c.Form["text"])
 	}
 	if got, want := datas(t, c), []string{"f:x:c", "f:x:t", "f:s"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("пустая выдача: кнопки %v, want %v", got, want)
 	}
 	c = press(t, b, api, "f:x:t")
-	if !strings.Contains(c.Form["text"], "Тип: любой") || !strings.Contains(c.Form["text"], "Город: Москва") {
+	if !strings.Contains(c.Form["text"], "Тип: Любой") || !strings.Contains(c.Form["text"], "Город: Москва") {
 		t.Fatalf("f:x:t: текст %q", c.Form["text"])
 	}
 }
@@ -398,7 +398,7 @@ func TestResetFilters(t *testing.T) {
 	_, before := filtersV(t, b)
 
 	c := press(t, b, api, "f:x")
-	if !strings.Contains(c.Form["text"], "Дата: все будущие · Город: вся Россия · Дистанция: любая · Тип: любой") {
+	if !strings.Contains(c.Form["text"], "📍 Город: Все города\n📅 Дата: Все будущие\n📏 Дистанция: Любая\n🏃 Тип: Любой") {
 		t.Fatalf("f:x: текст %q", c.Form["text"])
 	}
 	raw, v, err := s.Filters(context.Background(), 42)
@@ -426,8 +426,8 @@ func TestStaleMonthFilter(t *testing.T) {
 	}
 	page := "p:1:v" + strconv.Itoa(v)
 	c := press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "Дата: все будущие") || c.button(t, "Показать "+strconv.Itoa(n)) != page {
-		t.Fatalf("сводка: текст %q кнопки %v; want «Дата: все будущие» и «Показать %d» %s", c.Form["text"], datas(t, c), n, page)
+	if !strings.Contains(c.Form["text"], "Дата: Все будущие") || c.button(t, "🔎 Показать "+strconv.Itoa(n)) != page {
+		t.Fatalf("сводка: текст %q кнопки %v; want «Дата: Все будущие» и «Показать %d» %s", c.Form["text"], datas(t, c), n, page)
 	}
 	if c = press(t, b, api, page); !strings.HasPrefix(c.Form["text"], "Найдено") {
 		t.Fatalf("выдача: текст %q", c.Form["text"])
