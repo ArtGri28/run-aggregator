@@ -4,16 +4,16 @@ milestone: v1.27.0
 current_phase: 5
 current_phase_name: multiple-sources-deduplication
 status: executing
-stopped_at: все планы Phase 5 выполнены; ожидаются проверка безопасности, верификация и решение владельца о закрытии
-last_updated: "2026-10-01T15:19:48.000Z"
+stopped_at: все 8 планов Phase 5 выполнены; проверка безопасности (05-SECURITY.md) и верификация (05-VERIFICATION.md, human_needed) выполнены; фаза не закрыта — ждёт решения владельца
+last_updated: "2026-10-01T18:38:26.000Z"
 last_activity: 2026-10-01
-last_activity_desc: Phase 5 — планы 05-01…05-07 завершены (bdb7025), 05-08 (выкат) в работе
-state_head: 6d9efa3e5be579424f5414050a0d55b700bca3e7
+last_activity_desc: Phase 5 — ревью, проверка безопасности и верификация выполнены (7dd35e3); в ROADMAP добавлены Phase 7 и 8; Phase 5 не закрыта
+state_head: 7dd35e36b12ac39b4af0b333b7b88463639ede2f
 progress:
-  total_phases: 6
+  total_phases: 8
   completed_phases: 4
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 
 Phase: 5 (multiple-sources-deduplication) — EXECUTING
 Plan: 05-01…05-07 выполнены и закоммичены (bdb7025); 05-08 (выкат): задачи 1–2 закоммичены (faa8ee5), задачи 3–4 выполнены владельцем, задача 5 — keep-off (D-23), задача 6 не выполнялась. По сохранённым локальным логам `agg verify` на VPS развёрнуты faa8ee511c52 (01.10 10:42) и e8005e8f2940 (01.10 13:55), ПроБЕГ и heroleague приняты, в `/dupes` confirmed 86 и rejected 8, очередь пуста; оговорки приёмки — в 05-08-SUMMARY.md
-Status: In Progress — все 8 планов выполнены; до закрытия: 05-SECURITY.md, 05-VERIFICATION.md, решение владельца о закрытии. DEDUP_AUTO_MERGE=false (D-23); решения D-18…D-23 в 05-CONTEXT.md; D-21 перенесён в Phase 6
-Last activity: 2026-10-01 — Phase 5: планы 05-01…05-07 завершены, 05-08 в работе
+Status: In Progress — все 8 планов выполнены; ревью (05-REVIEW.md), проверка безопасности (05-SECURITY.md, 45 из 45 угроз закрыто) и верификация (05-VERIFICATION.md, human_needed, блокеров нет) выполнены; до закрытия — только решение владельца. DEDUP_AUTO_MERGE=false (D-23); решения D-18…D-26 в 05-CONTEXT.md; D-21 перенесён в Phase 7 (D-26)
+Last activity: 2026-10-01 — Phase 5: ревью, проверка безопасности и верификация выполнены; в ROADMAP добавлены Phase 7 и 8; фаза не закрыта
 
-Progress: [███████░░░] 67%
+Progress: [█████░░░░░] 50% (4 из 8 фаз закрыты)
 
 ## Performance Metrics
 
@@ -114,13 +114,16 @@ Recent decisions affecting current work:
 
 - [Phase 1 cleanup, не позже Phase 6, только с отдельного разрешения владельца]: удалить строку `run-agg-phase1` из `authorized_keys` на VPS, решить судьбу пользователя `runagg` и `/etc/sudoers.d/run-agg`, удалить локальные `~/.ssh/run_agg_*`, `~/run-agg-phase1/local.conf` и `approved.sha256` (MVP §7.4 п.1; 01-SECURITY.md T-01-07)
 - [Phase 3]: отложенные находки ревью Phase 2 — ME-04 «Russian Federation», ME-05 `5K`/`10K`, правило римских цифр («MIX RUN»), проверка правдоподобия дистанции в Validate (склейка «100 200 400 м»), low-находки 02-REVIEW.md
-- [Phase 6, D-23]: D-21 — потенциальные автослияния (`would_auto`) независимо от `DEDUP_AUTO_MERGE`, видимость в `/dupes` и `agg verify`, тест полноты AUTO-пар калибровки, пары heroleague в калибровке, счётчик ошибок прохода; обязательное условие включения автослияния (05-CONTEXT.md, 05-REVIEW.md)
-- [Phase 6, D-23]: дизайн и UX Telegram-бота — навигация, карточки забегов, пользовательский путь. Сейчас Phase 6 в ROADMAP — «Production»: расширение состава оформить при обсуждении Phase 6
-- [Phase 6]: замечания ревью Phase 5 — L1…L5, сортировка `/dupes` по оценке, SQL-рунбук отмены слияния (05-REVIEW.md)
+- [Phase 7, D-26]: D-21 — потенциальные автослияния (`would_auto`) независимо от `DEDUP_AUTO_MERGE`, видимость в `/dupes` и `agg verify`, тест полноты AUTO-пар калибровки, пары heroleague в калибровке, счётчик ошибок прохода; обязательное условие включения автослияния (05-CONTEXT.md, 05-REVIEW.md)
+- [Phase 8, D-26]: UX существующих функций бота — аудит (исходная точка `6d9efa3`), контракт экранов, реализация, приёмка в Telegram; `/stats`, `/broadcast`, избранное и подписки в Phase 8 не входят
+- [Phase 7, D-26]: замечания ревью Phase 5 — L1…L5 (L1: сначала воспроизвести, риск не принят), SQL-рунбук отмены слияния (05-REVIEW.md); сортировка `/dupes` по оценке — Phase 8
 - [Phase 5+]: часовой пояс по субъекту РФ (сейчас timezone пуст у 118 из 133 событий Марафонца; известны только Москва и СПб) — справочник «субъект → IANA-зона» в normalize/regions.go
 
 ### Blockers/Concerns
 
+- [Phase 6, открытые решения владельца]: внешнее хранилище бэкапов, инструмент шифрования и место ключа, сервис внешнего heartbeat — не выбраны; без них PRD-03 и PRD-05 не закрываются (06-CONTEXT.md)
+- [Релиз]: состав версии v1.27.0 после добавления Phase 7 и 8 — открытое решение владельца; версия не менялась
+- [Phase 5]: формально не закрыта — `phase.complete 5` только по команде владельца; 05-VERIFICATION.md остаётся `human_needed` (четыре необязательных наблюдения в production)
 - [Git]: remote ещё не настроен, push невозможен до настройки владельцем
 - ~~[Phase 1 → Phase 3]: у утверждённого источника Марафонец на HTML-страницах с VPS слово captcha x5 (механический вердикт: челлендж), источник не установлен~~ — ЗАКРЫТО 2026-09-29 планом 03-01: один GET /calendar-beg/ с Mac владельца дал HTTP 200 и 133 строки post-row; все 5 вхождений captcha — шаблон темы Newsmag (4 селектора `.td-warning-captcha*` формы комментариев в `<style id="wpr-usedcss">` и `var tds_captcha="";` в настройках темы), челленджа нет (internal/ingest/sources/marathonec/testdata/README.md, раздел «captcha (D-01)»)
 - [Phase 1, справочно, не блокирует]: Runlist (не утверждён) /event/skazka26 с VPS 2026-09-28 весит ~30% от baseline 2026-09-25 при точном совпадении структурных маркеров — G2 не закрыт, причина не установлена; не блокирует Phase 3, т.к. Runlist не входит в утверждённый набор (01-SOURCES-REPORT §2.3, §4.2)
@@ -136,6 +139,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-01T15:19:48.000Z
-Stopped at: все планы Phase 5 выполнены; ожидаются проверка безопасности, верификация и решение владельца о закрытии
+Last session: 2026-10-01T18:38:26.000Z
+Stopped at: все 8 планов Phase 5 выполнены; проверка безопасности (05-SECURITY.md) и верификация (05-VERIFICATION.md, human_needed) выполнены; фаза не закрыта — ждёт решения владельца
 Resume file: .planning/phases/05-multiple-sources-deduplication/05-08-SUMMARY.md
