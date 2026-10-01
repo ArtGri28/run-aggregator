@@ -31,8 +31,8 @@ const longDistanceM = 100_000
 // SanityReport пишет Markdown-отчёт по записям прогона для решения
 // владельца о fallback RU (D-07, ING-11): области с отметкой «в перечне
 // РФ» / «НЕТ в перечне» / «иностранная», число строк и первые 5 городов;
-// дистанции больше 100 км и нераспознанные типы. Чистая функция,
-// вывод детерминирован.
+// дистанции больше 100 км и нераспознанные типы; страна записей и
+// серии (D-04, D-14). Чистая функция, вывод детерминирован.
 func SanityReport(w io.Writer, source string, runID int64, startedAt time.Time, recs []SourceEvent) error {
 	type group struct {
 		name, status string
@@ -102,6 +102,7 @@ func SanityReport(w io.Writer, source string, runID int64, startedAt time.Time, 
 		len(recs), perStatus[regionRF]+perStatus[regionNotRF]+perStatus[regionForeign],
 		regionRF, perStatus[regionRF], regionNotRF, perStatus[regionNotRF], perStatus[regionForeign],
 		regionEmpty, rowsBy[regionEmpty], regionMulti, rowsBy[regionMulti])
+	writeCountrySeries(&sb, recs)
 	sb.WriteString("## Области (сначала подозрительные)\n\n")
 	sb.WriteString("| Область (как в источнике) | Статус | Строк | Города (первые 5) |\n|---|---|---|---|\n")
 	for _, g := range rows {
@@ -123,6 +124,47 @@ func SanityReport(w io.Writer, source string, runID int64, startedAt time.Time, 
 	sb.WriteString("\n## Решение\n\nЗаполняется по решению владельца (план 03-07): значение, дата, кто принял решение.\n")
 	_, err := io.WriteString(w, sb.String())
 	return err
+}
+
+// writeCountrySeries пишет раздел «Страна и серии» (D-04, D-14). RU —
+// явная страна РФ; иностранная — явная не-RU страна или иностранная
+// страна/область; иначе «не указана» — судьбу решает политика источника
+// (при no_fallback — вне каталога), её города показываются для проверки.
+func writeCountrySeries(sb *strings.Builder, recs []SourceEvent) {
+	var ru, foreign, unknown int
+	unknownCities := map[string]int{}
+	seriesRows := 0
+	seriesCity := map[string]bool{} // ключ серии → есть запись с городом
+	for _, rec := range recs {
+		city := normalize.City(rec.City)
+		_, regionKind := normalize.ClassifyRegion(normalize.Region(rec.Region))
+		_, countryKind := normalize.ClassifyRegion(rec.Country)
+		switch code := normalize.CountryCode(rec.Country); {
+		case code == "RU":
+			ru++
+		case code != "" || countryKind == normalize.RegionForeign || regionKind == normalize.RegionForeign:
+			foreign++
+		default:
+			unknown++
+			if city != "" {
+				unknownCities[city]++
+			}
+		}
+		if rec.GroupKey != "" {
+			seriesRows++
+			seriesCity[rec.GroupKey] = seriesCity[rec.GroupKey] || city != ""
+		}
+	}
+	noCity := 0
+	for _, has := range seriesCity {
+		if !has {
+			noCity++
+		}
+	}
+	sb.WriteString("## Страна и серии\n\n")
+	fmt.Fprintf(sb, "Страна: RU — %d | иностранная — %d | не указана — %d\n\n", ru, foreign, unknown)
+	fmt.Fprintf(sb, "Не указана, города (первые 10): %s\n\n", topCities(unknownCities, 10))
+	fmt.Fprintf(sb, "Серии (group_key): ключей — %d | записей — %d | ключей без города — %d\n\n", len(seriesCity), seriesRows, noCity)
 }
 
 // topCities — до n городов по убыванию числа строк, затем по имени.

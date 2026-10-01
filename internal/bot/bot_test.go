@@ -323,19 +323,32 @@ func checkCallbackLengths(t *testing.T, c call) {
 }
 
 func TestLoadFilters(t *testing.T) {
-	if got := loadFilters([]byte(`{}`)); !reflect.DeepEqual(got, userFilters{}) {
+	today := day(2026, 9, 29)
+	if got := loadFilters([]byte(`{}`), today); !reflect.DeepEqual(got, userFilters{}) {
 		t.Fatalf(`loadFilters({}) = %+v, want zero`, got)
 	}
-	if got := loadFilters([]byte(`not json`)); !reflect.DeepEqual(got, userFilters{}) {
+	if got := loadFilters([]byte(`not json`), today); !reflect.DeepEqual(got, userFilters{}) {
 		t.Fatalf("loadFilters(garbage) = %+v, want zero", got)
 	}
-	got := loadFilters([]byte(`{"date":"x","city":"Moscow","dist":[1,9],"type":"ultra","extra":1}`))
+	got := loadFilters([]byte(`{"date":"x","city":"Moscow","dist":[1,9],"type":"ultra","extra":1}`), today)
 	if want := (userFilters{Dist: []int{1}}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("loadFilters(invalid values) = %+v, want %+v", got, want)
 	}
 	valid := `{"date":"m202611","city":"nizhniy-novgorod","dist":[4,2,2],"type":"trail"}`
-	if got, want := loadFilters([]byte(valid)), (userFilters{Date: "m202611", City: "nizhniy-novgorod", Dist: []int{2, 4}, Type: "trail"}); !reflect.DeepEqual(got, want) {
+	if got, want := loadFilters([]byte(valid), today), (userFilters{Date: "m202611", City: "nizhniy-novgorod", Dist: []int{2, 4}, Type: "trail"}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("loadFilters(valid) = %+v, want %+v", got, want)
+	}
+	// Прошедший месяц сбрасывается (LO-05); текущий, будущий и пресеты — нет.
+	for date, want := range map[string]string{
+		"m202608": "", "m202609": "m202609", "m202610": "m202610",
+		"30": "30", "cm": "cm", "nm": "nm", "a": "a",
+	} {
+		if got := loadFilters([]byte(`{"date":"`+date+`"}`), today); got.Date != want {
+			t.Fatalf("loadFilters(date %s).Date = %q, want %q", date, got.Date, want)
+		}
+	}
+	if got, want := loadFilters([]byte(`{"date":"m202512","city":"moscow"}`), today), (userFilters{City: "moscow"}); !reflect.DeepEqual(got, want) {
+		t.Fatalf("loadFilters(past month) = %+v, want %+v", got, want)
 	}
 }
 
@@ -420,13 +433,31 @@ func TestPrivateOnly(t *testing.T) {
 	group := startUpdate(42)
 	group.Message.Chat.Type = models.ChatTypeGroup
 	b.api.ProcessUpdate(ctx, group)
-	inGroup := cbUpdate(42, 7, "f:s")
-	inGroup.CallbackQuery.Message.Message.Chat.Type = models.ChatTypeGroup
-	b.api.ProcessUpdate(ctx, inGroup)
 	if n := api.total(); n != 0 {
-		t.Fatalf("апдейты из группы: %d вызовов API, want 0", n)
+		t.Fatalf("сообщение из группы: %d вызовов API, want 0", n)
 	}
 
+	// Callback из группы — ровно один пустой ответ, обработчик не вызывается (IN-04).
+	inGroup := cbUpdate(42, 7, "f:s")
+	inGroup.CallbackQuery.Message.Message.Chat.Type = models.ChatTypeGroup
+	inaccessible := &models.Update{ID: 3, CallbackQuery: &models.CallbackQuery{
+		ID: "cqx", From: models.User{ID: 42}, Data: "f:s",
+		Message: models.MaybeInaccessibleMessage{
+			Type: models.MaybeInaccessibleMessageTypeInaccessibleMessage,
+			InaccessibleMessage: &models.InaccessibleMessage{
+				Chat: models.Chat{ID: -100, Type: models.ChatTypeSupergroup}, MessageID: 9},
+		},
+	}}
+	for _, u := range []*models.Update{inGroup, inaccessible} {
+		api.reset()
+		b.api.ProcessUpdate(ctx, u)
+		ans := api.of("answerCallbackQuery")
+		if api.total() != 1 || len(ans) != 1 || ans[0].Form["text"] != "" {
+			t.Fatalf("callback из группы: вызовы %+v, want один пустой answerCallbackQuery", api.calls)
+		}
+	}
+
+	api.reset()
 	b.api.ProcessUpdate(ctx, startUpdate(42))
 	b.api.ProcessUpdate(ctx, cbUpdate(42, 7, "f:s"))
 	if len(api.of("sendMessage")) != 1 || len(api.of("editMessageText")) != 1 || len(api.of("answerCallbackQuery")) != 1 {

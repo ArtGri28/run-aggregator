@@ -41,6 +41,14 @@ type SourceEvent struct {
 	TypeLabel       string   `json:"type"`
 	RegistrationURL string   `json:"registration_url,omitempty"`
 	Description     string   `json:"description,omitempty"`
+	// EndDate — дата окончания в формате, понятном normalize.Date;
+	// "" — однодневное событие. Новые поля стоят в конце и с omitempty:
+	// payload записей без них (и content_hash) не меняется.
+	EndDate string `json:"end_date,omitempty"`
+	// GroupKey — ключ серии: записи с равным непустым ключом в одном
+	// прогоне сворачиваются в Prepare до одной — единственная разрешённая
+	// склейка внутри источника (DDP-05).
+	GroupKey string `json:"group_key,omitempty"`
 }
 
 // RawDoc — один загруженный документ источника.
@@ -56,6 +64,9 @@ type Policy struct {
 	CountryFallback normalize.CountryPolicy
 	// CrawlDelay — минимальный интервал между запросами к хосту.
 	CrawlDelay time.Duration
+	// OutOfScopeMax — доля out_of_scope для Evaluate этого источника;
+	// 0 — общий порог Thresholds.
+	OutOfScopeMax float64
 }
 
 // Source — контракт источника (MVP.md §5). Fetcher источник получает

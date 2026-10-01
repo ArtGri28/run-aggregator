@@ -1,10 +1,12 @@
 package ingest_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"aggregator/internal/event"
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/marathonec"
 	"aggregator/internal/normalize"
@@ -241,6 +244,8 @@ type memSource struct {
 	// Accept и записью; cancel отменяет контекст прогона внутри Fetch.
 	onPolicy func()
 	cancel   context.CancelFunc
+	// outOfScopeMax — Policy.OutOfScopeMax источника.
+	outOfScopeMax float64
 }
 
 func newMemSource(t *testing.T, recs []ingest.SourceEvent) *memSource {
@@ -254,7 +259,7 @@ func (s *memSource) Policy() ingest.Policy {
 		s.onPolicy = nil
 		f()
 	}
-	return ingest.Policy{CountryFallback: normalize.RUOnlyFallback}
+	return ingest.Policy{CountryFallback: normalize.RUOnlyFallback, OutOfScopeMax: s.outOfScopeMax}
 }
 
 func (s *memSource) Fetch(ctx context.Context) ([]ingest.RawDoc, error) {
@@ -679,5 +684,131 @@ func TestTestDBGuard(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "_test") {
 		t.Fatalf("openTestStore(path *_test, ?dbname=postgres) err = %v, want the _test refusal", err)
+	}
+}
+
+// TestRunSeriesEndDate — tracer: запись с EndDate и серия с GroupKey
+// проходят Run → Accept до событий в PostgreSQL (ING-12, D-03, DDP-05).
+func TestRunSeriesEndDate(t *testing.T) {
+	r := testRunner(t)
+	ctx := context.Background()
+	city := fmt.Sprintf("Трассерск%d", time.Now().UnixNano())
+	day := func(n int) string { return fixtureNow.AddDate(0, 0, n).Format("02/01/2006") }
+	rec := func(id, title string, date int) ingest.SourceEvent {
+		return ingest.SourceEvent{ExternalID: id, URL: "https://example.invalid/race/" + id, Title: title,
+			Date: day(date), Distances: "5 км", City: city, Region: "Москва", TypeLabel: "shosse"}
+	}
+	single := rec("single", "Трассерский забег", 40)
+	single.EndDate = day(42)
+	recs := []ingest.SourceEvent{single}
+	for i, d := range []int{21, 7, 14, -7} {
+		s := rec(fmt.Sprint("s", i), "Трассерский паркран", d)
+		s.GroupKey = "series:трассерский паркран"
+		recs = append(recs, s)
+	}
+	src := newMemSource(t, recs)
+
+	run(t, r, src, ingest.StatusSuspect)
+	res := accept(t, r, src)
+	if res.Created != 2 || res.Upserted != 2 {
+		t.Fatalf("Accept = %+v, want Created 2, Upserted 2", res)
+	}
+	items, err := testStore.ListEvents(ctx, event.Filter{CityKey: normalize.CityKey(city)}, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("ListEvents = %+v, want 2 events", items)
+	}
+	var nearest, endDate string
+	for _, it := range items {
+		switch it.Title {
+		case "Трассерский паркран":
+			nearest = it.StartDate.Format(time.DateOnly)
+		case "Трассерский забег":
+			e, err := testStore.GetEvent(ctx, it.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if e.EndDate != nil {
+				endDate = e.EndDate.Format(time.DateOnly)
+			}
+		}
+	}
+	if nearest != "2026-10-06" || endDate != "2026-11-10" {
+		t.Fatalf("серия start_date = %q, end_date одиночного = %q; want 2026-10-06, 2026-11-10", nearest, endDate)
+	}
+
+	again := run(t, r, src, ingest.StatusOK)
+	if again.Created != 0 || again.Changed != 0 || again.Unchanged != 2 {
+		t.Fatalf("second Run = %+v, want Created 0, Changed 0, Unchanged 2", again)
+	}
+	t.Logf("TRACER created=%d events=%d nearest=%s end_date=%s", res.Created, len(items), nearest, endDate)
+}
+
+// TestRunOutOfScopeMax — порог out_of_scope источника заменяет общий
+// только для его прогонов.
+func TestRunOutOfScopeMax(t *testing.T) {
+	r := testRunner(t)
+	recs := records(1, 10)
+	for i := range 3 {
+		recs[i].Country = "Беларусь"
+	}
+	common, own := newMemSource(t, recs), newMemSource(t, recs)
+	own.code += "-own"
+	own.outOfScopeMax = 0.40
+	for _, src := range []*memSource{common, own} {
+		run(t, r, src, ingest.StatusSuspect)
+		accept(t, r, src)
+	}
+	if res := run(t, r, common, ingest.StatusSuspect); !hasReason(res, "доля вне каталога (out_of_scope)") {
+		t.Fatalf("общий порог: %s", statusOf(res))
+	}
+	run(t, r, own, ingest.StatusOK)
+}
+
+func TestPostApply(t *testing.T) {
+	r := testRunner(t)
+	var buf bytes.Buffer
+	r.Log = slog.New(slog.NewTextHandler(&buf, nil))
+	calls := 0
+	var postErr error
+	r.PostApply = func(ctx context.Context) error {
+		calls++
+		if ctx.Err() != nil {
+			t.Errorf("PostApply: контекст отменён: %v", ctx.Err())
+		}
+		return postErr
+	}
+	src := newMemSource(t, records(1, 10))
+	check := func(step string, want int) {
+		t.Helper()
+		if calls != want {
+			t.Fatalf("%s: PostApply вызван %d раз, want %d", step, calls, want)
+		}
+	}
+
+	run(t, r, src, ingest.StatusSuspect)
+	check("suspect", 0)
+	accept(t, r, src)
+	check("Accept", 1)
+	run(t, r, src, ingest.StatusOK)
+	check("ok", 2)
+	src.fetchErr = errors.New("сеть")
+	run(t, r, src, ingest.StatusFailed)
+	check("failed", 2)
+	if _, err := r.Accept(context.Background(), src, 0); !errors.Is(err, store.ErrNotAcceptable) {
+		t.Fatalf("Accept после failed: err = %v, want ErrNotAcceptable", err)
+	}
+	check("отказ Accept", 2)
+
+	src.fetchErr, postErr = nil, errors.New("дедупликация")
+	run(t, r, src, ingest.StatusOK)
+	check("ok с ошибкой PostApply", 3)
+	if !strings.Contains(buf.String(), "post-apply failed") {
+		t.Fatalf("в логе нет post-apply failed:\n%s", buf.String())
+	}
+	if last := lastRun(t, src.code); last.Status != "ok" {
+		t.Fatalf("LastRun = %s, want ok", last.Status)
 	}
 }

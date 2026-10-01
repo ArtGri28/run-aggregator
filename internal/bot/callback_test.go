@@ -17,6 +17,7 @@ func TestCallbackRoundTrip(t *testing.T) {
 		"f:x", "f:x:d", "f:x:t",
 		"p:1:v1", "p:10000:v2147483647", "e:9223372036854775807:3:v12",
 		"r:a:5", "r:y:5", "r:n:5",
+		"d:o", "d:m:5", "d:y:5", "d:n:5", "d:x:5", "d:s:9223372036854775807",
 	} {
 		c, err := parseCallback(s)
 		if err != nil {
@@ -39,9 +40,18 @@ func TestCallbackReject(t *testing.T) {
 		// сверх списка плана: лишние части, регистр, пробелы, переполнение
 		"f:s:", "f:d:", "F:s", "f:d:A", " f:s", "p:1:v1:", "p:1:v2147483648", "p:99999999999999999999:v1",
 		"e:9223372036854775808:1:v1", "r:a:-1",
+		"d:", "d:o:1", "d:m", "d:m:0", "d:m:01", "d:q:5", "d:m:-1", "d:m:5:1", "d:x:9223372036854775808",
 	} {
 		if c, err := parseCallback(s); err == nil {
 			t.Errorf("parseCallback(%q) = %+v, want error", s, c)
+		}
+	}
+}
+
+func TestCbPrefix(t *testing.T) {
+	for data, want := range map[string]string{"d:x:1": "d", "r:y:1": "r", "z:1": "?", "d": "?"} {
+		if got := cbPrefix(data); got != want {
+			t.Errorf("cbPrefix(%q) = %q, want %q", data, got, want)
 		}
 	}
 }
@@ -66,7 +76,7 @@ func TestCallbackLength(t *testing.T) {
 		"summary": summaryScreen(f, "Город", math.MaxInt32, math.MaxInt32),
 		"list":    listScreen(items, 50000, 10000, math.MaxInt32),
 		"list1":   listScreen(items, 1, 1, 1),
-		"empty":   emptyScreen(f, math.MaxInt32),
+		"empty":   emptyScreen(f),
 	} {
 		if sc.kb == nil || len(sc.kb.InlineKeyboard) == 0 {
 			t.Errorf("%s: нет клавиатуры", name)

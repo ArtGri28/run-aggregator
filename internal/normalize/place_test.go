@@ -25,6 +25,19 @@ func TestCity(t *testing.T) {
 		{"с. Ильинское", "Ильинское"},
 		{"С.-Петербург", "С.-Петербург"},
 		{"", ""},
+		{"пгт. Ныроб", "Ныроб"},
+		{"пгт.Ныроб", "Ныроб"},
+		{"ПГТ. Ныроб", "Ныроб"},
+		{"п.г.т. Красная поляна", "Красная поляна"},
+		{"посёлок Гимолы", "Гимолы"},
+		{"Поселок Гимолы", "Гимолы"},
+		{"ст-ца Ессентукская", "Ессентукская"},
+		{"станица Ессентукская", "Ессентукская"},
+		{"хутор Ленина", "Ленина"},
+		{"аул Хакуринохабль", "Хакуринохабль"},
+		{"c. Белогорское", "Белогорское"}, // латинская c
+		{"Аулово", "Аулово"},
+		{"Ставрополь", "Ставрополь"},
 	}
 	for _, tt := range tests {
 		if got := City(tt.in); got != tt.want {
@@ -86,6 +99,8 @@ func TestCityKey(t *testing.T) {
 		{"Москва — Сити", "moskva-siti"},
 		{"Москва ь Сити", "moskva-siti"}, // слово из одного «ь» не даёт «--» (LO-04)
 		{"Усть-Абакан", "ust-abakan"},
+		{"пгт. Ныроб", "nyrob"},
+		{"Ныроб", "nyrob"},
 		{"", ""},
 		{"  (—) ", ""},
 		{long, ""}, // checked by invariant only
@@ -95,12 +110,37 @@ func TestCityKey(t *testing.T) {
 		if tt.in != long && got != tt.want {
 			t.Errorf("CityKey(%q) = %q, want %q", tt.in, got, tt.want)
 		}
-		if got != "" && (len(got) > 64 || !cityKeyRe.MatchString(got)) {
+		if got != "" && (len(got) > 60 || !cityKeyRe.MatchString(got)) {
 			t.Errorf("CityKey(%q) = %q violates city_key invariant (len %d)", tt.in, got, len(got))
 		}
 	}
-	if got := CityKey(long); got == "" || len(got) > 64 {
-		t.Errorf("CityKey(long) = %q (len %d), want non-empty and <= 64 bytes", got, len(got))
+	if got := CityKey(long); got == "" || len(got) > 60 {
+		t.Errorf("CityKey(long) = %q (len %d), want non-empty and <= 60 bytes", got, len(got))
+	}
+}
+
+func TestCityPrefixesOrder(t *testing.T) {
+	for i := 1; i < len(cityPrefixes); i++ {
+		if len(cityPrefixes[i]) > len(cityPrefixes[i-1]) {
+			t.Errorf("cityPrefixes: %q (%d байт) после более короткого %q", cityPrefixes[i], len(cityPrefixes[i]), cityPrefixes[i-1])
+		}
+	}
+}
+
+func TestIsRFCity(t *testing.T) {
+	for _, c := range []string{"Москва", "г. Сочи", "Ростов-на-Дону", "ростов на дону", "Екатеринбург", "Орёл", "Орел", "Бийск"} {
+		if !IsRFCity(c) {
+			t.Errorf("IsRFCity(%q) = false, want true", c)
+		}
+	}
+	// Светлогорск — неоднозначный; Мариуполь — нет в справочнике 2021 года.
+	for _, c := range []string{"Донецк", "Светлогорск", "Минск", "Гродно", "Мариуполь", "Где-то", ""} {
+		if IsRFCity(c) {
+			t.Errorf("IsRFCity(%q) = true, want false", c)
+		}
+	}
+	if n := len(rfCities); n < 1080 {
+		t.Errorf("индекс городов РФ: %d, want ≥ 1080", n)
 	}
 }
 

@@ -22,6 +22,8 @@ import (
 //	p:<стр>:v<N>             страница списка (N — версия фильтров)
 //	e:<id>:<стр>:v<N>        карточка
 //	r:<a|y|n>:<runID>        админ: принятие прогона
+//	d:o                      админ: очередь дублей с начала
+//	d:<m|y|n|x|s>:<cid>      админ: слить (подтверждение) / да / отмена / разные / пропустить
 const maxCallbackBytes = 64
 
 type cbKind int
@@ -38,6 +40,12 @@ const (
 	cbRunAsk
 	cbRunYes
 	cbRunNo
+	cbDupeOpen
+	cbDupeAsk
+	cbDupeYes
+	cbDupeNo
+	cbDupeRej
+	cbDupeSkip
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -60,6 +68,9 @@ const maxCityKeyBytes = 60 // 64 − len("f:c:")
 
 var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "c": cbCity, "b": cbBucket, "t": cbType, "x": cbReset}
 var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbCity: "c", cbBucket: "b", cbType: "t", cbReset: "x"}
+
+var dKinds = map[string]cbKind{"m": cbDupeAsk, "y": cbDupeYes, "n": cbDupeNo, "x": cbDupeRej, "s": cbDupeSkip}
+var dLetters = map[cbKind]string{cbDupeAsk: "m", cbDupeYes: "y", cbDupeNo: "n", cbDupeRej: "x", cbDupeSkip: "s"}
 
 var eventTypes = []event.Type{event.TypeRoad, event.TypeTrail, event.TypeCross, event.TypeTrack, event.TypeObstacle, event.TypeOther}
 
@@ -181,6 +192,19 @@ func parseCallback(data string) (callback, error) {
 		}
 		id, err := num(p[2], 1, math.MaxInt64)
 		return callback{Kind: k, ID: id}, err
+	case "d":
+		if len(p) == 2 && p[1] == "o" {
+			return callback{Kind: cbDupeOpen}, nil
+		}
+		if len(p) != 3 {
+			return callback{}, errCallback
+		}
+		k, ok := dKinds[p[1]]
+		if !ok {
+			return callback{}, errCallback
+		}
+		id, err := num(p[2], 1, math.MaxInt64)
+		return callback{Kind: k, ID: id}, err
 	}
 	return callback{}, errCallback
 }
@@ -205,6 +229,10 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("r:y:%d", c.ID)
 	case cbRunNo:
 		s = fmt.Sprintf("r:n:%d", c.ID)
+	case cbDupeOpen:
+		s = "d:o"
+	case cbDupeAsk, cbDupeYes, cbDupeNo, cbDupeRej, cbDupeSkip:
+		s = fmt.Sprintf("d:%s:%d", dLetters[c.Kind], c.ID)
 	default:
 		return "", errCallback
 	}

@@ -642,7 +642,7 @@ func TestSaveEventFor(t *testing.T) {
 
 	se := upsert("1")
 	e := sampleEvent()
-	created, changed, err := s.SaveEventFor(ctx, se, e)
+	created, changed, err := s.SaveEventFor(ctx, se, e, event.FoldConfig{})
 	if err != nil || !created || changed {
 		t.Fatalf("SaveEventFor (new) = %v, %v, %v; want created", created, changed, err)
 	}
@@ -658,7 +658,7 @@ func TestSaveEventFor(t *testing.T) {
 	}
 
 	again := sampleEvent()
-	created, changed, err = s.SaveEventFor(ctx, se, again)
+	created, changed, err = s.SaveEventFor(ctx, se, again, event.FoldConfig{})
 	if err != nil || created || changed || again.ID != e.ID {
 		t.Fatalf("SaveEventFor (same) = %v, %v, %v, id %d; want unchanged event %d", created, changed, err, again.ID, e.ID)
 	}
@@ -672,7 +672,7 @@ func TestSaveEventFor(t *testing.T) {
 
 	// Источник без явного статуса не сбрасывает cancelled (Pitfall 10).
 	exec(t, "UPDATE events SET status = 'cancelled' WHERE id = $1", e.ID)
-	if _, _, err := s.SaveEventFor(ctx, se, sampleEvent()); err != nil {
+	if _, _, err := s.SaveEventFor(ctx, se, sampleEvent(), event.FoldConfig{}); err != nil {
 		t.Fatalf("SaveEventFor (after cancel): %v", err)
 	}
 	if got := scalar[string](t, "SELECT status FROM events WHERE id = $1", e.ID); got != "cancelled" {
@@ -685,7 +685,7 @@ func TestSaveEventFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	e2 := sampleEvent()
-	if created, _, err := s.SaveEventFor(ctx, se2, e2); err != nil || !created {
+	if created, _, err := s.SaveEventFor(ctx, se2, e2, event.FoldConfig{}); err != nil || !created {
 		t.Fatalf("SaveEventFor (out_of_scope) = %v, %v; want created", created, err)
 	}
 	if got := scalar[string](t, "SELECT match_state FROM source_events WHERE id = $1", se2); got != "auto" {
@@ -697,7 +697,7 @@ func TestSaveEventFor(t *testing.T) {
 	events := scalar[int64](t, "SELECT count(*) FROM events")
 	bad := sampleEvent()
 	bad.Description = strings.Repeat("а", 1001)
-	if _, _, err := s.SaveEventFor(ctx, se3, bad); err == nil {
+	if _, _, err := s.SaveEventFor(ctx, se3, bad, event.FoldConfig{}); err == nil {
 		t.Fatal("SaveEventFor (1001 chars) err = nil, want CHECK violation")
 	}
 	if got := scalar[int64](t, "SELECT count(*) FROM events"); got != events {
@@ -707,7 +707,7 @@ func TestSaveEventFor(t *testing.T) {
 		t.Fatalf("link after failed save = %q, want new:true", got)
 	}
 
-	if _, _, err := s.SaveEventFor(ctx, 999999999, sampleEvent()); !isNotFound(err) {
+	if _, _, err := s.SaveEventFor(ctx, 999999999, sampleEvent(), event.FoldConfig{}); !isNotFound(err) {
 		t.Fatalf("SaveEventFor(nonexistent) err = %v, want ErrNotFound", err)
 	}
 }
@@ -727,7 +727,7 @@ func TestSetOutOfScope(t *testing.T) {
 			t.Fatal(err)
 		}
 		e := sampleEvent()
-		if _, _, err := s.SaveEventFor(ctx, se, e); err != nil {
+		if _, _, err := s.SaveEventFor(ctx, se, e, event.FoldConfig{}); err != nil {
 			t.Fatal(err)
 		}
 		return se, e.ID
@@ -1023,7 +1023,7 @@ func TestObserve(t *testing.T) {
 		ids[ext] = upsert(run1, ext)
 		e := sampleEvent()
 		e.StartDate, e.EndDate = date, nil
-		if _, _, err := s.SaveEventFor(ctx, ids[ext], e); err != nil {
+		if _, _, err := s.SaveEventFor(ctx, ids[ext], e, event.FoldConfig{}); err != nil {
 			t.Fatal(err)
 		}
 		events[ext] = e.ID
@@ -1120,7 +1120,7 @@ func TestOutOfScopeReturnReusesEvent(t *testing.T) {
 	se := upsert(newRun(t, s, src), "1")
 	e := sampleEvent()
 	e.StartDate, e.EndDate = today.AddDate(0, 1, 0), nil
-	if _, _, err := s.SaveEventFor(ctx, se, e); err != nil {
+	if _, _, err := s.SaveEventFor(ctx, se, e, event.FoldConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetOutOfScope(ctx, se); err != nil {
@@ -1137,7 +1137,7 @@ func TestOutOfScopeReturnReusesEvent(t *testing.T) {
 
 	back := sampleEvent()
 	back.StartDate, back.EndDate = e.StartDate, nil
-	created, _, err := s.SaveEventFor(ctx, se, back)
+	created, _, err := s.SaveEventFor(ctx, se, back, event.FoldConfig{})
 	if err != nil || created || back.ID != e.ID {
 		t.Fatalf("SaveEventFor (back in scope) = created %v, id %d, %v; want the old event %d", created, back.ID, err, e.ID)
 	}

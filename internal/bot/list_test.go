@@ -231,15 +231,63 @@ func TestHiddenAndMerged(t *testing.T) {
 			t.Fatalf("list still has a button for event %d", id)
 		}
 	}
-	for _, data := range []string{btnHidden, btnMerged} {
-		gone := press(t, b, api, data)
-		if gone.Form["text"] != "Событие больше не доступно" || gone.button(t, "К списку") != "p:1:v1" {
-			t.Fatalf("%s: text %q buttons %v", data, gone.Form["text"], datas(t, gone))
-		}
+	if gone := press(t, b, api, btnHidden); gone.Form["text"] != "Событие больше не доступно" || gone.button(t, "К списку") != "p:1:v1" {
+		t.Fatalf("%s: text %q buttons %v", btnHidden, gone.Form["text"], datas(t, gone))
+	}
+	// Слитое событие открывает карточку того, в которое слито (D-16).
+	if card := press(t, b, api, btnMerged); !strings.HasPrefix(card.Form["text"], "<b>"+html.EscapeString(before[2].Title)+"</b>") ||
+		card.button(t, "К списку") != "p:1:v1" {
+		t.Fatalf("%s: text %q buttons %v", btnMerged, card.Form["text"], datas(t, card))
 	}
 	// Несуществующий id — то же сообщение.
 	if gone := press(t, b, api, "e:999999:1:v1"); gone.Form["text"] != "Событие больше не доступно" {
 		t.Fatalf("unknown id: %q", gone.Form["text"])
+	}
+}
+
+// TestMergedCardOpensRoot — tracer D-16: старая кнопка слитого события
+// (цепочка из двух шагов) открывает карточку корня; скрытый корень недоступен.
+func TestMergedCardOpensRoot(t *testing.T) {
+	s, api, b := seeded(t)
+	items := allItems(t, s, event.Filter{From: fixtureToday})
+	x, y, root := items[0].ID, items[1].ID, items[2].ID
+	storetest.MergeEvent(t, x, y)
+	storetest.MergeEvent(t, y, root)
+
+	want := "<b>" + html.EscapeString(items[2].Title) + "</b>"
+	for _, c := range []struct{ data, list string }{
+		{fmt.Sprintf("e:%d:2:v1", x), "p:2:v1"},
+		{fmt.Sprintf("e:%d:1:v1", y), "p:1:v1"},
+	} {
+		card := press(t, b, api, c.data)
+		text := card.Form["text"]
+		if !strings.HasPrefix(text, want) || !strings.Contains(text, "Источники: ") || card.button(t, "К списку") != c.list {
+			t.Fatalf("%s: text %q buttons %v; want root card and %s", c.data, text, datas(t, card), c.list)
+		}
+	}
+
+	storetest.HideEvent(t, root)
+	if gone := press(t, b, api, fmt.Sprintf("e:%d:1:v1", x)); gone.Form["text"] != "Событие больше не доступно" {
+		t.Fatalf("hidden root: %q", gone.Form["text"])
+	}
+	t.Logf("TRACER merged-card hops=2 root=ok hidden-root=gone")
+}
+
+func TestCardSourceNames(t *testing.T) {
+	e := event.Event{Title: "Забег", StartDate: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), Type: event.TypeRoad}
+	sc := cardScreen(e, []store.EventSource{
+		{Code: "marathonec", URL: "https://marathonec.ru/e/1"},
+		{Code: "probeg", URL: "https://probeg.org/event/123/"},
+	}, 1, 1)
+	if want := `<a href="https://marathonec.ru/e/1">Марафонец</a>, <a href="https://probeg.org/event/123/">ПроБЕГ</a>`; !strings.Contains(sc.text, want) {
+		t.Fatalf("sources: want %q in\n%s", want, sc.text)
+	}
+	if sourceName("probeg") != "ПроБЕГ" || sourceName("zzz") != "zzz" {
+		t.Fatalf("sourceName: probeg=%q zzz=%q", sourceName("probeg"), sourceName("zzz"))
+	}
+	sc = cardScreen(e, []store.EventSource{{Code: "probeg", URL: `https://probeg.org/event/1/"><b>x`}}, 1, 1)
+	if strings.Contains(sc.text, `"><b>x`) || !strings.Contains(sc.text, "ПроБЕГ") {
+		t.Fatalf("probeg source not escaped:\n%s", sc.text)
 	}
 }
 

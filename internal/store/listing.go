@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -117,4 +118,37 @@ func (s *Store) EventSources(ctx context.Context, eventID int64) ([]EventSource,
 		return nil, fmt.Errorf("event sources: %w", err)
 	}
 	return out, nil
+}
+
+// maxMergeHops — предел длины цепочки merged_into_id. Слияние схлопывает
+// цепочки до одного шага; предел защищает от цикла (CHECK в БД нет).
+const maxMergeHops = 32
+
+// RootEventID — общий резолвер корня слияний (D-17): бот (D-16),
+// дедупликация, будущие избранное и подписки. Корень возвращает себя,
+// слитое событие — id конца цепочки merged_into_id одним запросом.
+// Нет события — ErrNotFound; цикл или цепочка длиннее maxMergeHops — другая
+// ошибка. Только читает events.
+func (s *Store) RootEventID(ctx context.Context, id int64) (int64, error) {
+	const q = `
+		WITH RECURSIVE chain (id, next, depth) AS (
+			SELECT id, merged_into_id, 0 FROM events WHERE id = $1
+			UNION ALL
+			SELECT e.id, e.merged_into_id, c.depth + 1
+			FROM chain c JOIN events e ON e.id = c.next
+			WHERE c.depth < $2
+		)
+		SELECT id, next IS NULL FROM chain ORDER BY depth DESC LIMIT 1`
+	var root int64
+	var isRoot bool
+	err := s.db.QueryRow(ctx, q, id, maxMergeHops).Scan(&root, &isRoot)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return 0, fmt.Errorf("root event %d: %w", id, ErrNotFound)
+	case err != nil:
+		return 0, fmt.Errorf("root event %d: %w", id, err)
+	case !isRoot:
+		return 0, fmt.Errorf("root event %d: merge chain longer than %d or cyclic", id, maxMergeHops)
+	}
+	return root, nil
 }

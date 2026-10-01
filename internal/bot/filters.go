@@ -54,13 +54,18 @@ var monthNames = [...]string{"январь", "февраль", "март", "ап
 
 // loadFilters терпима к испорченным данным: ошибка разбора — значения по
 // умолчанию, лишние ключи игнорируются, значения вне грамматики кодека
-// отбрасываются.
-func loadFilters(raw []byte) userFilters {
+// отбрасываются. today — «сегодня» для сброса прошедшего месяца.
+func loadFilters(raw []byte, today time.Time) userFilters {
 	var f userFilters
 	if json.Unmarshal(raw, &f) != nil {
 		return userFilters{}
 	}
 	if f.Date != "" && !validDate(f.Date) {
+		f.Date = ""
+	}
+	// Прошедший месяц из сохранённых фильтров — «все будущие» (LO-05);
+	// значение уходит из БД при следующем изменении фильтров.
+	if _, to := dateRange(f.Date, today); monthRE.MatchString(f.Date) && to.Before(today) {
 		f.Date = ""
 	}
 	if f.City != "" && !validCityKey(f.City) {
@@ -80,7 +85,10 @@ func loadFilters(raw []byte) userFilters {
 	return f
 }
 
-// Изменения фильтров — чистые методы с абсолютным результатом.
+// Изменения фильтров — чистые методы, возвращают новое значение. Дата, город
+// и тип задаются абсолютно, корзина переключается относительно текущего
+// состояния: update применяет изменение под блокировкой строки, поэтому
+// двойное нажатие безопасно (даёт «выкл→вкл»).
 
 func (f userFilters) setDate(v string) userFilters {
 	if v == "a" {
@@ -106,7 +114,8 @@ func (f userFilters) setType(t string) userFilters {
 	return f
 }
 
-// toggleBucket добавляет или убирает корзину; список отсортирован.
+// toggleBucket добавляет или убирает корзину относительно текущего состояния
+// (под блокировкой строки в update); список отсортирован.
 func (f userFilters) toggleBucket(i int) userFilters {
 	if j := slices.Index(f.Dist, i); j >= 0 {
 		f.Dist = slices.Delete(slices.Clone(f.Dist), j, j+1)
@@ -290,7 +299,7 @@ func summaryScreen(f userFilters, cityName string, v, n int) screen {
 }
 
 // emptyScreen — пустая выдача (D-12): кнопки снимают только заданные фильтры.
-func emptyScreen(f userFilters, v int) screen {
+func emptyScreen(f userFilters) screen {
 	var rows []row
 	if f.Date != "" && f.Date != "a" {
 		rows = append(rows, btn("Снять дату", callback{Kind: cbReset, Value: "d"}))
@@ -389,12 +398,13 @@ func (b *Bot) summary(ctx context.Context, f userFilters, v int) (screen, error)
 }
 
 // update меняет фильтры одной UpdateFilters: fn получает актуальные
-// фильтры под блокировкой строки и возвращает абсолютный результат.
+// фильтры под блокировкой строки и возвращает новое значение.
 func (b *Bot) update(ctx context.Context, tgID int64, fn func(userFilters) userFilters) (userFilters, int, error) {
+	today := b.today()
 	raw, v, err := b.Store.UpdateFilters(ctx, tgID, func(cur []byte) ([]byte, error) {
-		return json.Marshal(fn(loadFilters(cur)))
+		return json.Marshal(fn(loadFilters(cur, today)))
 	})
-	return loadFilters(raw), v, err
+	return loadFilters(raw, today), v, err
 }
 
 // onStart: /start создаёт пользователя, но фильтры не сбрасывает (D-17).
@@ -429,7 +439,7 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 	} else {
 		var raw []byte
 		raw, v, err = b.Store.Filters(ctx, q.From.ID)
-		f = loadFilters(raw)
+		f = loadFilters(raw, b.today())
 	}
 	if err != nil {
 		b.logger().Error("filters", "err", err)

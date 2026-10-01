@@ -182,7 +182,7 @@ func filtersV(t *testing.T, b *Bot) (userFilters, int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return loadFilters(raw), v
+	return loadFilters(raw, fixtureToday), v
 }
 
 func TestFilterFlow(t *testing.T) {
@@ -404,5 +404,36 @@ func TestResetFilters(t *testing.T) {
 	raw, v, err := s.Filters(context.Background(), 42)
 	if err != nil || string(raw) != "{}" || v != before+1 {
 		t.Fatalf("после сброса filters=%s v=%d err=%v; want {} и v=%d", raw, v, err, before+1)
+	}
+}
+
+// TestStaleMonthFilter — LO-05: сохранённый прошедший месяц читается как
+// «все будущие» и уходит из users.filters при следующем изменении.
+func TestStaleMonthFilter(t *testing.T) {
+	s := storetest.Open(t)
+	seedMarathonec(t, s)
+	api := fakeTelegram(t)
+	b := newTestBot(t, api, s)
+	ctx := context.Background()
+
+	_, v, err := b.update(ctx, 42, func(f userFilters) userFilters { f.Date = "m202608"; return f })
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.CountEvents(ctx, event.Filter{From: fixtureToday})
+	if err != nil || n == 0 {
+		t.Fatalf("CountEvents = %d, %v; want > 0", n, err)
+	}
+	page := "p:1:v" + strconv.Itoa(v)
+	c := press(t, b, api, "f:s")
+	if !strings.Contains(c.Form["text"], "Дата: все будущие") || c.button(t, "Показать "+strconv.Itoa(n)) != page {
+		t.Fatalf("сводка: текст %q кнопки %v; want «Дата: все будущие» и «Показать %d» %s", c.Form["text"], datas(t, c), n, page)
+	}
+	if c = press(t, b, api, page); !strings.HasPrefix(c.Form["text"], "Найдено") {
+		t.Fatalf("выдача: текст %q", c.Form["text"])
+	}
+	press(t, b, api, "f:t:road")
+	if raw, _, err := s.Filters(ctx, 42); err != nil || strings.Contains(string(raw), "m202608") {
+		t.Fatalf("после изменения filters=%s err=%v; want без m202608", raw, err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -366,16 +367,131 @@ func saveEventTx(ctx context.Context, tx pgx.Tx, e *event.Event) (bool, error) {
 	return changed, nil
 }
 
-// SaveEventFor saves the event built from one source_events row in a
-// single transaction, so a crash can't leave an event without its link
-// (T-03-10). An unlinked row (event_id NULL) gets a new event and
-// match_state = 'auto'; a linked row updates its event, keeping the status
-// stored in the database, because a source without an explicit status
-// must not reset cancelled/postponed. A row back from out_of_scope reuses
-// its event: match_state = 'auto', is_listed recomputed (LO-12).
-// Choosing fields by source priority when an event has several
-// source_events is Phase 5's job. A missing sourceEventID is ErrNotFound.
-func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.Event) (created, changed bool, err error) {
+// sourceFields — нормализованные поля одной записи источника в
+// source_events.fields (D-19): свои snake_case-ключи, а не имена полей Go,
+// поэтому переименование в event.Event не обнуляет старые строки; status,
+// id и служебные поля не пишутся. Неизвестные ключи при чтении игнорируются.
+type sourceFields struct {
+	Title           string          `json:"title"`
+	TitleNorm       string          `json:"title_norm"`
+	StartDate       string          `json:"start_date"`
+	EndDate         string          `json:"end_date,omitempty"`
+	StartTime       string          `json:"start_time,omitempty"`
+	Timezone        string          `json:"timezone,omitempty"`
+	CountryCode     string          `json:"country_code"`
+	Region          string          `json:"region,omitempty"`
+	City            string          `json:"city,omitempty"`
+	CityKey         string          `json:"city_key,omitempty"`
+	Address         string          `json:"address,omitempty"`
+	EventType       string          `json:"event_type"`
+	Description     string          `json:"description,omitempty"`
+	RegistrationURL string          `json:"registration_url,omitempty"`
+	Distances       []fieldDistance `json:"distances"`
+}
+
+type fieldDistance struct {
+	M     int    `json:"m"`
+	Label string `json:"label,omitempty"`
+}
+
+const fieldsDate = "2006-01-02"
+
+// marshalFields — JSON полей записи; e уже прошёл canonicalize.
+func marshalFields(e *event.Event) ([]byte, error) {
+	f := sourceFields{
+		Title: e.Title, TitleNorm: e.TitleNorm, StartDate: e.StartDate.Format(fieldsDate),
+		StartTime: e.StartTime, Timezone: e.Timezone, CountryCode: e.CountryCode,
+		Region: e.Region, City: e.City, CityKey: e.CityKey, Address: e.Address,
+		EventType: string(e.Type), Description: e.Description, RegistrationURL: e.RegistrationURL,
+		Distances: []fieldDistance{},
+	}
+	if e.EndDate != nil {
+		f.EndDate = e.EndDate.Format(fieldsDate)
+	}
+	for _, d := range normalizeDistances(e.Distances) {
+		f.Distances = append(f.Distances, fieldDistance{M: d.Meters, Label: d.Label})
+	}
+	return json.Marshal(f)
+}
+
+// unmarshalFields — обратное marshalFields.
+func unmarshalFields(raw []byte) (event.Event, error) {
+	var f sourceFields
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return event.Event{}, err
+	}
+	start, err := time.Parse(fieldsDate, f.StartDate)
+	if err != nil {
+		return event.Event{}, fmt.Errorf("start_date: %w", err)
+	}
+	e := event.Event{
+		Title: f.Title, TitleNorm: f.TitleNorm, StartDate: start,
+		StartTime: f.StartTime, Timezone: f.Timezone, CountryCode: f.CountryCode,
+		Region: f.Region, City: f.City, CityKey: f.CityKey, Address: f.Address,
+		Type: event.Type(f.EventType), Description: f.Description, RegistrationURL: f.RegistrationURL,
+	}
+	if f.EndDate != "" {
+		end, err := time.Parse(fieldsDate, f.EndDate)
+		if err != nil {
+			return event.Event{}, fmt.Errorf("end_date: %w", err)
+		}
+		e.EndDate = &end
+	}
+	for _, d := range f.Distances {
+		e.Distances = append(e.Distances, event.Distance{Meters: d.M, Label: d.Label})
+	}
+	return e, nil
+}
+
+// foldPartsTx — части для event.Fold: код источника и fields строк события
+// eventID с непустым fields, вне gone и out_of_scope (как listEventSQL);
+// строка ownID входит всегда — запись, которая пишется сейчас. Порядок по
+// id строки; приоритет источников применяет Fold.
+func foldPartsTx(ctx context.Context, tx queryRowerMulti, eventID, ownID int64) ([]event.Part, error) {
+	const q = `
+		SELECT s.code, se.fields FROM source_events se JOIN sources s ON s.id = se.source_id
+		WHERE se.event_id = $1 AND se.fields IS NOT NULL
+		  AND ((se.state <> 'gone' AND se.match_state <> 'out_of_scope') OR se.id = $2)
+		ORDER BY se.id`
+	rows, err := tx.Query(ctx, q, eventID, ownID)
+	if err != nil {
+		return nil, fmt.Errorf("fold parts: %w", err)
+	}
+	type row struct {
+		code   string
+		fields []byte
+	}
+	raw, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+		var x row
+		return x, r.Scan(&x.code, &x.fields)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fold parts: %w", err)
+	}
+	parts := make([]event.Part, 0, len(raw))
+	for _, x := range raw {
+		e, err := unmarshalFields(x.fields)
+		if err != nil {
+			return nil, fmt.Errorf("fold parts: event %d: %w", eventID, err)
+		}
+		parts = append(parts, event.Part{Source: x.code, Event: e})
+	}
+	return parts, nil
+}
+
+// SaveEventFor — единственная точка записи полей события из записи
+// источника (D-17.1): всё идёт через saveEventTx в одной транзакции, чтобы
+// сбой не оставил событие без связи (T-03-10). Поля записи сохраняются в
+// source_events.fields. Несвязанная строка (event_id NULL) получает новое
+// событие и match_state = 'auto'. Связанная обновляет своё событие: если у
+// него несколько записей с fields, поля события — event.Fold всех записей
+// по fold (D-07), иначе — поля этой записи; status берётся из БД, потому
+// что источник без явного статуса не должен сбрасывать cancelled/postponed.
+// Строка, вернувшаяся из out_of_scope, переиспользует событие:
+// match_state = 'auto', is_listed пересчитывается (LO-12).
+// Чужие строки читаются без блокировки: запись прогонов сериализует
+// LockDedup. Нет sourceEventID — ErrNotFound.
+func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.Event, fold event.FoldConfig) (created, changed bool, err error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return false, false, fmt.Errorf("save event for: begin: %w", err)
@@ -392,6 +508,17 @@ func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.
 		return false, false, fmt.Errorf("save event for: select source event: %w", err)
 	}
 
+	if err := canonicalize(e); err != nil {
+		return false, false, fmt.Errorf("save event for: %w", err)
+	}
+	fields, err := marshalFields(e)
+	if err != nil {
+		return false, false, fmt.Errorf("save event for: fields: %w", err)
+	}
+	if _, err := tx.Exec(ctx, "UPDATE source_events SET fields = $2 WHERE id = $1", sourceEventID, fields); err != nil {
+		return false, false, fmt.Errorf("save event for: fields: %w", err)
+	}
+
 	if eventID == nil {
 		e.ID = 0
 		if _, err := saveEventTx(ctx, tx, e); err != nil {
@@ -403,19 +530,29 @@ func (s *Store) SaveEventFor(ctx context.Context, sourceEventID int64, e *event.
 		}
 		created = true
 	} else {
-		e.ID = *eventID
+		id := *eventID
 		var status string
-		if err := tx.QueryRow(ctx, "SELECT status FROM events WHERE id = $1 FOR UPDATE", e.ID).Scan(&status); err != nil {
+		if err := tx.QueryRow(ctx, "SELECT status FROM events WHERE id = $1 FOR UPDATE", id).Scan(&status); err != nil {
 			return false, false, fmt.Errorf("save event for: select status: %w", err)
 		}
-		e.Status = event.Status(status)
-		if changed, err = saveEventTx(ctx, tx, e); err != nil {
-			return false, false, err
-		}
-		if matchState == string(event.MatchOutOfScope) {
+		back := matchState == string(event.MatchOutOfScope)
+		if back {
 			if _, err := tx.Exec(ctx, "UPDATE source_events SET match_state = 'auto' WHERE id = $1", sourceEventID); err != nil {
 				return false, false, fmt.Errorf("save event for: relink: %w", err)
 			}
+		}
+		parts, err := foldPartsTx(ctx, tx, id, sourceEventID)
+		if err != nil {
+			return false, false, fmt.Errorf("save event for: %w", err)
+		}
+		if len(parts) > 1 {
+			*e = event.Fold(parts, fold)
+		}
+		e.ID, e.Status = id, event.Status(status)
+		if changed, err = saveEventTx(ctx, tx, e); err != nil {
+			return false, false, err
+		}
+		if back {
 			if _, err := tx.Exec(ctx, listEventSQL, e.ID); err != nil {
 				return false, false, fmt.Errorf("save event for: is_listed: %w", err)
 			}

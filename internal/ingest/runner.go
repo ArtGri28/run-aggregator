@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"aggregator/internal/event"
 	"aggregator/internal/store"
 )
 
@@ -43,6 +44,14 @@ type Runner struct {
 	Now func() time.Time
 	// Log — nil означает slog.Default().
 	Log *slog.Logger
+	// PostApply — шаг после применения прогона к каталогу (дедупликация):
+	// вызывается после успешного Run (ok) и после Accept; nil — шага нет.
+	// Ошибка только в лог, статус прогона не меняется.
+	PostApply func(ctx context.Context) error
+	// Fold — приоритет источников и допуск дистанций для полей события с
+	// несколькими записями (D-07); нулевое — порядок записей и точные
+	// метры. Заполняет newRunner из настроек дедупликации.
+	Fold event.FoldConfig
 }
 
 // Result — итог и счётчики одного прогона или принятия.
@@ -147,7 +156,8 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 		}
 		return fail(reason)
 	}
-	prepared, st := Prepare(recs, now, src.Policy())
+	pol := src.Policy()
+	prepared, st := Prepare(recs, now, pol)
 	res.Rejected, res.Expired, res.OutOfScope = st.Rejected, st.Expired, st.OutOfScope
 	logRecords(log, st)
 
@@ -157,7 +167,12 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 		return res, fmt.Errorf("%s: %w", code, err)
 	}
 	base = baselineOf(rows)
-	res.Status, res.Reasons = Evaluate(st, base, r.thresholds())
+	t := r.thresholds()
+	if pol.OutOfScopeMax > 0 {
+		// Порог источника — только для его прогонов (Pitfall 5).
+		t.OutOfScopeMax = pol.OutOfScopeMax
+	}
+	res.Status, res.Reasons = Evaluate(st, base, t)
 
 	if res.Status == StatusSuspect {
 		// Каталог не трогается; записи сохраняются для принятия (D-06).
@@ -176,7 +191,21 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 		res, _ = fail(err.Error())
 		return res, fmt.Errorf("%s: %w", code, err)
 	}
-	return res, finish(store.RunFinish{Metrics: withCounts(st.Metrics(), res)})
+	if err := finish(store.RunFinish{Metrics: withCounts(st.Metrics(), res)}); err != nil {
+		return res, err
+	}
+	r.postApply(fctx, log)
+	return res, nil
+}
+
+// postApply выполняет PostApply, если он задан; ошибка — только в лог.
+func (r *Runner) postApply(ctx context.Context, log *slog.Logger) {
+	if r.PostApply == nil {
+		return
+	}
+	if err := r.PostApply(ctx); err != nil {
+		log.Warn("post-apply failed", "err", err)
+	}
 }
 
 // collect выполняет Fetch, сохраняет сырые ответы (до Parse — чтобы
@@ -289,9 +318,11 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 		return Result{}, fmt.Errorf("%s: прогон %d: %w", code, last.ID, err)
 	}
 	res.Status = StatusOK
-	r.logger().Info("run accepted", "source", code, "run_id", last.ID, "reason", last.Error,
+	log := r.logger().With("source", code, "run_id", last.ID)
+	log.Info("run accepted", "reason", last.Error,
 		"upserted", res.Upserted, "created", res.Created, "changed", res.Changed, "unchanged", res.Unchanged,
 		"out_of_scope", res.OutOfScope, "missing", res.Missing, "gone", res.Gone)
+	r.postApply(fctx, log)
 	return res, nil
 }
 
@@ -299,6 +330,13 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 // найденных строк, наблюдение. Ошибка откатывает всё: failed-прогон не
 // применяет ничего (MVP.md §5.4).
 func (r *Runner) write(ctx context.Context, tx *store.Store, sourceID, runID int64, recs []SourceEvent, prepared []Prepared, now time.Time, res *Result) error {
+	// Запись прогонов всех источников, проход дедупликации и слияния идут
+	// под одной блокировкой: без тупиков и гонки за поля общего события.
+	// ponytail: источники пишутся по очереди (секунды на прогон);
+	// блокировки по событиям — если это станет узким местом.
+	if err := tx.LockDedup(ctx); err != nil {
+		return fmt.Errorf("запись: %w", err)
+	}
 	if err := r.apply(ctx, tx, sourceID, runID, prepared, res); err != nil {
 		return fmt.Errorf("запись: %w", err)
 	}
@@ -336,7 +374,7 @@ func (r *Runner) apply(ctx context.Context, tx *store.Store, sourceID, runID int
 			}
 			continue
 		}
-		created, changed, err := tx.SaveEventFor(ctx, id, &p.Event)
+		created, changed, err := tx.SaveEventFor(ctx, id, &p.Event, r.Fold)
 		if err != nil {
 			return fmt.Errorf("external_id %s: %w", p.Source.ExternalID, err)
 		}
@@ -432,7 +470,7 @@ func (r *Runner) logFinished(ctx context.Context, log *slog.Logger, sourceID int
 		"out_of_scope", res.OutOfScope, "upserted", res.Upserted,
 		"created", res.Created, "changed", res.Changed, "unchanged", res.Unchanged,
 		"missing", res.Missing, "gone", res.Gone,
-		"date_out_of_range", st.DateOutOfRange, "unrecognized_region", st.UnrecognizedRegion,
+		"date_out_of_range", st.DateOutOfRange, "collapsed", st.Collapsed, "unrecognized_region", st.UnrecognizedRegion,
 		"baseline_runs", base.OKRuns, "baseline_median", median(base.Parsed),
 		"duration_ms", time.Since(began).Milliseconds(),
 		"consecutive_failures", h.ConsecutiveFailures)

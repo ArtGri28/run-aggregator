@@ -49,14 +49,16 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithCheckInitTimeout(15 * time.Second),
 		tgbot.WithErrorsHandler(func(err error) { b.logger().Error("telegram", "err", err) }),
 		tgbot.WithDefaultHandler(b.onDefault),
-		tgbot.WithMiddlewares(recoverMW, privateOnlyMW),
+		tgbot.WithMiddlewares(recoverMW, b.privateOnlyMW),
 		tgbot.WithAllowedUpdates(tgbot.AllowedUpdates{"message", "callback_query"}),
 		tgbot.WithMessageTextHandler("start", tgbot.MatchTypeCommandStartOnly, b.onStart),
 		tgbot.WithMessageTextHandler("runs", tgbot.MatchTypeCommandStartOnly, b.onRuns),
+		tgbot.WithMessageTextHandler("dupes", tgbot.MatchTypeCommandStartOnly, b.onDupes),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
 		tgbot.WithCallbackQueryDataHandler("p:", tgbot.MatchTypePrefix, b.cb(b.onList)),
 		tgbot.WithCallbackQueryDataHandler("e:", tgbot.MatchTypePrefix, b.cb(b.onCard)),
 		tgbot.WithCallbackQueryDataHandler("r:", tgbot.MatchTypePrefix, b.cb(b.onRun)),
+		tgbot.WithCallbackQueryDataHandler("d:", tgbot.MatchTypePrefix, b.cb(b.onDupe)),
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {
@@ -72,6 +74,10 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 func (b *Bot) Start(ctx context.Context) { b.api.Start(ctx) }
 
 func (b *Bot) isAdmin(id int64) bool { return b.admins[id] }
+
+// Loc — часовой пояс бота (Europe/Moscow): единственный источник для /runs,
+// алертов и сводки дублей (IN-08).
+func (b *Bot) Loc() *time.Location { return b.loc }
 
 // logger — логгер бота с маскированием токена. Библиотека сама заменяет токен
 // в URL сетевой ошибки; здесь — вторая линия для любых других текстов.
@@ -160,11 +166,15 @@ func recoverMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 	}
 }
 
-// privateOnlyMW пропускает только апдейты из личных чатов; остальные
-// молча отбрасываются, без ответа и без записи в users.
-func privateOnlyMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
+// privateOnlyMW пропускает только апдейты из личных чатов. Callback из
+// другого чата получает пустой answerCallbackQuery (IN-04), сообщения
+// отбрасываются молча; обработчик не вызывается, users не пишется.
+func (b *Bot) privateOnlyMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 	return func(ctx context.Context, api *tgbot.Bot, u *models.Update) {
 		if !isPrivate(u) {
+			if u.CallbackQuery != nil {
+				b.answer(ctx, u.CallbackQuery, "")
+			}
 			return
 		}
 		next(ctx, api, u)
@@ -189,7 +199,9 @@ func isPrivate(u *models.Update) bool {
 
 // cb оборачивает обработчик callback: разбор data (ошибка — «кнопка
 // устарела» без вызова fn) и ровно один ответ в defer — в том числе при
-// панике fn. fn возвращает текст уведомления ("" — без уведомления).
+// панике fn. fn возвращает текст уведомления ("" — без уведомления) и
+// получает ctx с коротким пределом ожидания 429 (callbackRetryWait, LO-03),
+// чтобы ответ ушёл вовремя; сам ответ — с исходным ctx.
 func (b *Bot) cb(fn func(ctx context.Context, q *models.CallbackQuery, c callback) string) tgbot.HandlerFunc {
 	return func(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		q := u.CallbackQuery
@@ -204,13 +216,13 @@ func (b *Bot) cb(fn func(ctx context.Context, q *models.CallbackQuery, c callbac
 			return
 		}
 		notice = "" // при панике fn ответ уйдёт без текста
-		notice = fn(ctx, q, c)
+		notice = fn(context.WithValue(ctx, retryWaitKey{}, callbackRetryWait), q, c)
 	}
 }
 
 // cbPrefix — вид callback для логов: только буква до «:» из известных.
 func cbPrefix(data string) string {
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 'p' || data[0] == 'e' || data[0] == 'r') {
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 'p' || data[0] == 'e' || data[0] == 'r' || data[0] == 'd') {
 		return data[:1]
 	}
 	return "?"

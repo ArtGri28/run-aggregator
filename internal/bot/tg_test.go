@@ -12,11 +12,12 @@ import (
 	tgbot "github.com/go-telegram/bot"
 )
 
-// shortRetry уменьшает предел ожидания 429 до конца теста.
+// shortRetry уменьшает предел ожидания 429 до 2 с до конца теста:
+// retry_after 1 (минимальный) ещё повторяется, 120 — уже нет.
 func shortRetry(t *testing.T) {
 	t.Helper()
 	old := maxRetryWait
-	maxRetryWait = 10 * time.Millisecond
+	maxRetryWait = 2 * time.Second
 	t.Cleanup(func() { maxRetryWait = old })
 }
 
@@ -111,7 +112,7 @@ func TestRateLimitRetry(t *testing.T) {
 		}
 	})
 
-	t.Run("ожидание не длиннее предела", func(t *testing.T) {
+	t.Run("retry_after больше предела — без ожидания и повтора", func(t *testing.T) {
 		api := fakeTelegram(t, only("editMessageText", func(n int) string {
 			if n == 1 {
 				return apiErr(429, "Too Many Requests: retry after 120", 120)
@@ -120,11 +121,14 @@ func TestRateLimitRetry(t *testing.T) {
 		}))
 		b := newTestBot(t, api, nil)
 		start := time.Now()
-		if err := b.show(context.Background(), q, sc); err != nil {
-			t.Fatalf("show: %v", err)
+		if err := b.show(context.Background(), q, sc); err == nil {
+			t.Fatal("show: want 429 error")
 		}
-		if d := time.Since(start); d > 2*time.Second {
+		if d := time.Since(start); d > time.Second {
 			t.Fatalf("show waited %v with maxRetryWait %v", d, maxRetryWait)
+		}
+		if e, m := len(api.of("editMessageText")), len(api.of("sendMessage")); e != 1 || m != 0 {
+			t.Fatalf("editMessageText = %d, sendMessage = %d; want 1 and 0", e, m)
 		}
 	})
 
@@ -160,6 +164,49 @@ func TestRateLimitRetry(t *testing.T) {
 			t.Fatalf("show waited %v despite cancelled ctx", d)
 		}
 	})
+}
+
+// TestCallbackRetryLimit — LO-03: внутри b.cb предел ожидания 429 —
+// callbackRetryWait, ответ на callback не ждёт долгий retry_after.
+func TestCallbackRetryLimit(t *testing.T) {
+	h := func(b *Bot) tgbot.HandlerFunc {
+		return b.cb(func(ctx context.Context, q *models.CallbackQuery, _ callback) string {
+			_ = b.show(ctx, q, screen{text: "x"})
+			return "n"
+		})
+	}
+	cases := []struct {
+		name       string
+		retryAfter int
+		edits      int
+		maxDur     time.Duration
+	}{
+		{"долгий 429 — без ожидания", 10, 1, 2 * time.Second},
+		{"короткий 429 — повтор", 1, 2, 5 * time.Second},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			api := fakeTelegram(t, only("editMessageText", func(n int) string {
+				if n == 1 {
+					return apiErr(429, fmt.Sprintf("Too Many Requests: retry after %d", c.retryAfter), c.retryAfter)
+				}
+				return ""
+			}))
+			b := newTestBot(t, api, nil)
+			start := time.Now()
+			h(b)(context.Background(), b.api, cbUpdate(42, 7, "p:1:v1"))
+			if d := time.Since(start); d > c.maxDur {
+				t.Fatalf("callback took %v, want < %v", d, c.maxDur)
+			}
+			if n := len(api.of("editMessageText")); n != c.edits {
+				t.Fatalf("editMessageText = %d, want %d", n, c.edits)
+			}
+			ans := api.of("answerCallbackQuery")
+			if len(ans) != 1 || ans[0].Form["text"] != "n" {
+				t.Fatalf("answerCallbackQuery = %+v, want one with text «n»", ans)
+			}
+		})
+	}
 }
 
 func TestEditNotModified(t *testing.T) {

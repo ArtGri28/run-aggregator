@@ -61,8 +61,16 @@ const (
 	kindOther
 )
 
-// maxRetryWait — предел ожидания retry_after перед единственным повтором.
+// maxRetryWait — предел ожидания retry_after перед единственным повтором;
+// retry_after больше предела не ждём и не повторяем.
 var maxRetryWait = 30 * time.Second
+
+// callbackRetryWait — предел внутри обработчика callback: ответа на callback
+// ждёт обработчик, поэтому долгий 429 не ждём (LO-03). cb передаёт его в ctx.
+var callbackRetryWait = 5 * time.Second
+
+// retryWaitKey — ключ ctx с пределом ожидания (time.Duration) для withRetry.
+type retryWaitKey struct{}
 
 // classify — единственное место разбора ошибок Bot API. Для 429 возвращает
 // retry_after. Библиотечная проверка 429 не используется: она приводит тип
@@ -84,15 +92,24 @@ func classify(err error) (errKind, time.Duration) {
 	return kindOther, 0
 }
 
-// withRetry вызывает fn; при 429 ждёт retry_after (не дольше maxRetryWait,
-// с учётом ctx) и вызывает ещё раз. Повтор один.
+// withRetry вызывает fn; при 429 ждёт retry_after (с учётом ctx) и вызывает
+// ещё раз. Повтор один. retry_after больше предела (maxRetryWait или значение
+// retryWaitKey из ctx) — сразу исходная ошибка: повтор раньше срока всё равно
+// получил бы 429.
 func withRetry(ctx context.Context, fn func() error) error {
 	err := fn()
 	kind, wait := classify(err)
 	if kind != kindRateLimited {
 		return err
 	}
-	t := time.NewTimer(min(wait, maxRetryWait))
+	limit := maxRetryWait
+	if d, ok := ctx.Value(retryWaitKey{}).(time.Duration); ok {
+		limit = d
+	}
+	if wait > limit {
+		return err
+	}
+	t := time.NewTimer(wait)
 	defer t.Stop()
 	select {
 	case <-ctx.Done():

@@ -21,8 +21,10 @@ import (
 
 	"aggregator/internal/alert"
 	"aggregator/internal/bot"
+	"aggregator/internal/dedup"
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/marathonec"
+	"aggregator/internal/ingest/sources/probeg"
 	"aggregator/internal/store"
 )
 
@@ -144,13 +146,14 @@ func openStore(ctx context.Context) (*store.Store, error) {
 // newSources — единственное место регистрации источников: пакет ingest их
 // не импортирует. f — сетевой загрузчик (боту не нужен: nil).
 func newSources(f *ingest.Fetcher) []ingest.Source {
-	return []ingest.Source{marathonec.New(f)}
+	return []ingest.Source{marathonec.New(f), probeg.New(f)}
 }
 
-// newRunner собирает Runner из настроек наблюдения. Worker и bot строят его
-// одной функцией: принятие из бота должно наблюдать с теми же
-// GoneAfterRuns/GoneAfter, что и worker (Pitfall 11).
-func newRunner(s *store.Store, cfg ingest.Config) *ingest.Runner {
+// newRunner собирает Runner из настроек наблюдения и дедупликации. Worker и
+// bot строят его одной функцией: принятие из бота должно наблюдать с теми же
+// GoneAfterRuns/GoneAfter, что и worker (Pitfall 11), и запускать тот же
+// проход дедупликации с той же конфигурацией (принятие кнопкой — тоже).
+func newRunner(s *store.Store, cfg ingest.Config, dcfg dedup.Config) *ingest.Runner {
 	return &ingest.Runner{
 		Store:         s,
 		Raw:           &ingest.RawStore{Dir: cfg.RawDir, TTL: cfg.RawTTL, Keep: 2},
@@ -160,12 +163,14 @@ func newRunner(s *store.Store, cfg ingest.Config) *ingest.Runner {
 		GoneAfter:     cfg.GoneAfter,
 		Now:           time.Now,
 		Log:           slog.Default(),
+		Fold:          dcfg.Fold(),
+		PostApply:     func(ctx context.Context) error { return dedup.Pass(ctx, s, dcfg) },
 	}
 }
 
-// runBot запускает Telegram-бота (long polling) и цикл алертов до отмены
-// ctx. Конфигурация читается первой: ошибки токена, ADMIN_TG_IDS и настроек
-// наблюдения видны без БД и сети. OWNER_CONTACT боту не нужен: к сайтам он
+// runBot запускает Telegram-бота (long polling), цикл алертов и сводку
+// дублей до отмены ctx. Конфигурация читается первой: ошибки токена,
+// ADMIN_TG_IDS, настроек наблюдения и DEDUP_* видны без БД и сети. OWNER_CONTACT боту не нужен: к сайтам он
 // не ходит, принятие прогона использует сохранённый снимок.
 func runBot(ctx context.Context) error {
 	cfg, err := bot.LoadConfig()
@@ -173,6 +178,10 @@ func runBot(ctx context.Context) error {
 		return err
 	}
 	icfg, err := ingest.LoadConfig(false)
+	if err != nil {
+		return err
+	}
+	dcfg, err := dedup.LoadConfig()
 	if err != nil {
 		return err
 	}
@@ -185,18 +194,20 @@ func runBot(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	b.Runner, b.Sources = newRunner(s, icfg), newSources(nil)
+	b.Runner, b.Sources = newRunner(s, icfg, dcfg), newSources(nil)
 
-	slog.Info("started", "subcommand", "bot", "admins", len(cfg.Admins))
+	slog.Info("started", "subcommand", "bot", "admins", len(cfg.Admins), "dedup_auto_merge", dcfg.AutoMerge)
 	if len(cfg.Admins) == 0 {
-		slog.Warn("ADMIN_TG_IDS пуст: админ-функции и алерты отключены")
+		slog.Warn("ADMIN_TG_IDS пуст: админ-функции, алерты и сводка дублей отключены")
 	}
-	loop := &alert.Loop{Store: s, Admins: cfg.Admins, Send: b.SendAlert, Log: slog.Default()}
+	loop := &alert.Loop{Store: s, Admins: cfg.Admins, Send: b.SendAlert, Loc: b.Loc(), Log: slog.Default()}
+	digest := &dedup.DigestLoop{Store: s, Admins: cfg.Admins, Send: b.SendDupesDigest, Loc: b.Loc(), At: dcfg.DigestAt, Log: slog.Default()}
 	var wg sync.WaitGroup
 	wg.Go(func() { loop.Run(ctx) })
+	wg.Go(func() { digest.Run(ctx) })
 	b.Start(ctx)
 	slog.Info("stopping", "subcommand", "bot")
-	wg.Wait() // store закрывается только после цикла алертов
+	wg.Wait() // store закрывается только после циклов алертов и сводки
 	return nil
 }
 
@@ -227,6 +238,10 @@ func runWorker(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	dcfg, err := dedup.LoadConfig()
+	if err != nil {
+		return err
+	}
 	fetcher := ingest.NewFetcher(cfg.Fetch)
 	sources := newSources(fetcher)
 	var codes []string
@@ -246,11 +261,11 @@ func runWorker(ctx context.Context, args []string) error {
 		return err
 	}
 	defer s.Close()
-	runner := newRunner(s, cfg)
+	runner := newRunner(s, cfg, dcfg)
 
 	switch cmd {
 	case "":
-		slog.Info("started", "subcommand", "worker", "sources", codes)
+		slog.Info("started", "subcommand", "worker", "sources", codes, "dedup_auto_merge", dcfg.AutoMerge)
 		runner.Loop(ctx, sources, ingest.Schedule{Interval: cfg.Interval, Jitter: cfg.Jitter})
 		slog.Info("stopping", "subcommand", "worker")
 		return nil

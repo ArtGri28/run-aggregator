@@ -46,6 +46,9 @@ type Stats struct {
 	Rejected int
 	// Expired — прошедшие даты: вне каталога, но не rejected (D-11).
 	Expired int
+	// Collapsed — записи серии (равный непустой GroupKey), не ближайшие
+	// по дате: в выход не попадают (D-03, DDP-05).
+	Collapsed int `json:",omitempty"`
 	// DateOutOfRange — даты позже сегодня+3 года (входят в Rejected).
 	DateOutOfRange int
 	OutOfScope     int
@@ -67,6 +70,11 @@ type Stats struct {
 // Prepare выполняет Validate и Normalize (MVP.md §5.2, §6) над всеми
 // записями прогона. Чистая функция: время — только из now (в прогоне —
 // момент старта). Порядок выхода совпадает с порядком входа.
+//
+// Серии (D-03, DDP-05): из записей с равным непустым GroupKey остаётся
+// одна — с ближайшей датой не раньше today−1, при равенстве первая по
+// входу; остальные считаются в Collapsed. Записи без GroupKey не
+// сворачиваются никогда. Parsed = Valid + Rejected + Expired + Collapsed.
 func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) {
 	st := Stats{Parsed: len(recs), Rejects: map[string]ReasonStat{}, Empty: map[string]int{}, Unrecognized: map[string]int{}}
 	y, m, d := now.UTC().Date()
@@ -83,33 +91,58 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 		st.Rejected++
 	}
 
+	// Победитель серии: индекс записи с ближайшей датой среди записей,
+	// которые пройдут проверки цикла ниже (те же check и дубль id).
+	winner := map[string]int{}
+	winDate := map[string]time.Time{}
 	seen := make(map[string]bool, len(recs))
+	for i, rec := range recs {
+		dup := rec.ExternalID != "" && seen[rec.ExternalID]
+		seen[rec.ExternalID] = true
+		if dup || rec.GroupKey == "" {
+			continue
+		}
+		date, reason, expired := check(rec, now, minDate, maxDate)
+		if reason != "" || expired {
+			continue
+		}
+		if d, ok := winDate[rec.GroupKey]; !ok || date.Before(d) {
+			winner[rec.GroupKey], winDate[rec.GroupKey] = i, date
+		}
+	}
+
+	clear(seen)
 	out := make([]Prepared, 0, len(recs))
-	for _, rec := range recs {
+	for i, rec := range recs {
 		if rec.ExternalID != "" && seen[rec.ExternalID] {
 			reject(rec, reasonDuplicateID)
 			continue
 		}
 		seen[rec.ExternalID] = true
-		title := strings.TrimSpace(rec.Title)
-		date, dateOK := normalize.Date(rec.Date, now)
+		date, reason, expired := check(rec, now, minDate, maxDate)
 		switch {
-		case rec.ExternalID == "":
-			reject(rec, reasonNoExternalID)
-			continue
-		case title == "":
-			reject(rec, reasonNoTitle)
-			continue
-		case !dateOK:
-			reject(rec, reasonBadDate)
-			continue
-		case date.Before(minDate):
+		case expired:
 			st.Expired++
 			continue
-		case date.After(maxDate):
-			st.DateOutOfRange++
-			reject(rec, reasonDateRange)
+		case reason != "":
+			if reason == reasonDateRange {
+				st.DateOutOfRange++
+			}
+			reject(rec, reason)
 			continue
+		}
+		// Не ближайшая запись серии — до подсчёта city/region/distances/
+		// country, чтобы счётчики считали только оставшиеся записи.
+		if rec.GroupKey != "" && winner[rec.GroupKey] != i {
+			st.Collapsed++
+			continue
+		}
+		title := strings.TrimSpace(rec.Title)
+		// Дата окончания: неразборчивая или не позже старта — без неё,
+		// запись не отбраковывается.
+		var endDate *time.Time
+		if end, ok := normalize.Date(rec.EndDate, now); ok && end.After(date) {
+			endDate = &end
 		}
 
 		city := normalize.City(rec.City)
@@ -173,6 +206,7 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 				Title:           title,
 				TitleNorm:       normalize.TitleNorm(title),
 				StartDate:       date,
+				EndDate:         endDate,
 				CountryCode:     code,
 				Region:          region,
 				City:            city,
@@ -188,6 +222,26 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 	}
 	st.Valid = len(out)
 	return out, st
+}
+
+// check — проверки записи в Prepare, кроме дубля external_id: дата и
+// причина отбраковки ("" — запись валидна); expired — прошедшая дата
+// (вне каталога, но не отбраковка).
+func check(rec SourceEvent, now, minDate, maxDate time.Time) (date time.Time, reason string, expired bool) {
+	date, dateOK := normalize.Date(rec.Date, now)
+	switch {
+	case rec.ExternalID == "":
+		return date, reasonNoExternalID, false
+	case strings.TrimSpace(rec.Title) == "":
+		return date, reasonNoTitle, false
+	case !dateOK:
+		return date, reasonBadDate, false
+	case date.Before(minDate):
+		return date, "", true
+	case date.After(maxDate):
+		return date, reasonDateRange, false
+	}
+	return date, "", false
 }
 
 // Metrics — метрики прогона для ingest_runs.metrics: счётчики и доли
@@ -208,8 +262,9 @@ func (s Stats) Metrics() []byte {
 		MultiRegion        int   `json:"multi_region"`
 		DroppedDistances   int   `json:"dropped_distances"`
 		Empty              empty `json:"empty"`
+		Collapsed          int   `json:"collapsed,omitempty"`
 	}{s.Valid, s.Expired, s.DateOutOfRange, s.OutOfScope, s.UnrecognizedRegion, s.MultiRegion, s.DroppedDistances,
-		empty{s.emptyShare("city"), s.emptyShare("region"), s.emptyShare("distances")}}
+		empty{s.emptyShare("city"), s.emptyShare("region"), s.emptyShare("distances")}, s.Collapsed}
 	// Marshal структуры из чисел не возвращает ошибку.
 	b, _ := json.Marshal(m)
 	return b

@@ -4,7 +4,7 @@ milestone: v1.27.0
 current_phase: 5
 current_phase_name: multiple-sources-deduplication
 status: executing
-stopped_at: Phase 5 context gathered
+stopped_at: 05-07 complete; waiting owner decision on 05-08
 last_updated: "2026-10-01T05:25:15.560Z"
 last_activity: 2026-09-30
 last_activity_desc: Phase 4 complete, transitioned to Phase 5
@@ -13,7 +13,7 @@ progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 28
-  completed_plans: 20
+  completed_plans: 27
 ---
 
 # Project State
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 
 ## Current Position
 
-Phase: 5 (multiple-sources-deduplication) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
+Phase: 5 (multiple-sources-deduplication) — EXECUTING
+Plan: 05-01…05-07 выполнены (рабочее дерево, не закоммичено); 05-08 (выкат) — не начат, ждёт решения владельца
+Status: Ожидание решения по 05-08; DEDUP_AUTO_MERGE=false; решения D-18…D-20 в 05-CONTEXT.md
 Last activity: 2026-09-30 — Phase 4 complete, transitioned to Phase 5
 
 Progress: [███████░░░] 67%
@@ -133,5 +133,5 @@ Items acknowledged and deferred at milestone close, most recent first:
 ## Session Continuity
 
 Last session: 2026-09-30T19:07:03.431Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-multiple-sources-deduplication/05-CONTEXT.md
+Stopped at: 05-07 complete — owner decides on 05-08
+Resume file: .planning/phases/05-multiple-sources-deduplication/05-07-SUMMARY.md

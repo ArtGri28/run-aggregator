@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -152,5 +153,46 @@ func TestEventSources(t *testing.T) {
 	}
 	if got, err := s.EventSources(ctx, empty); err != nil || len(got) != 0 {
 		t.Fatalf("EventSources without sources = %+v, %v; want empty", got, err)
+	}
+}
+
+func TestRootEventID(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	a := listEvent(t, s, "2026-10-01", "Москва", "moscow", event.TypeRoad, 5000)
+	b := listEvent(t, s, "2026-10-02", "Москва", "moscow", event.TypeRoad, 5000)
+	c := listEvent(t, s, "2026-10-03", "Москва", "moscow", event.TypeRoad, 5000)
+	d := listEvent(t, s, "2026-10-04", "Москва", "moscow", event.TypeRoad, 5000)
+	e := listEvent(t, s, "2026-10-05", "Москва", "moscow", event.TypeRoad, 5000)
+
+	root := func(id int64) int64 {
+		t.Helper()
+		got, err := s.RootEventID(ctx, id)
+		if err != nil {
+			t.Fatalf("RootEventID(%d): %v", id, err)
+		}
+		return got
+	}
+	if got := root(a); got != a {
+		t.Fatalf("RootEventID(root) = %d, want %d", got, a)
+	}
+	exec(t, "UPDATE events SET merged_into_id = $1 WHERE id = $2", a, b)
+	if got := root(b); got != a {
+		t.Fatalf("RootEventID(b) = %d, want %d", got, a)
+	}
+	// Цепочка без схлопывания: c → b → a.
+	exec(t, "UPDATE events SET merged_into_id = $1 WHERE id = $2", b, c)
+	if got := root(c); got != a {
+		t.Fatalf("RootEventID(c) = %d, want %d", got, a)
+	}
+	if _, err := s.RootEventID(ctx, 999999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("RootEventID(missing) err = %v, want ErrNotFound", err)
+	}
+	// Цикл d → e → d: ошибка, не ErrNotFound и не зависание.
+	exec(t, "UPDATE events SET merged_into_id = $1 WHERE id = $2", e, d)
+	exec(t, "UPDATE events SET merged_into_id = $1 WHERE id = $2", d, e)
+	if _, err := s.RootEventID(ctx, d); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatalf("RootEventID(cycle) err = %v, want non-ErrNotFound error", err)
 	}
 }

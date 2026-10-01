@@ -5,6 +5,7 @@ package alert
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -15,10 +16,6 @@ import (
 
 // remindEvery — как часто напоминать, пока плохое состояние держится.
 const remindEvery = 24 * time.Hour
-
-// msk — Москва без перехода на летнее время: фиксированная зона не
-// зависит от tzdata.
-var msk = time.FixedZone("MSK", 3*3600)
 
 // Loop опрашивает последние завершённые прогоны источников и шлёт
 // администраторам сообщение при переходе в failed или suspect.
@@ -33,6 +30,9 @@ type Loop struct {
 	Now   func() time.Time
 	Log   *slog.Logger
 	Every time.Duration
+	// Loc — часовой пояс времени в тексте; бот передаёт свой (Europe/Moscow),
+	// nil — UTC.
+	Loc *time.Location
 }
 
 type action int
@@ -71,13 +71,13 @@ func decide(run store.FinishedRun, st *store.AlertState, now time.Time) action {
 // message — обычный текст без разметки (в причинах бывают «<» и «>»).
 // failures — число сбоев подряд (для failed). acceptRunID != 0 только у
 // suspect со снимком (D-15).
-func message(run store.FinishedRun, failures int, reminder bool) (text string, acceptRunID int64) {
+func message(run store.FinishedRun, failures int, reminder bool, loc *time.Location) (text string, acceptRunID int64) {
 	var b strings.Builder
 	if reminder {
 		b.WriteString("Напоминание: ")
 	}
 	fmt.Fprintf(&b, "Источник %s: %s (прогон %d), завершён %s МСК\n",
-		run.Code, run.Status, run.RunID, run.FinishedAt.In(msk).Format("02.01 15:04"))
+		run.Code, run.Status, run.RunID, run.FinishedAt.In(loc).Format("02.01 15:04"))
 	reason := run.Error
 	if reason == "" {
 		reason = "не указана"
@@ -103,6 +103,13 @@ func (l *Loop) now() time.Time {
 	return time.Now()
 }
 
+func (l *Loop) loc() *time.Location {
+	if l.Loc != nil {
+		return l.Loc
+	}
+	return time.UTC
+}
+
 func (l *Loop) log() *slog.Logger {
 	if l.Log != nil {
 		return l.Log
@@ -112,7 +119,8 @@ func (l *Loop) log() *slog.Logger {
 
 // Tick один раз сверяет прогоны с source_alerts. Состояние пишется только
 // после успешной отправки хотя бы одному администратору (Pitfall 14):
-// иначе следующий тик повторяет попытку.
+// иначе следующий тик повторяет попытку. Ошибка по одному источнику не
+// останавливает обход остальных (IN-03): все ошибки возвращаются вместе.
 func (l *Loop) Tick(ctx context.Context) error {
 	if len(l.Admins) == 0 {
 		return nil
@@ -126,6 +134,7 @@ func (l *Loop) Tick(ctx context.Context) error {
 		return err
 	}
 	now := l.now()
+	var errs []error
 	for _, run := range runs {
 		var st *store.AlertState
 		if cur, ok := states[run.SourceID]; ok {
@@ -135,18 +144,19 @@ func (l *Loop) Tick(ctx context.Context) error {
 		switch act {
 		case reset:
 			if err := l.Store.ClearAlertState(ctx, run.SourceID); err != nil {
-				return err
+				errs = append(errs, err)
 			}
 		case send, remind:
 			failures := 0
 			if run.Status == "failed" {
 				h, err := l.Store.SourceHealth(ctx, run.SourceID)
 				if err != nil {
-					return err
+					errs = append(errs, err)
+					continue
 				}
 				failures = h.ConsecutiveFailures
 			}
-			text, acceptRunID := message(run, failures, act == remind)
+			text, acceptRunID := message(run, failures, act == remind, l.loc())
 			if !l.sendAll(ctx, run.Code, text, acceptRunID) {
 				continue
 			}
@@ -155,11 +165,11 @@ func (l *Loop) Tick(ctx context.Context) error {
 				next.NotifiedAt = st.NotifiedAt
 			}
 			if err := l.Store.SaveAlertState(ctx, next); err != nil {
-				return err
+				errs = append(errs, err)
 			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // sendAll шлёт сообщение каждому администратору; true, если дошло хотя бы

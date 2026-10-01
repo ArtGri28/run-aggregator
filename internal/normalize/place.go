@@ -10,12 +10,18 @@ import (
 var parensRe = regexp.MustCompile(`\([^)]*\)`)
 
 // cityPrefixes are stripped case-insensitively from the start of a city
-// name, longest first ("г.о. " before "г."). A bare "г" is kept
-// (Гатчина): only "г." or "г " is a prefix; "С.-Петербург" is untouched.
-var cityPrefixes = []string{"городской округ ", "г.о. ", "город ", "пос. ", "п. ", "д. ", "с. ", "г.", "г "}
+// name, longest first in bytes ("г.о. " before "г.", "п.г.т." before
+// "п. "); TestCityPrefixesOrder checks the order. A bare "г" is kept
+// (Гатчина): only "г." or "г " is a prefix; "С.-Петербург", "Аулово",
+// "Ставрополь" are untouched. "c. " is a Latin "c" typed for "с.".
+var cityPrefixes = []string{
+	"городской округ ", "посёлок ", "поселок ", "станица ", "город ", "хутор ", "ст-ца ",
+	"п.г.т.", "пос. ", "г.о. ", "пгт.", "аул ", "п. ", "д. ", "с. ", "г.", "г ", "c. ",
+}
 
 // City cleans a display city name: drops parenthesised parts and a
-// leading settlement prefix ("г.", "г.о.", "п.", "с.", "д.", "город"),
+// leading settlement prefix ("г.", "г.о.", "п.", "пгт.", "п.г.т.",
+// "посёлок", "с.", "д.", "станица", "ст-ца", "хутор", "аул", "город"),
 // collapses spaces. Case and "ё" are kept.
 func City(s string) string {
 	s = collapseSpaces(parensRe.ReplaceAllString(s, " "))
@@ -72,12 +78,12 @@ var cyrillicToLatin = map[rune]string{
 }
 
 // maxCityKeyBytes keeps city_key inside Telegram callback_data (Phase 4)
-// and the events.city_key CHECK.
-const maxCityKeyBytes = 64
+// and the events.city_key CHECK (64): бот принимает ≤ 60 = 64 − len("f:c:").
+const maxCityKeyBytes = 60
 
 // CityKey returns the ASCII search slug of a city: a dictionary synonym
 // or a transliteration. The result is "" or matches
-// ^[a-z0-9]+(-[a-z0-9]+)*$ and is at most 64 bytes.
+// ^[a-z0-9]+(-[a-z0-9]+)*$ and is at most 60 bytes.
 func CityKey(s string) string {
 	key := cityLookupKey(s)
 	if canon, ok := citySynonyms[key]; ok {

@@ -37,18 +37,19 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 		b.logger().Error("filters", "err", err)
 		return errNotice
 	}
-	f := loadFilters(raw)
+	today := b.today()
+	f := loadFilters(raw, today)
 	page, notice := c.Page, ""
 	if c.V != v {
 		page, notice = 1, "Фильтры изменились — показываю актуальную выдачу"
 	}
-	flt := f.query(b.today())
+	flt := f.query(today)
 	total, err := b.Store.CountEvents(ctx, flt)
 	if err != nil {
 		b.logger().Error("count", "err", err)
 		return errNotice
 	}
-	sc := emptyScreen(f, v)
+	sc := emptyScreen(f)
 	if total > 0 {
 		page = min(page, (total+pageSize-1)/pageSize)
 		items, err := b.Store.ListEvents(ctx, flt, pageSize, (page-1)*pageSize)
@@ -113,14 +114,23 @@ func listScreen(items []store.ListItem, total, page, v int) screen {
 	return screen{text: sb.String(), kb: keyboard(cards, nav, btn("Фильтры", back))}
 }
 
-// onCard показывает карточку события (e:<id>:<стр>:v<N>). Скрытое и слитое
-// событие по старой кнопке недоступно (BOT-06); отменённое и перенесённое
+// onCard показывает карточку события (e:<id>:<стр>:v<N>). Слитое событие
+// открывает карточку корня (D-16, корень — только через store.RootEventID);
+// скрытое и несуществующее недоступно (BOT-06); отменённое и перенесённое
 // показывается с пометкой.
 func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) string {
 	if c.Kind != cbCard {
 		return staleNotice
 	}
-	e, err := b.Store.GetEvent(ctx, c.ID)
+	root, err := b.Store.RootEventID(ctx, c.ID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		b.logger().Error("root event", "err", err)
+		return errNotice
+	}
+	var e event.Event
+	if err == nil {
+		e, err = b.Store.GetEvent(ctx, root)
+	}
 	var sc screen
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -128,6 +138,7 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	case err != nil:
 		b.logger().Error("get event", "err", err)
 		return errNotice
+	// Слитый корень — страховка от гонки со слиянием между запросами.
 	case !e.IsListed || e.MergedIntoID != nil:
 		sc = goneScreen(c.Page, c.V)
 	default:
@@ -153,7 +164,7 @@ var monthsGen = [...]string{"января", "февраля", "марта", "а�
 	"июля", "августа", "сентября", "октября", "ноября", "декабря"}
 
 // sourceNames — подпись источника по коду; неизвестный код показывается как есть.
-var sourceNames = map[string]string{"marathonec": "Марафонец"}
+var sourceNames = map[string]string{"marathonec": "Марафонец", "probeg": "ПроБЕГ"}
 
 func sourceName(code string) string {
 	if n, ok := sourceNames[code]; ok {

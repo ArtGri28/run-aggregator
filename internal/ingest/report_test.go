@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -59,5 +60,40 @@ func TestSanityReport(t *testing.T) {
 	}
 	if strings.Contains(out, "21,1 км") {
 		t.Error("distances ≤ 100 km must not be listed")
+	}
+}
+
+func TestSanityReportCountrySeries(t *testing.T) {
+	recs := []SourceEvent{
+		{ExternalID: "1", Country: "Россия", City: "Сочи"},
+		{ExternalID: "2", Region: "Беларусь", City: "Гродно"},
+		{ExternalID: "3", City: "Мариуполь"},
+	}
+	for i := range 3 {
+		recs = append(recs, SourceEvent{ExternalID: fmt.Sprint("b", i), GroupKey: "series:5 верст бийск", City: "Бийск", Country: "Россия"})
+	}
+	recs = append(recs, SourceEvent{ExternalID: "p", GroupKey: "series:паркран"})
+	at := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	var a, b bytes.Buffer
+	if err := SanityReport(&a, "probeg", 1, at, recs); err != nil {
+		t.Fatal(err)
+	}
+	if err := SanityReport(&b, "probeg", 1, at, recs); err != nil {
+		t.Fatal(err)
+	}
+	out := a.String()
+	if out != b.String() {
+		t.Fatal("report is not deterministic")
+	}
+	areas := strings.Index(out, "## Области")
+	for _, s := range []string{
+		"## Страна и серии",
+		"Страна: RU — 4 | иностранная — 1 | не указана — 2",
+		"Не указана, города (первые 10): Мариуполь\n",
+		"Серии (group_key): ключей — 2 | записей — 4 | ключей без города — 1",
+	} {
+		if i := strings.Index(out, s); i < 0 || i > areas {
+			t.Errorf("report has no %q before «## Области»:\n%s", s, out)
+		}
 	}
 }

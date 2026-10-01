@@ -1,0 +1,1379 @@
+[
+  {
+    "id": "c01",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90435"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83327"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Черноисточинск «Трейл «Уральский вулкан: гора Липовая»» | B: 03.10 Черноисточинск «Трейл «Гора Липовая — Уральский вулкан»»",
+    "reason": "одна дата и город, слова названия переставлены, общая ссылка myrace.info/events/2080, дистанции 2/10/20 км у обоих"
+  },
+  {
+    "id": "c02",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81411"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "76978"
+    },
+    "label": "different",
+    "kind": "same-name-different",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 24.10 Нижний Новгород «Трейл «Окская тропа» – ночной забег» | B: 25.10 Сысоевка «Трейл «Окская тропа» (дневной забег)»",
+    "reason": "ночной забег 24.10 против дневного 25.10, разные ссылки (NochOkaTrail2026 / …dnevnoyzabeg), дистанции 3,5/10 против 8/15/31 км"
+  },
+  {
+    "id": "c03",
+    "a": {
+      "source": "probeg",
+      "external_id": "35740"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "39808"
+    },
+    "label": "same",
+    "kind": "same-source",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 12.06.2027 Ростов-на-Дону «Забег «Беговая забава»» | B: 12.06.2027 Ростов-на-Дону «Забег «Беговая забава»»",
+    "reason": "дубль внутри ПроБЕГа: название, дата и город совпадают; по правилу одного источника всё равно не сливается (DDP-05)"
+  },
+  {
+    "id": "c04",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90435"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83327"
+    },
+    "label": "different",
+    "kind": "other-year",
+    "synthetic": true,
+    "proposed": false,
+    "note": "A: 03.10.2026 Черноисточинск «Трейл «Уральский вулкан: гора Липовая»» | B (сдвиг +1 год): 03.10.2027 Черноисточинск «Трейл «Гора Липовая — Уральский вулкан»»",
+    "reason": "синтетическая: копия c01 со стороной b на год позже — другой выпуск"
+  },
+  {
+    "id": "c05",
+    "a": {
+      "source": "marathonec",
+      "external_id": "67153"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83377"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Новотроицк «Новотроицкий полумарафон» | B: 03.10 Новотроицк «Новотроицкий полумарафон»",
+    "reason": "название, дата и город совпадают; общая ссылка russiarunning NOVOTROITsKIYPOLUMARAFON2026; 5/10/21 км у обоих"
+  },
+  {
+    "id": "c06",
+    "a": {
+      "source": "marathonec",
+      "external_id": "33603"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "75122"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Москва «Полумарафон «Моя столица» 2026» | B: 03.10–04.10 Москва «Полумарафон «Моя столица»»",
+    "reason": "одно название без года, тот же город и дата (у ПроБЕГа два дня); 5/10 км у обоих"
+  },
+  {
+    "id": "c07",
+    "a": {
+      "source": "marathonec",
+      "external_id": "67169"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73975"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 04.10 Иркутск «Иркутский Осенний марафон» | B: 04.10 Иркутск «XXXVII Иркутский Осенний Марафон»",
+    "reason": "то же название с номером выпуска, дата и город совпадают; у ПроБЕГа только 7 км, у Марафонца 7/21/42"
+  },
+  {
+    "id": "c08",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81771"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "77270"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 11.10 Саратов «Саратовский марафон» | B: 11.10 Саратов «XXIX Саратовский марафон»",
+    "reason": "название с номером выпуска, та же дата и город, общая ссылка myrace.info/events/1708"
+  },
+  {
+    "id": "c09",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90431"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "76165"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 10.10 Ныроб «Трейловый полумарафон «Ветлан»» | B: 10.10 Ныроб «XVI Трейловый полумарафон «Ветлан»»",
+    "reason": "название с номером выпуска, та же дата и город"
+  },
+  {
+    "id": "c10",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89607"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73614"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 04.10 Семиозерье «Hard Trail Sand» | B: 04.10 Семиозерье «Hard Trail | Sand»",
+    "reason": "то же название с другой пунктуацией, дата и город; 7/15/30 км у обоих"
+  },
+  {
+    "id": "c11",
+    "a": {
+      "source": "marathonec",
+      "external_id": "82481"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "74418"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Хабаровск «Хехцир Трейл «Золотая осень»» | B: 03.10 Хабаровск «Забег «ХехцирТрейл — Золотая осень»»",
+    "reason": "слитное «ХехцирТрейл», та же дата и город; 6/12/22/30 км у обоих"
+  },
+  {
+    "id": "c12",
+    "a": {
+      "source": "marathonec",
+      "external_id": "77049"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "79741"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 11.04.2027 Химки «Трейл «Химкинский лес»» | B: 11.04.2027 Химки «Трейл \"Химкинский лес. Юбилей. 2027”»",
+    "reason": "добавлено «Юбилей. 2027», та же дата и город; 13/27 км у обоих"
+  },
+  {
+    "id": "c13",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89627"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "76763"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 18.10 Москва «Забег «Покровское-Стрешнево»» | B: 18.10 Москва «Забег-полумарафон «Покровское-Стрешнево»»",
+    "reason": "слово формата только у ПроБЕГа; общая ссылка russiarunning PokrovskoeStreshnevo2, дистанции 2–30 км почти совпадают"
+  },
+  {
+    "id": "c14",
+    "a": {
+      "source": "marathonec",
+      "external_id": "82598"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "80736"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 13.12 Горячий Ключ «Трейл «Горячий шоколад»» | B: 13.12 Горячий Ключ «Трейл-полумарафон «Горячий Шоколад» 2026»",
+    "reason": "слово формата только у ПроБЕГа; ссылка Марафонца …Treylpolumarafon…2026 — тот же трейл-полумарафон; 5/10/20–21 км"
+  },
+  {
+    "id": "c15",
+    "a": {
+      "source": "marathonec",
+      "external_id": "72430"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "80735"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 06.12 Вологда «Полумарафон «Бегущая Вологда»» | B: 05.12–06.12 Вологда «IV Полумарафон «Бегущая Вологда»»",
+    "reason": "общая ссылка russiarunning IXpolumarafonBV, тот же город; у ПроБЕГа два дня, включающие дату Марафонца"
+  },
+  {
+    "id": "c16",
+    "a": {
+      "source": "marathonec",
+      "external_id": "82278"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83015"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 23.07.2027 Суздаль «Golden Ring Ultra Trail 2027» | B: 23.07–25.07.2027 Суздаль «Golden Ring Ultra Trail 100 2026»",
+    "reason": "сомнительно: в названии ПроБЕГа «2026» при дате 2027; дата, город и набор дистанций до 100 км совпадают"
+  },
+  {
+    "id": "c17",
+    "a": {
+      "source": "marathonec",
+      "external_id": "84201"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "77976"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 30.10 Железноводск «Железноводск Ultra Trail» | B: 31.10–01.11 Железноводск «Железноводск Ultra Trail»",
+    "reason": "то же название и город, дистанции 5/30/50/100 км у обоих; даты соседние (многодневный старт), не пересекаются"
+  },
+  {
+    "id": "c18",
+    "a": {
+      "source": "marathonec",
+      "external_id": "74103"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "71738"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 24.10 Санкт-Петербург ««Арена марафон» 2026» | B: 25.10 Санкт-Петербург «Арена Марафон»",
+    "reason": "сомнительно: даты 24 и 25.10, у ПроБЕГа только 5/10 км, у Марафонца 5/10/21/42 — возможно, разные дни одного старта"
+  },
+  {
+    "id": "c19",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89575"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "82232"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Москва «Фонарный забег» | B: 03.10 Долгопрудный «VII Фонарный забег»",
+    "reason": "ссылка zeppelinrun.ru/fonarny-zabeg у обоих (отличается только параметрами), 10 км; Долгопрудный — пригород Москвы"
+  },
+  {
+    "id": "c20",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89592"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83379"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 17.10 Санкт-Петербург «Знаменский забег» | B: 17.10 Петергоф «Знаменский забег»",
+    "reason": "общая ссылка russiarunning Znamenkarun, 5/10/15 км у обоих; Петергоф — район Петербурга"
+  },
+  {
+    "id": "c21",
+    "a": {
+      "source": "marathonec",
+      "external_id": "72448"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "75906"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 24.10 Ильинское «Трейл «Рубеж»» | B: 24.10 Медынь «Трейл «Рубеж»»",
+    "reason": "то же название и дата, 5/10/30/100 км у обоих; города записаны по-разному (вероятно, место старта и райцентр)"
+  },
+  {
+    "id": "c22",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81723"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85157"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 17.10 Самара «Трейл «Сосновый рай»» | B: 17.10 Малая Царёвщина «Трейл «Сосновый рай»»",
+    "reason": "общая ссылка toplist.run sosnovyi-rai-2026, 7/14 км у обоих; у ПроБЕГа место старта, у Марафонца — Самара"
+  },
+  {
+    "id": "c23",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81411"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "76977"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 24.10 Нижний Новгород «Трейл «Окская тропа» – ночной забег» | B: 24.10 Сысоевка «Трейл «Окская тропа» (ночной забег)»",
+    "reason": "оба ночные 24.10, общая ссылка russiarunning NochOkaTrail2026, 3,5/10 км у обоих"
+  },
+  {
+    "id": "c24",
+    "a": {
+      "source": "marathonec",
+      "external_id": "73926"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85128"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 05.12 Кварса «Ночной трейловый забег «Светлая ночь»» | B: 05.12 Новый «Ночной трейловый забег «Светлая ночь»»",
+    "reason": "общая ссылка russiarunning Svetlaynoch2026, 5/16/30 км у обоих; населённые пункты записаны по-разному"
+  },
+  {
+    "id": "c25",
+    "a": {
+      "source": "marathonec",
+      "external_id": "55401"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84536"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.09.2027 Сочи «Т-Банк Rosa Wild Fest» | B: 03.09–05.09.2027 Красная поляна «Т-Банк Rosa Wild Fest 2026»",
+    "reason": "сомнительно: «2026» в названии ПроБЕГа при дате 2027; дата и дистанции 6,3…180 км совпадают, Красная Поляна — в Сочи"
+  },
+  {
+    "id": "c26",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90420"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85136"
+    },
+    "label": "same",
+    "kind": "dup-other-city",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 02.10 Чулково «Кросс памяти Серафима и Георгия Знаменских» | B: 03.10 имени Тельмана «55-й традиционный кросс памяти Серафима и Георгия Знаменских»",
+    "reason": "сомнительно по дате (02 и 03.10); общая ссылка myrace.info/events/2159 и одинаковые дистанции 1–8 км"
+  },
+  {
+    "id": "c27",
+    "a": {
+      "source": "marathonec",
+      "external_id": "67221"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "80227"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 11.10 Суздаль «Полумарафон «Жемчужина Золотого Кольца»» | B: 11.10 Суздаль «Суздальский полумарафон «Жемчужина Золотого кольца»»",
+    "reason": "общая ссылка russiarunning …ZhemchuzhinaZolotogokoltsa2026, та же дата и город"
+  },
+  {
+    "id": "c28",
+    "a": {
+      "source": "marathonec",
+      "external_id": "79931"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73418"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Кисловодск «Кисловодский марафон Kavkaz.Run» | B: 04.10 Кисловодск «Кисловодский международный марафон Kavkaz.Run»",
+    "reason": "ссылки на одно событие KislovodskiymarafonKAVKAZRUN2026 (хосты reg.russiarunning.com и russiarunning.com); даты 03 и 04.10"
+  },
+  {
+    "id": "c29",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81714"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83378"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 10.10 Первоуральск «Осенний трейл «Первоуральск Опен»» | B: 10.10 Первоуральск «Осенний фестиваль бега «Первоуральск-Опен»»",
+    "reason": "общая ссылка russiarunning PervouralskOpen2026Osen, 5/10/15/30 км у обоих"
+  },
+  {
+    "id": "c30",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81569"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "71736"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 11.10 Тула «Эстафета 5х4,2 км Осень» | B: 11.10 Тула «Легкоатлетический забег «Эстафета 5х4,2км — Осень»»",
+    "reason": "та же эстафета 5х4,2 км, дата и город"
+  },
+  {
+    "id": "c31",
+    "a": {
+      "source": "marathonec",
+      "external_id": "44926"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "78465"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 08.11 Гатчина «Гатчинский полумарафон 2026» | B: 08.11 Гатчина «XVII Гатчинский международный полумарафон»",
+    "reason": "та же дата и город, 2/10 км у обоих; добавлено «международный»"
+  },
+  {
+    "id": "c32",
+    "a": {
+      "source": "marathonec",
+      "external_id": "73916"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83360"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Петрозаводск «KultaKarjala» | B: 04.10 Петрозаводск «Осенний Кросс «KultaKarjala»»",
+    "reason": "общая ссылка russiarunning KULTAKARJALA2026, 4/8/12 км у обоих; даты 03 и 04.10 (у Марафонца есть вторая запись на 04.10 — c33)"
+  },
+  {
+    "id": "c33",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90522"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83360"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 04.10 Петрозаводск «Осенний кросс «КультаКарьяла»» | B: 04.10 Петрозаводск «Осенний Кросс «KultaKarjala»»",
+    "reason": "одно название кириллицей и латиницей (схожесть ниже 0,4), общая ссылка KULTAKARJALA2026, 4/8/12 км"
+  },
+  {
+    "id": "c34",
+    "a": {
+      "source": "marathonec",
+      "external_id": "72065"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "79960"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 03.10 Слюдорудник «Марафон «Путь к роднику»» | B: 03.10–04.10 Слюдорудник «Беговой фестиваль «Путь к роднику»»",
+    "reason": "общая ссылка myrace.info/events/1540, та же дата и посёлок; «марафон» и «фестиваль» — один старт (схожесть ниже 0,4)"
+  },
+  {
+    "id": "c35",
+    "a": {
+      "source": "marathonec",
+      "external_id": "86190"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83375"
+    },
+    "label": "same",
+    "kind": "edge",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 17.07.2027 Великий Новгород «Фестиваль ВолховМен «На пути из варяг в греки»» | B: 17.07–18.07.2027 Великий Новгород «Фестиваль «ВолховMan»»",
+    "reason": "общая ссылка russiarunning VOLKhOVMEN, та же дата и город; «Мен»/«Man» (схожесть ниже 0,4)"
+  },
+  {
+    "id": "c36",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89602"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "76977"
+    },
+    "label": "different",
+    "kind": "same-name-different",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 25.10 Нижний Новгород «Трейл «Окская тропа» – дневной забег» | B: 24.10 Сысоевка «Трейл «Окская тропа» (ночной забег)»",
+    "reason": "дневной 25.10 против ночного 24.10, разные ссылки регистрации, 8/15/31 км против 10 км"
+  },
+  {
+    "id": "c37",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89618"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85115"
+    },
+    "label": "different",
+    "kind": "same-name-different",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 01.11 Санкт-Петербург «Благотворительный забег «8 городов. Санкт-Петербург»» | B: 01.11 Москва «Благотворительный забег «8 городов. Москва»»",
+    "reason": "один цикл, но разные города и ссылки (8gorodovSanktPeterburg / 8gorodovMoskva)"
+  },
+  {
+    "id": "c38",
+    "a": {
+      "source": "marathonec",
+      "external_id": "73918"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "45094"
+    },
+    "label": "different",
+    "kind": "same-name-different",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 11.10 Ступино «Осенний трейл «Краски леса»» | B: 10.10 Ростов-на-Дону «Осенний трейл»",
+    "reason": "общее только «Осенний трейл»: разные города, даты и дистанции"
+  },
+  {
+    "id": "c39",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89623"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85129"
+    },
+    "label": "different",
+    "kind": "same-name-different",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 05.01.2027 Бахчисарай «Крымский Зимний Ультра Трейл» | B: 05.01.2027 Тула «Тульский зимний трейл»",
+    "reason": "общее «зимний трейл»: разные города, ссылки (cwut27 / TWT2027) и дистанции"
+  },
+  {
+    "id": "c40",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81569"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "78657"
+    },
+    "label": "different",
+    "kind": "same-name-different",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 11.10 Тула «Эстафета 5х4,2 км Осень» | B: 10.10 Москва «Эстафета «Grom Relay Осень 2026»»",
+    "reason": "общее «эстафета осень»: разные города, даты, ссылки и этап 4,2 против 4,6 км"
+  },
+  {
+    "id": "c41",
+    "a": {
+      "source": "marathonec",
+      "external_id": "24926"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84145"
+    },
+    "label": "different",
+    "kind": "all-russia",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 22.05.2027 Вся Россия «Всероссийский полумарафон «ЗаБег.РФ» 2027» | B: 22.05.2027 Москва «Всероссийский полумарафон «ЗаБег.РФ»»",
+    "reason": "запись Марафонца — забег во всех городах сразу, строка ПроБЕГа — один город; слияние скрыло бы остальные города"
+  },
+  {
+    "id": "c42",
+    "a": {
+      "source": "marathonec",
+      "external_id": "24926"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84115"
+    },
+    "label": "different",
+    "kind": "all-russia",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 22.05.2027 Вся Россия «Всероссийский полумарафон «ЗаБег.РФ» 2027» | B: 22.05.2027 Нижневартовск «Всероссийский полумарафон «ЗаБег.РФ»»",
+    "reason": "общероссийская запись против одного города (как c41)"
+  },
+  {
+    "id": "c43",
+    "a": {
+      "source": "marathonec",
+      "external_id": "24926"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84124"
+    },
+    "label": "different",
+    "kind": "all-russia",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 22.05.2027 Вся Россия «Всероссийский полумарафон «ЗаБег.РФ» 2027» | B: 22.05.2027 Уфа «Всероссийский полумарафон «ЗаБег.РФ» (Уфа)»",
+    "reason": "общероссийская запись против одного города (как c41)"
+  },
+  {
+    "id": "c44",
+    "a": {
+      "source": "marathonec",
+      "external_id": "24926"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84106"
+    },
+    "label": "different",
+    "kind": "all-russia",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 22.05.2027 Вся Россия «Всероссийский полумарафон «ЗаБег.РФ» 2027» | B: 22.05.2027 Менделеевск «Всероссийский полумарафон «ЗаБег.РФ — Цепная Реакция»»",
+    "reason": "общероссийская запись против одного города (как c41)"
+  },
+  {
+    "id": "c45",
+    "a": {
+      "source": "probeg",
+      "external_id": "84115"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84145"
+    },
+    "label": "different",
+    "kind": "same-source",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: 22.05.2027 Нижневартовск «Всероссийский полумарафон «ЗаБег.РФ»» | B: 22.05.2027 Москва «Всероссийский полумарафон «ЗаБег.РФ»»",
+    "reason": "две строки ПроБЕГа одного дня в разных городах — разные забеги"
+  },
+  {
+    "id": "c46",
+    "a": {
+      "source": "marathonec",
+      "external_id": "67153"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83377"
+    },
+    "label": "different",
+    "kind": "other-year",
+    "synthetic": true,
+    "proposed": false,
+    "note": "A: 03.10.2026 Новотроицк «Новотроицкий полумарафон» | B (сдвиг +1 год): 03.10.2027 Новотроицк «Новотроицкий полумарафон»",
+    "reason": "синтетическая: копия c05 со стороной b на год позже — другой выпуск"
+  },
+  {
+    "id": "c47",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81771"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "77270"
+    },
+    "label": "different",
+    "kind": "other-year",
+    "synthetic": true,
+    "proposed": false,
+    "note": "A: 11.10.2026 Саратов «Саратовский марафон» | B (сдвиг +1 год): 11.10.2027 Саратов «XXIX Саратовский марафон»",
+    "reason": "синтетическая: копия c08 со стороной b на год позже — другой выпуск"
+  },
+  {
+    "id": "c48",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89607"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73614"
+    },
+    "label": "different",
+    "kind": "other-year",
+    "synthetic": true,
+    "proposed": false,
+    "note": "A: 04.10.2026 Семиозерье «Hard Trail Sand» | B (сдвиг +1 год): 04.10.2027 Семиозерье «Hard Trail | Sand»",
+    "reason": "синтетическая: копия c10 со стороной b на год позже — другой выпуск"
+  },
+  {
+    "id": "c49",
+    "a": {
+      "source": "marathonec",
+      "external_id": "82675"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85129"
+    },
+    "label": "different",
+    "kind": "other-year",
+    "synthetic": true,
+    "proposed": false,
+    "note": "A: 05.01.2027 Тула «Тульский зимний трейл» | B (сдвиг +1 год): 05.01.2028 Тула «Тульский зимний трейл»",
+    "reason": "синтетическая: реальная пара (общая ссылка TWT2027) со стороной b на год позже — другой выпуск"
+  },
+  {
+    "id": "a01",
+    "a": {
+      "source": "marathonec",
+      "external_id": "67329"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83324"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Забег «Ржевский рубеж»» · 03.10 · Ржев (rzhev) · 5/10/21 км · https://myrace.info/events/1877 | B: «Забег «Ржевский рубеж»» · 03.10 · Ржев (rzhev) · 1/5/10/21 км · https://myrace.info/events/1877",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a02",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81053"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "75791"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Завидово трейл» · 03.10 · Завидово (zavidovo) · 5/10/20/50 км · https://reg.russiarunning.com/event/ZAVIDOVOTRAIL | B: «Забег «Завидово Трейл»» · 03.10–04.10 · Завидово (zavidovo) · 0.5/1/5.33/11.1/22.7/54.6 км · https://reg.russiarunning.com/event/ZAVIDOVOTRAIL",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a03",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81592"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "74645"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Осенний Павловский забег» · 04.10 · Павловск (pavlovsk) · 3/10/21 км · https://reg.russiarunning.com/event/OsenniyPavlovskiyzabeg2026 | B: «Осенний Павловский забег» · 04.10 · Павловск (pavlovsk) · 3/10/21.098 км · https://reg.russiarunning.com/event/OsenniyPavlovskiyzabeg2026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a04",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81833"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83065"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: ««Воронки трейл»» · 04.10 · Уфа (ufa) · 5/10/15 км · https://reg.russiarunning.com/event/VORONKITREYL2026 | B: ««ВОРОНКИ ТРЕЙЛ 2026»» · 04.10 · Уфа (ufa) · 0.2/0.5/0.8/5/10/15 км · https://reg.russiarunning.com/event/VORONKITREYL2026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a05",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81343"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84083"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Благотворительный забег «Вместе против инсульта»» · 10.10 · Москва (moscow) · 1/2.5/5 км · https://reg.russiarunning.com/event/ORBI26 | B: «Благотворительный забег «Вместе против инсульта»» · 10.10 · Москва (moscow) · 1/2.5/5 км · https://reg.russiarunning.com/event/ORBI26",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a06",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90488"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84857"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Фестиваль спорта «Исток Дона»» · 10.10 · Новомосковск (novomoskovsk) · 7/15 км · https://reg.russiarunning.com/event/ID2026 | B: «Фестиваль спорта «Исток Дона»» · 10.10 · Новомосковск (novomoskovsk) · 7.5/15 км · https://reg.russiarunning.com/event/ID2026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a07",
+    "a": {
+      "source": "marathonec",
+      "external_id": "73918"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83373"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Осенний трейл «Краски леса»» · 11.10 · Ступино (stupino) · 5/10/21 км · https://reg.russiarunning.com/event/TREYLKRASKILESA2026 | B: «Осенний трейл «Краски леса»» · 11.10 · Ступино (stupino) · 1/5/10/21.098 км · https://reg.russiarunning.com/event/TREYLKRASKILESA2026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a08",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90493"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84855"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «СоюзТрейл» · 17.10 · Белокуриха (belokuriha) · 5/13/26 км · https://reg.russiarunning.com/event/SoyuzTreyl | B: «Забег «СоюзТрейл»» · 17.10 · Белокуриха (belokuriha) · 5/13/26 км · https://reg.russiarunning.com/event/SoyuzTreyl",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a09",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81654"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84185"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Часовой забег «Осенний вальс»» · 18.10 · Волгоград (volgograd) · — км · https://reg.russiarunning.com/event/ZABEGOSENNIYVALS202618102026 | B: «Часовой забег «Осенний Вальс»» · 18.10 · Волгоград (volgograd) · — км · https://reg.russiarunning.com/event/ZABEGOSENNIYVALS202618102026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a10",
+    "a": {
+      "source": "marathonec",
+      "external_id": "87022"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73218"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «НеЗаповедные тропы» · 24.10 · Красноярск (krasnoyarsk) · 5/10/23 км · https://www.toplist.run/race/12592 | B: «Забег «неЗаповедные тропы»» · 24.10–25.10 · Красноярск (krasnoyarsk) · 10.5/22.9 км · https://toplist.run/race/12592",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a11",
+    "a": {
+      "source": "marathonec",
+      "external_id": "90527"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85127"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Пещерный трейл» · 25.10 · Терновка (ternovka) · 15/30 км · https://reg.russiarunning.com/event/Peshchernyytreyl | B: «Забег «Пещерный трейл»» · 25.10 · Терновка (ternovka) · 15/30 км · https://reg.russiarunning.com/event/Peshchernyytreyl",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a12",
+    "a": {
+      "source": "marathonec",
+      "external_id": "72424"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "78870"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Марафон «Мучкап – Шапкино – Любо»» · 31.10 · Мучкапский (muchkapskiy) · 10/21/42 км · https://reg.russiarunning.com/event/MARAFONMUChKAPShAPKINOLYuBO2026 | B: «XIII марафон «Мучкап – Шапкино» – Любо!» · 31.10 · Мучкапский (muchkapskiy) · 10/21.098/42.195 км · https://reg.russiarunning.com/event/MARAFONMUChKAPShAPKINOLYuBO2026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a13",
+    "a": {
+      "source": "marathonec",
+      "external_id": "79952"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84194"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Полумарафон «Русский Север»» · 31.10 · Кириллов (kirillov) · 2/5/10/21 км · https://reg.russiarunning.com/event/IIIpolumarafonRusskiySever | B: «Полумарафон «Русский Север»» · 31.10 · Кириллов (kirillov) · 0.5/1/2/5/10/21.098 км · https://reg.russiarunning.com/event/IIIpolumarafonRusskiySever",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a14",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81585"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73996"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «O-Trail Karras» · 31.10 · Железноводск (zheleznovodsk) · 8/16 км · https://reg.russiarunning.com/event/OTRAILKarras2026 | B: «Забег «O-TRAIL Karras»» · 31.10 · Железноводск (zheleznovodsk) · 1/8/16 км · https://reg.russiarunning.com/event/OTRAILKarras2026",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a15",
+    "a": {
+      "source": "marathonec",
+      "external_id": "89615"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85115"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Благотворительный забег «8 городов. Москва»» · 01.11 · Москва (moscow) · 2/5/10/21 км · https://reg.russiarunning.com/event/8gorodovMoskva | B: «Благотворительный забег «8 городов. Москва»» · 01.11 · Москва (moscow) · 1/5/10/21.098 км · https://reg.russiarunning.com/event/8gorodovMoskva",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a16",
+    "a": {
+      "source": "marathonec",
+      "external_id": "81691"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "75297"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Забег «Марьинская Стрела»» · 08.11 · Москва (moscow) · 2/3/5/7/10/15/21/25/30 км · https://reg.russiarunning.com/event/ZabegpolumarafonMarinskayaStrela12 | B: «Забег «Марьинская стрела»» · 08.11 · Москва (moscow) · 1/2/3/5/7/10/15/21.098/25/30 км · https://reg.russiarunning.com/event/ZabegpolumarafonMarinskayaStrela12",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a17",
+    "a": {
+      "source": "marathonec",
+      "external_id": "60972"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73030"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Новогодний марафон Sosnovka Goat» · 13.12 · Санкт-Петербург (saint-petersburg) · 5/10/21/42/63 км · https://reg.russiarunning.com/event/SosnovkaGoat | B: «Новогодний марафон «Sosnovka Goat»» · 13.12 · Санкт-Петербург (saint-petersburg) · 3/5.275/10.55/21.098/42.195/63.3 км · https://reg.russiarunning.com/event/SosnovkaGoat",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a18",
+    "a": {
+      "source": "marathonec",
+      "external_id": "82514"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83330"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Трейл Wild Peak» · 19.06.2027 · Акташ (aktash) · 7/15/35/66 км · https://myrace.info/events/2027 | B: «Трейл Wild Peak» · 19.06.2027 · Акташ (aktash) · 7/15/35/66 км · https://myrace.info/events/2027",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a19",
+    "a": {
+      "source": "marathonec",
+      "external_id": "61022"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73024"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Октобер Трейл» · 04.10 · Новосибирск (novosibirsk) · 8/17/28/45 км · — | B: «Октобер Трейл» · 04.10 · Новосибирск (novosibirsk) · 1/1.5/8/14/22 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a20",
+    "a": {
+      "source": "marathonec",
+      "external_id": "63884"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73641"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Покровский полумарафон» · 04.10 · Покровское (pokrovskoe) · 5/10/21 км · https://vk.com/away.php?to=https%3A%2F%2Fvologdamarafon.ru%2Fmarafon%2Fpokrovskij-polumarafon%2Fregistraciya%2F&utf=1 | B: «XI Покровский полумарафон» · 04.10 · Покровское (pokrovskoe) · 0.7/1.2/5/10/21.098 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a21",
+    "a": {
+      "source": "marathonec",
+      "external_id": "73910"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73905"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Яблочный трейл» · 10.10 · Грушевка (grushevka) · 3/7/14/24/39 км · https://reg.russiarunning.com/event/YablochnyyTreyl2026 | B: «Яблочный трейл» · 10.10 · Грушевка (grushevka) · 6/11/24/38 км · https://crimeatrail.com/appletrail",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a22",
+    "a": {
+      "source": "marathonec",
+      "external_id": "67866"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "74452"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Казанский национальный полумарафон 2026» · 10.10 · Казань (kazan) · 3/5/10/21 км · — | B: «Казанский национальный полумарафон» · 10.10–11.10 · Казань (kazan) · 0.3/0.6/1/3/10/21.098 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a23",
+    "a": {
+      "source": "marathonec",
+      "external_id": "86323"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73643"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Шекснинский полумарафон» · 17.10 · Шексна (sheksna) · 5/10/21/42 км · https://vk.com/away.php?to=https%3A%2F%2Fvologdamarafon.ru%2Fmarafon%2F%25D1%2588%25D0%25B5%25D0%25BA%25D1%2581%25D0%25BD%25D0%25B8%25D0%25BD%25D1%2581%25D0%25BA%25D0%25B8%25D0%25B9-%25D0%25BF%25D0%25BE%25D0%25BB%25D1%2583%25D0%25BC%25D0%25B0%25D1%2580%25D0%25B0%25D1%2584%25D0%25BE%25D0%25BD%2F%25D1%2580%25D0%25B5%25D0%25B3%25D0%25B8%25D1%2581%25D1%2582%25D1%2580%25D0%25B0%25D1%2586%25D0%25B8%25D1%258F%2F&utf=1 | B: «XVIII Шекснинский полумарафон» · 17.10 · Шексна (sheksna) · 10/21.098 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a24",
+    "a": {
+      "source": "marathonec",
+      "external_id": "73420"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "73625"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Народный трейл» · 04.11 · Истра (istra) · 5/10/20 км · https://istra.run/narod#rec773672918 | B: «Народный трейл» · 04.11 · Истра (istra) · 1/2.2/6.39/11.8/20.2 км · https://reg.o-time.ru/race/26100",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a25",
+    "a": {
+      "source": "marathonec",
+      "external_id": "60377"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "79775"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Фестиваль трейлраннинга «Бештаугорский Крест»» · 03.04.2027 · Пятигорск (pyatigorsk) · 5/15/17/23 км · — | B: «Фестиваль трейлраннинга «Бештаугорский крест»» · 03.04.2027–04.04.2027 · Пятигорск (pyatigorsk) · 1/5.18/14.79/16.25/22.55 км · https://reg.russiarunning.com/event/BeshtaugorskiyKrest2027",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a26",
+    "a": {
+      "source": "marathonec",
+      "external_id": "83757"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "82533"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Dagestan Wild Trail 2027» · 09.04.2027 · Махачкала (mahachkala) · 12/19/30/55/75/100 км · — | B: «Dagestan Wild Trail» · 09.04.2027–11.04.2027 · Махачкала (mahachkala) · 6.6/12.44/17.79/30.32/52.37/73.34/99.48 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a27",
+    "a": {
+      "source": "marathonec",
+      "external_id": "83775"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "81766"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Arkhyz Wild Trail 2027» · 25.06.2027 · Архыз (arhyz) · 15/19/30/40/50/65 км · — | B: «Arkhyz Wild Trail» · 25.06.2027–27.06.2027 · Архыз (arhyz) · 0.5/1/14.2/18.5/30.5/38.5/40.4/47.3/51.5/53.4 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a28",
+    "a": {
+      "source": "marathonec",
+      "external_id": "86440"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83355"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Elbrus Wild Trail 2027» · 06.08.2027 · Терскол (terskol) · 11/20/25/35/60/130 км · — | B: «Elbrus Wild Trail» · 06.08.2027–08.08.2027 · Терскол (terskol) · 4.7/10.8/20.5/21.2/32.1/34.8/60.2/128.31 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a29",
+    "a": {
+      "source": "marathonec",
+      "external_id": "23206"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "84195"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Челябинский марафон 2027» · 22.08.2027 · Челябинск (chelyabinsk) · 5/10/21/42 км · — | B: «XX Челябинский марафон» · 22.08.2027 · Челябинск (chelyabinsk) · 1/5/10/21.098/42.195 км · https://reg.russiarunning.com/event/Chelyabinskiymarafon2027",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a30",
+    "a": {
+      "source": "marathonec",
+      "external_id": "68272"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "64612"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Vottovaara Mountain Race» · 04.09.2027 · Гимолы (gimoly) · 14/55/80.467/160.934 км · — | B: «Vottovaara Mountain Race» · 04.09.2027–05.09.2027 · Гимолы (gimoly) · 1/3/13.25/42.4/51.4/78/157.66 км · —",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a31",
+    "a": {
+      "source": "marathonec",
+      "external_id": "76777"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "83332"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Марий Форест SnowRun – Backyard Ultra» · 06.03.2027 · Йошкар-Ола (yoshkar-ola) · 6.7 км · https://myrace.info/events/2028 | B: «Забег Backyard Ultra «Марий Форест SnowRUN»» · 06.03.2027–12.03.2027 · Йошкар-Ола (yoshkar-ola) · — км · https://myrace.info/events/2028",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  },
+  {
+    "id": "a32",
+    "a": {
+      "source": "marathonec",
+      "external_id": "82675"
+    },
+    "b": {
+      "source": "probeg",
+      "external_id": "85129"
+    },
+    "label": "same",
+    "kind": "dup",
+    "synthetic": false,
+    "proposed": false,
+    "note": "A: «Тульский зимний трейл» · 05.01.2027 · Тула (tula) · 6/15 км · https://reg.russiarunning.com/event/TWT2027 | B: «Тульский зимний трейл» · 05.01.2027 · Тула (tula) · 5.76/15.95 км · https://reg.russiarunning.com/event/TWT2027",
+    "reason": "AUTO-пара окна фикстур (даты пересекаются, city_key совпал, NameSim ≥ 0,70, единственный партнёр); владелец проверил и подтвердил same 2026-10-01"
+  }
+]

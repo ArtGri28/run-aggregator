@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	_ "time/tzdata"
 
 	"aggregator/internal/store"
 	"aggregator/internal/store/storetest"
@@ -57,7 +58,7 @@ func TestMessage(t *testing.T) {
 		Code: "marathonec", RunID: 7, Status: "suspect", FinishedAt: fin, Error: "первый прогон <источника>",
 		Parsed: 133, Rejected: 1, OutOfScope: 0, Unrecognized: 2, HasSnapshot: true,
 	}
-	text, accept := message(suspect, 0, false)
+	text, accept := message(suspect, 0, false, moscow(t))
 	for _, want := range []string{
 		"marathonec", "прогон 7", "suspect", "первый прогон <источника>",
 		"parsed 133 · rejected 1 · out_of_scope 0 · unrecognized_region 2",
@@ -76,18 +77,18 @@ func TestMessage(t *testing.T) {
 
 	noSnap := suspect
 	noSnap.HasSnapshot = false
-	if _, accept := message(noSnap, 0, false); accept != 0 {
+	if _, accept := message(noSnap, 0, false, time.UTC); accept != 0 {
 		t.Errorf("suspect без снимка: acceptRunID = %d, want 0", accept)
 	}
 
 	failed := store.FinishedRun{Code: "marathonec", RunID: 9, Status: "failed", FinishedAt: fin, Error: "загрузка: timeout", HasSnapshot: true}
-	text, accept = message(failed, 3, false)
+	text, accept = message(failed, 3, false, time.UTC)
 	if accept != 0 || !strings.Contains(text, "Сбоев подряд: 3") || !strings.Contains(text, "загрузка: timeout") ||
 		strings.Contains(text, "parsed") {
 		t.Errorf("failed: accept = %d, текст:\n%s", accept, text)
 	}
 
-	text, _ = message(failed, 3, true)
+	text, _ = message(failed, 3, true, time.UTC)
 	if !strings.HasPrefix(text, "Напоминание: ") {
 		t.Errorf("напоминание без префикса:\n%s", text)
 	}
@@ -137,11 +138,21 @@ func finish(t *testing.T, s *store.Store, sourceID int64, f store.RunFinish) int
 	return id
 }
 
+// moscow — часовой пояс, который бот передаёт в Loop.Loc.
+func moscow(t *testing.T) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return loc
+}
+
 func admins(t *testing.T, rec *recorder, s *store.Store, now *time.Time) *Loop {
 	t.Helper()
 	return &Loop{
 		Store: s, Admins: []int64{101, 102}, Send: rec.send,
-		Now: func() time.Time { return *now },
+		Now: func() time.Time { return *now }, Loc: moscow(t),
 	}
 }
 
@@ -335,6 +346,39 @@ func TestTickSendFailure(t *testing.T) {
 	}
 	if err := l.Tick(ctx); err != nil || len(rec.take()) != 0 {
 		t.Fatal("после записи состояния тик должен молчать")
+	}
+}
+
+// IN-03: ошибка записи состояния по одному источнику не останавливает обход.
+func TestTickContinuesAfterError(t *testing.T) {
+	s := storetest.Open(t)
+	bg := context.Background()
+	for _, code := range []string{"marathonec", "probeg"} {
+		src, err := s.EnsureSource(bg, code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		finish(t, s, src, store.RunFinish{Status: "suspect", Error: "сбой " + code})
+	}
+	ctx, cancel := context.WithCancel(bg)
+	defer cancel()
+	var mu sync.Mutex
+	var texts []string
+	l := &Loop{Store: s, Admins: []int64{101}, Now: time.Now,
+		Send: func(_ context.Context, _ int64, text string, _ int64) error {
+			mu.Lock()
+			defer mu.Unlock()
+			texts = append(texts, text)
+			cancel() // запись состояния первого источника упадёт
+			return nil
+		}}
+	err := l.Tick(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Tick = %v, want context.Canceled", err)
+	}
+	all := strings.Join(texts, "\n")
+	if len(texts) != 2 || !strings.Contains(all, "сбой marathonec") || !strings.Contains(all, "сбой probeg") {
+		t.Fatalf("отправки: %q; want по одной на каждый источник", texts)
 	}
 }
 

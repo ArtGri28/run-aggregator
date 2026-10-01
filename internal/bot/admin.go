@@ -5,17 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
 	"aggregator/internal/store"
 )
-
-// msk — Москва без перехода на летнее время: фиксированная зона не зависит
-// от tzdata.
-var msk = time.FixedZone("MSK", 3*3600)
 
 const (
 	runsPerSource = 3
@@ -70,7 +65,7 @@ func (b *Bot) runsScreen(runs []store.RecentRun) screen {
 			}
 		}
 		fmt.Fprintf(&t, "\n#%d %s %s МСК · parsed %d · rej %d · oos %d · upserted %d",
-			r.ID, r.Status, r.StartedAt.In(msk).Format("02.01 15:04"), r.Parsed, r.Rejected, r.OutOfScope, r.Upserted)
+			r.ID, r.Status, r.StartedAt.In(b.loc).Format("02.01 15:04"), r.Parsed, r.Rejected, r.OutOfScope, r.Upserted)
 		if r.Error != "" {
 			t.WriteString(" · " + cut(r.Error, maxRunReason))
 		}
