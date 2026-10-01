@@ -164,3 +164,29 @@ func TestPreparedEdges(t *testing.T) {
 		t.Errorf("Rejects = %+v", st.Rejects)
 	}
 }
+
+// E. Политика Марафонца не менялась: страны в записях нет, fallback — RU;
+// область-страна («Беларусь») по-прежнему выводит запись из каталога, а
+// Беларусь не становится fallback'ом этого источника.
+func TestPolicyKeepsRUOnly(t *testing.T) {
+	pol := New(nil).Policy()
+	if pol.CountryFallback != normalize.RUOnlyFallback {
+		t.Fatalf("CountryFallback = %v, want RUOnlyFallback", pol.CountryFallback)
+	}
+	for _, tt := range []struct {
+		region, city string
+		inScope      bool
+		country      string
+	}{
+		{"Московская область", "Химки", true, "RU"},
+		{"", "Сочи", true, "RU"},
+		{"Беларусь", "Минск", false, ""},
+		{"Республика Беларусь", "Гомель", false, ""},
+	} {
+		rec := ingest.SourceEvent{ExternalID: "1", Title: "Забег", Date: "15/11/2026", Distances: "10 км", Region: tt.region, City: tt.city}
+		out, _ := ingest.Prepare([]ingest.SourceEvent{rec}, time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC), pol)
+		if p := out[0]; p.InScope != tt.inScope || p.Event.CountryCode != tt.country {
+			t.Errorf("%q/%q: in_scope=%v %q; want %v %q", tt.region, tt.city, p.InScope, p.Event.CountryCode, tt.inScope, tt.country)
+		}
+	}
+}

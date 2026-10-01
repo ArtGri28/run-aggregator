@@ -313,9 +313,11 @@
     "date": "03.10.2026",
     "distances": "21 км, 10 км, 5 км, 3 км, 1500 м, 800 м",
     "city": "Колбовичи",
-    "region": "Беларусь",
+    "region": "Брестская область",
+    "country": "Беларусь",
     "type": "",
-    "registration_url": "https://42195.by/events/registration/?event_id=1093"
+    "registration_url": "https://42195.by/events/registration/?event_id=1093",
+    "address": "Барановичский район"
   },
   {
     "external_id": "77498",
@@ -2780,7 +2782,8 @@
     "date": "10.10.2026",
     "distances": "42195 м, 10 км, 5 км",
     "city": "Малорита",
-    "region": "Беларусь",
+    "region": "Брестская область",
+    "country": "Беларусь",
     "type": ""
   },
   {
@@ -2835,7 +2838,8 @@
     "date": "10.10.2026",
     "distances": "21098 м, 7 км, 1 км",
     "city": "Гомель",
-    "region": "Беларусь",
+    "region": "",
+    "country": "Беларусь",
     "type": ""
   },
   {
@@ -3012,9 +3016,11 @@
     "date": "10.10.2026",
     "distances": "20 км, 10 км, 5 км, 5 км, 1 км, 1 км",
     "city": "Пышки",
-    "region": "Беларусь",
+    "region": "Гродненская область",
+    "country": "Беларусь",
     "type": "",
-    "end_date": "11.10.2026"
+    "end_date": "11.10.2026",
+    "address": "Гродненский район"
   },
   {
     "external_id": "84857",
@@ -5504,7 +5510,8 @@
     "date": "17.10.2026",
     "distances": "30 км, 5700 м",
     "city": "Любань",
-    "region": "Беларусь",
+    "region": "Минская область",
+    "country": "Беларусь",
     "type": "",
     "registration_url": "https://42195.by/events/registration/?event_id=1108"
   },
@@ -7732,9 +7739,11 @@
     "date": "18.10.2026",
     "distances": "10 км, 5 км, 3 км",
     "city": "Раубичи",
-    "region": "Беларусь",
+    "region": "Минская область",
+    "country": "Беларусь",
     "type": "",
-    "registration_url": "https://bisonrace.by/trails/2026-10-18/entries"
+    "registration_url": "https://bisonrace.by/trails/2026-10-18/entries",
+    "address": "Минский район"
   },
   {
     "external_id": "81985",
@@ -8060,8 +8069,10 @@
     "date": "24.10.2026",
     "distances": "10 км, 5 км, 3 км, 1 км",
     "city": "Клиденяты",
-    "region": "Беларусь",
-    "type": ""
+    "region": "Гродненская область",
+    "country": "Беларусь",
+    "type": "",
+    "address": "Сморгонский район"
   },
   {
     "external_id": "78654",
@@ -10378,7 +10389,8 @@
     "date": "25.10.2026",
     "distances": "1 час",
     "city": "Молодечно",
-    "region": "Беларусь",
+    "region": "Минская область",
+    "country": "Беларусь",
     "type": ""
   },
   {
@@ -10445,8 +10457,10 @@
     "date": "31.10.2026",
     "distances": "54610 м, 10600 м",
     "city": "Вязье",
-    "region": "Беларусь",
-    "type": ""
+    "region": "Могилёвская область",
+    "country": "Беларусь",
+    "type": "",
+    "address": "Осиповичский район"
   },
   {
     "external_id": "77976",
@@ -13494,7 +13508,8 @@
     "date": "27.12.2026",
     "distances": "12 км, 1 км",
     "city": "Минск",
-    "region": "Беларусь",
+    "region": "",
+    "country": "Беларусь",
     "type": ""
   },
   {

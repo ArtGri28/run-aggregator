@@ -133,17 +133,6 @@ func Timezone(cityKey, region string) string {
 	return cityZones[CityKey(region)]
 }
 
-var countryNames = map[string]string{
-	"россия": "RU",
-	"russia": "RU",
-	"рф":     "RU",
-	"российская федерация": "RU",
-	"rus":                "RU",
-	"russian federation": "RU",
-	"rossiya":            "RU",
-	"russian":            "RU",
-}
-
 // CountryCode normalizes a country name or ISO alpha-2 code; "" if unknown.
 func CountryCode(name string) string {
 	s := strings.ToLower(strings.TrimSpace(name))
@@ -172,24 +161,31 @@ const (
 )
 
 // Country applies MVP.md §6 rules 1–4. A recognised explicit country
-// wins: only RU is in scope, any other code or a known foreign name
-// (ClassifyRegion → RegionForeign) is out of scope under every policy.
+// wins: it is in scope only if it is in the list of allowed countries
+// (allowedCountries); a recognised country outside the list keeps its code
+// and is out of scope under every policy, and so is a known foreign name
+// without an ISO code (ClassifyRegion → RegionForeign).
 // Without an explicit country, or with one that is not recognised
 // (ME-04: "cannot determine" is not "foreign"), the source policy
-// decides: RUOnlyFallback yields RU, NoFallback yields out of scope.
-// inScope == false means the caller stores the source event with
-// match_state = out_of_scope and creates no event.
+// decides: RUOnlyFallback yields RU (if RU is allowed), NoFallback yields
+// out of scope. inScope == false means the caller stores the source event
+// with match_state = out_of_scope and creates no event.
 func Country(explicit string, p CountryPolicy) (code string, inScope bool) {
+	return countryIn(explicit, p, allowedCountries)
+}
+
+// countryIn — Country с явным списком разрешённых стран.
+func countryIn(explicit string, p CountryPolicy, allowed map[string]bool) (code string, inScope bool) {
 	if strings.TrimSpace(explicit) != "" {
 		if code = CountryCode(explicit); code != "" {
-			return code, code == "RU"
+			return code, allowed[code]
 		}
 		if _, kind := ClassifyRegion(explicit); kind == RegionForeign {
 			return "", false
 		}
 	}
 	if p == RUOnlyFallback {
-		return "RU", true
+		return "RU", allowed["RU"]
 	}
 	return "", false
 }

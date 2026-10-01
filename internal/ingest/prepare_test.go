@@ -3,6 +3,7 @@ package ingest
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -143,6 +144,71 @@ func TestPrepareRegions(t *testing.T) {
 	// Нераспознанная область считается и при NoFallback.
 	if _, st := Prepare(recs[2:3], now, noFallback); st.UnrecognizedRegion != 1 {
 		t.Errorf("Минская область, NoFallback: UnrecognizedRegion = %d, want 1", st.UnrecognizedRegion)
+	}
+}
+
+// TestPrepareCountries — явная страна записи: разрешённая (RU, BY) проходит
+// в каталог с country_code и областью как есть, неразрешённая остаётся вне
+// каталога; перечень субъектов РФ к области другой страны не применяется.
+func TestPrepareCountries(t *testing.T) {
+	now := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	mk := func(id, country, region, city, address string) SourceEvent {
+		r := rec(id, "15/11/2026")
+		r.Country, r.Region, r.City, r.Address = country, region, city, address
+		return r
+	}
+	recs := []SourceEvent{
+		mk("1", "Беларусь", "Минская область", "Минск", ""),
+		mk("2", "Республика Беларусь", "Брестская область", "д. Колбовичи", "Барановичский район"),
+		mk("3", "Беларусь", "", "Гомель", ""),
+		mk("4", "Казахстан", "Алматинская область", "Алматы", ""),
+		mk("5", "Украина", "", "Киев", ""),
+		mk("6", "Россия", "Московская область", "Химки", ""),
+		mk("7", "Россия", "Беларусь", "Минск", ""), // область-страна: вне каталога, как раньше
+		mk("8", "Беларусь", "Минская область", "Любань", ""),
+		mk("9", "Россия", "Ленинградская область", "Любань", ""),
+	}
+	for _, pol := range []Policy{ruOnly, noFallback} {
+		out, st := Prepare(recs, now, pol)
+		if len(out) != len(recs) {
+			t.Fatalf("valid = %d, want %d", len(out), len(recs))
+		}
+		by := map[string]Prepared{}
+		for _, p := range out {
+			by[p.Source.ExternalID] = p
+		}
+		type want struct {
+			in           bool
+			code, region string
+		}
+		for id, w := range map[string]want{
+			"1": {true, "BY", "Минская область"},
+			"2": {true, "BY", "Брестская область"},
+			"3": {true, "BY", ""},
+			"4": {false, "KZ", "Алматинская область"},
+			"5": {false, "UA", ""},
+			"6": {true, "RU", "Московская область"},
+			"7": {false, "", "Беларусь"},
+			"8": {true, "BY", "Минская область"},
+			"9": {true, "RU", "Ленинградская область"},
+		} {
+			p := by[id]
+			if p.InScope != w.in || p.Event.CountryCode != w.code || p.Event.Region != w.region {
+				t.Errorf("%s: InScope %v, %q, %q; want %v, %q, %q", id, p.InScope, p.Event.CountryCode, p.Event.Region, w.in, w.code, w.region)
+			}
+		}
+		if p := by["2"]; p.Event.City != "Колбовичи" || p.Event.Address != "Барановичский район" {
+			t.Errorf("2: City %q, Address %q", p.Event.City, p.Event.Address)
+		}
+		// Область другой страны не считается нераспознанной областью РФ.
+		if st.UnrecognizedRegion != 0 || st.OutOfScope != 3 || st.Empty["region"] != 2 {
+			t.Errorf("Stats = %+v, want UnrecognizedRegion 0, OutOfScope 3, Empty[region] 2", st)
+		}
+		// Одинаковое название города в разных странах: city_key один,
+		// идентичность города — пара (country_code, city_key).
+		if a, b := by["8"].Event, by["9"].Event; a.CityKey != "lyuban" || a.CityKey != b.CityKey || a.CountryCode == b.CountryCode {
+			t.Errorf("Любань: %q/%q и %q/%q", a.CountryCode, a.CityKey, b.CountryCode, b.CityKey)
+		}
 	}
 }
 
@@ -300,5 +366,18 @@ func TestPrepareGroupKey(t *testing.T) {
 	out, st = Prepare(series, now, noFallback)
 	if len(out) != 1 || st.OutOfScope != 1 || st.Collapsed != 2 || st.Empty["city"] != 0 {
 		t.Errorf("NoFallback: out %d, Stats %+v", len(out), st)
+	}
+}
+
+func TestPrepareSourceTimezone(t *testing.T) {
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	rec := func(city, tz string) SourceEvent {
+		return SourceEvent{ExternalID: city, Title: "Старт", Date: "2026-10-17", City: city, Country: "RU", Timezone: tz}
+	}
+	out, _ := Prepare([]SourceEvent{rec("Волгоград", "Europe/Volgograd"), rec("Москва", "Asia/Tokyo"), rec("Тула", "Nope/Zone")}, now, Policy{})
+	got := []string{out[0].Event.Timezone, out[1].Event.Timezone, out[2].Event.Timezone}
+	// справочник городов важнее источника; неизвестная зона отбрасывается
+	if want := []string{"Europe/Volgograd", "Europe/Moscow", ""}; !slices.Equal(got, want) {
+		t.Fatalf("timezone = %v, want %v", got, want)
 	}
 }

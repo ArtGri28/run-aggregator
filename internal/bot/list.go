@@ -57,7 +57,7 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 			b.logger().Error("list", "err", err)
 			return errNotice
 		}
-		sc = listScreen(items, total, page, v)
+		sc = listScreen(items, total, page, v, f.Country == allCountries)
 	}
 	if err := b.show(ctx, q, sc); err != nil {
 		b.logger().Warn("show list", "err", err)
@@ -85,8 +85,9 @@ func cut(s string, n int) string {
 }
 
 // listScreen — страница списка (D-11): пронумерованные строки, кнопки
-// карточек 1…5, навигация и «Фильтры».
-func listScreen(items []store.ListItem, total, page, v int) screen {
+// карточек 1…5, навигация и «Фильтры». flags — перед городом флаг страны
+// события (выдача «все страны»); область и район не показываются никогда.
+func listScreen(items []store.ListItem, total, page, v int, flags bool) screen {
 	pages := (total + pageSize - 1) / pageSize
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Найдено %d · страница %d/%d\n", total, page, pages)
@@ -95,6 +96,9 @@ func listScreen(items []store.ListItem, total, page, v int) screen {
 		city := it.City
 		if city == "" {
 			city = "—"
+		}
+		if f := countryFlag(it.CountryCode); flags && f != "" {
+			city = f + " " + city
 		}
 		fmt.Fprintf(&sb, "\n%d. %s · %s · %s%s", i+1, it.StartDate.Format("02.01"), html.EscapeString(city),
 			statusMark(it.Status), html.EscapeString(cut(it.Title, maxListTitle)))
@@ -147,12 +151,36 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 			b.logger().Error("event sources", "err", err)
 			return errNotice
 		}
-		sc = cardScreen(e, srcs, c.Page, c.V)
+		style, err := b.cardPlaceStyle(ctx, q.From.ID)
+		if err != nil {
+			b.logger().Error("card place", "err", err)
+			return errNotice
+		}
+		sc = cardScreen(e, srcs, c.Page, c.V, style)
 	}
 	if err := b.show(ctx, q, sc); err != nil {
 		b.logger().Warn("show card", "err", err)
 	}
 	return ""
+}
+
+// cardPlaceStyle — как показать место в карточке по фильтрам пользователя:
+// прежний текст (одна страна), «📍 город» (страна выбрана) или «🌍 страна» и
+// «📍 город» (все страны).
+func (b *Bot) cardPlaceStyle(ctx context.Context, tgID int64) (placeStyle, error) {
+	raw, _, err := b.Store.Filters(ctx, tgID)
+	if err != nil {
+		return placePlain, err
+	}
+	f := loadFilters(raw, b.today())
+	if f.Country == allCountries {
+		return placeWithCountry, nil
+	}
+	show, err := b.showCountry(ctx, f)
+	if show {
+		return placePinned, err
+	}
+	return placePlain, err
 }
 
 func goneScreen(page, v int) screen {
@@ -164,7 +192,7 @@ var monthsGen = [...]string{"января", "февраля", "марта", "а�
 	"июля", "августа", "сентября", "октября", "ноября", "декабря"}
 
 // sourceNames — подпись источника по коду; неизвестный код показывается как есть.
-var sourceNames = map[string]string{"marathonec": "Марафонец", "probeg": "ПроБЕГ"}
+var sourceNames = map[string]string{"marathonec": "Марафонец", "probeg": "ПроБЕГ", "heroleague": "Лига Героев"}
 
 func sourceName(code string) string {
 	if n, ok := sourceNames[code]; ok {
@@ -177,9 +205,18 @@ func ruDate(t time.Time) string {
 	return fmt.Sprintf("%d %s %d", t.Day(), monthsGen[t.Month()-1], t.Year())
 }
 
+// placeStyle — вид строки места в карточке.
+type placeStyle int
+
+const (
+	placePlain       placeStyle = iota // «Минск» — одна страна в каталоге, прежний текст
+	placePinned                        // «📍 Минск» — страна выбрана
+	placeWithCountry                   // «🇧🇾 Беларусь» и «📍 Минск» — все страны
+)
+
 // cardScreen — карточка события (BOT-05, HTML): всё динамическое
 // экранировано, ссылки только из validURL. Пустые поля строк не дают.
-func cardScreen(e event.Event, srcs []store.EventSource, page, v int) screen {
+func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style placeStyle) screen {
 	esc := func(s string, n int) string { return html.EscapeString(cut(s, n)) }
 	var sb strings.Builder
 	sb.WriteString("<b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n")
@@ -195,8 +232,14 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int) screen {
 	if e.City != "" {
 		place = esc(e.City, 100)
 	}
-	if e.Address != "" {
-		place += ", " + esc(e.Address, 200)
+	if a := visibleAddress(e); a != "" {
+		place += ", " + esc(a, 200)
+	}
+	if style == placeWithCountry {
+		sb.WriteString("🌍 " + esc(countryName(e.CountryCode), 60) + "\n")
+	}
+	if style != placePlain {
+		place = "📍 " + place
 	}
 	sb.WriteString(place + "\n" + typeLabel(string(e.Type)) + "\n")
 	if len(e.Distances) > 0 {

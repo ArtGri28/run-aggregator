@@ -172,7 +172,12 @@ func TestParseRows(t *testing.T) {
 	check("85120", place{"02.10.2026", "04.10.2026", "Краснодарский край", "Сочи", "Россия"})
 	check("74418", place{region: "", city: "Хабаровск", country: "Россия"})
 	check("76653", place{region: "Москва", city: "Москва", country: "Россия"})
-	check("83368", place{region: "Беларусь", city: "Гомель", country: ""})
+	check("83368", place{region: "", city: "Гомель", country: "Беларусь"})
+	check("83357", place{region: "Брестская область", city: "Колбовичи", country: "Беларусь"})
+	check("77919", place{region: "", city: "Минск", country: "Беларусь"})
+	if a := byID(t, recs, "83357").Address; a != "Барановичский район" {
+		t.Errorf("83357: Address %q, want район", a)
+	}
 	check("77976", place{date: "31.10.2026", end: "01.11.2026", region: byID(t, recs, "77976").Region, city: byID(t, recs, "77976").City, country: "Россия"})
 	check("83307", place{date: "31.07.2027", end: "04.08.2027", region: byID(t, recs, "83307").Region, city: byID(t, recs, "83307").City, country: byID(t, recs, "83307").Country})
 	check("84871", place{date: "07.09.2027", region: byID(t, recs, "84871").Region, city: "Сахюрта", country: "Россия"})
@@ -257,7 +262,7 @@ func TestPlaceVerdicts(t *testing.T) {
 		raw := text(cells[colCity])
 		parts := strings.Split(raw, ",")
 		_, kind := normalize.ClassifyRegion(parts[0])
-		_, city, cntry := resolvePlace(raw, false)
+		_, city, cntry, _ := resolvePlace(raw, false)
 		switch {
 		case kind == normalize.RegionForeign:
 			foreign[strings.TrimSpace(parts[0])]++
@@ -386,6 +391,42 @@ func TestParseEdges(t *testing.T) {
 		recs, err := parsePage(t, fixtureFetched, row("03.10", `<a href="/event/1/">Забег</a>`, p, "5 км", ""))
 		if err != nil || recs[0].Country != "" {
 			t.Errorf("%q: %+v, %v; want Country пусто", p, recs, err)
+		}
+	}
+}
+
+func TestResolvePlace(t *testing.T) {
+	tests := []struct {
+		raw                            string
+		group                          bool
+		region, city, country, address string
+	}{
+		// Беларусь: страна по справочнику, область, район, город без префикса.
+		{"Беларусь, Минск", false, "", "Минск", "Беларусь", ""},
+		{"Беларусь, Гомель", false, "", "Гомель", "Беларусь", ""},
+		{"Беларусь, Брестская область, Малорита", false, "Брестская область", "Малорита", "Беларусь", ""},
+		{"Беларусь, Минская область, Молодечно", false, "Минская область", "Молодечно", "Беларусь", ""},
+		{"Беларусь, Минская область, Любань", false, "Минская область", "Любань", "Беларусь", ""},
+		{"Беларусь, Минская область, Логойск", false, "Минская область", "Логойск", "Беларусь", ""},
+		{"Беларусь, Минская область, Минский район, д.\u00a0Раубичи", false, "Минская область", "Раубичи", "Беларусь", "Минский район"},
+		{"Республика Беларусь, Гродненская область, Лида", false, "Гродненская область", "Лида", "Республика Беларусь", ""},
+		// другая страна с ISO-кодом: тот же механизм, решение — за Prepare.
+		{"Казахстан, Алматы", false, "", "Алматы", "Казахстан", ""},
+		// иностранная страна без ISO-кода: как раньше.
+		{"Абхазия, Сухум", false, "Абхазия", "Сухум", "", ""},
+		// Россия без изменений.
+		{"Московская область, Химки", false, "Московская область", "Химки", "Россия", ""},
+		{"г. Москва", true, "Москва", "Москва", "Россия", ""},
+		{"Ростов-на-Дону", false, "", "Ростов-на-Дону", "Россия", ""},
+		{"Атлантида, Центр", false, "Атлантида", "Центр", "", ""},
+		{"Неизвестный город", false, "", "Неизвестный город", "", ""},
+		{"", false, "", "", "", ""},
+	}
+	for _, tt := range tests {
+		region, city, country, address := resolvePlace(tt.raw, tt.group)
+		if region != tt.region || city != tt.city || country != tt.country || address != tt.address {
+			t.Errorf("resolvePlace(%q) = %q/%q/%q/%q, want %q/%q/%q/%q",
+				tt.raw, region, city, country, address, tt.region, tt.city, tt.country, tt.address)
 		}
 	}
 }

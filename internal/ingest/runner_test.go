@@ -752,7 +752,7 @@ func TestRunOutOfScopeMax(t *testing.T) {
 	r := testRunner(t)
 	recs := records(1, 10)
 	for i := range 3 {
-		recs[i].Country = "Беларусь"
+		recs[i].Country = "Казахстан"
 	}
 	common, own := newMemSource(t, recs), newMemSource(t, recs)
 	own.code += "-own"

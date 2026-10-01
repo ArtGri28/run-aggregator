@@ -150,8 +150,11 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 		if city == "" {
 			st.Empty["city"]++
 		}
+		code, inScope := normalize.Country(rec.Country, pol.CountryFallback)
 		// Область (D-08, D-09, D-14). Иностранная — вне каталога при любой
 		// политике; нераспознанная считается независимо от политики.
+		// Перечень субъектов РФ применяется, только если страна записи РФ
+		// или не определена: область другой страны проходит как есть.
 		region := normalize.Region(rec.Region)
 		foreign := false
 		switch {
@@ -159,6 +162,8 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 			st.MultiRegion++
 		case region == "":
 			st.Empty["region"]++
+		case code != "" && code != "RU":
+			// область другой страны: классификация РФ не применяется
 		default:
 			canonical, kind := normalize.ClassifyPlace(region, city)
 			switch kind {
@@ -188,7 +193,6 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 		if len(dists) == 0 {
 			st.Empty["distances"]++
 		}
-		code, inScope := normalize.Country(rec.Country, pol.CountryFallback)
 		if foreign {
 			code, inScope = "", false
 		}
@@ -211,10 +215,11 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 				Region:          region,
 				City:            city,
 				CityKey:         cityKey,
-				Timezone:        normalize.Timezone(cityKey, region),
+				Timezone:        timezone(cityKey, region, rec.Timezone),
 				Type:            normalize.Type(rec.TypeLabel),
 				Status:          event.StatusScheduled,
 				Description:     normalize.Description(rec.Description),
+				Address:         normalize.Region(rec.Address),
 				RegistrationURL: rec.RegistrationURL,
 				Distances:       dists,
 			},
@@ -222,6 +227,17 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 	}
 	st.Valid = len(out)
 	return out, st
+}
+
+// timezone — зона по справочнику городов, иначе валидная зона источника.
+func timezone(cityKey, region, source string) string {
+	if tz := normalize.Timezone(cityKey, region); tz != "" {
+		return tz
+	}
+	if _, err := time.LoadLocation(source); err == nil && source != "" {
+		return source
+	}
+	return ""
 }
 
 // check — проверки записи в Prepare, кроме дубля external_id: дата и

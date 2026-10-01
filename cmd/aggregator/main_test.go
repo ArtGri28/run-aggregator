@@ -50,7 +50,7 @@ func TestNewSources(t *testing.T) {
 	for _, s := range newSources(nil) {
 		codes[s.Code()] = s.Policy()
 	}
-	for _, c := range []string{"marathonec", "probeg"} {
+	for _, c := range []string{"marathonec", "probeg", "heroleague"} {
 		if _, ok := codes[c]; !ok {
 			t.Fatalf("источник %s не зарегистрирован", c)
 		}

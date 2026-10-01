@@ -175,7 +175,15 @@ func TestCountryCode(t *testing.T) {
 		{"RU", "RU"},
 		{"rus", "RU"},
 		{"by", "BY"},
-		{"Беларусь", ""},
+		{"Беларусь", "BY"},
+		{"Республика Беларусь", "BY"},
+		{"Белоруссия", "BY"},
+		{"Belarus", "BY"},
+		{"Польша", "PL"},
+		{"Poland", "PL"},
+		{"Казахстан", "KZ"},
+		{"Абхазия", ""}, // нет собственного ISO-кода
+		{"Атлантида", ""},
 		{"", ""},
 	}
 	for _, tt := range tests {
@@ -195,11 +203,17 @@ func TestCountry(t *testing.T) {
 		// 1. explicit Russia
 		{"Россия", NoFallback, "RU", true},
 		{"Russia", RUOnlyFallback, "RU", true},
-		// 3. explicit other country: out of scope under any policy
-		{"Беларусь", RUOnlyFallback, "", false},
-		{"BY", NoFallback, "BY", false},
+		// 3. explicit allowed country (RU, BY): in scope under any policy
+		{"Беларусь", RUOnlyFallback, "BY", true},
+		{"Беларусь", NoFallback, "BY", true},
+		{"BY", NoFallback, "BY", true},
+		{"Belarus", RUOnlyFallback, "BY", true},
+		// explicit country outside the allowed list: code kept, out of scope
 		{"KZ", RUOnlyFallback, "KZ", false},
-		{"Belarus", RUOnlyFallback, "", false},
+		{"Казахстан", RUOnlyFallback, "KZ", false},
+		{"Польша", RUOnlyFallback, "PL", false},
+		// known foreign name without ISO code: out of scope, no code
+		{"Абхазия", RUOnlyFallback, "", false},
 		// ME-04: распознанное написание России
 		{"Russian Federation", NoFallback, "RU", true},
 		{"Rossiya", NoFallback, "RU", true},
@@ -215,6 +229,63 @@ func TestCountry(t *testing.T) {
 		code, inScope := Country(tt.explicit, tt.policy)
 		if code != tt.code || inScope != tt.inScope {
 			t.Errorf("Country(%q, %v) = (%q, %v), want (%q, %v)", tt.explicit, tt.policy, code, inScope, tt.code, tt.inScope)
+		}
+	}
+}
+
+// Справочник названий покрывает все страны из foreignNames (regions.go),
+// кроме нескольких без собственного ISO-кода; все значения — ISO alpha-2.
+func TestCountryNamesCoverForeign(t *testing.T) {
+	noISO := map[string]bool{"Абхазия": true, "Южная Осетия": true, "Abkhazia": true}
+	for _, n := range foreignNames {
+		if got := CountryCode(n); got == "" && !noISO[n] {
+			t.Errorf("foreignNames: %q не найдено в countryNames", n)
+		}
+	}
+	for name, code := range countryNames {
+		if len(code) != 2 || code != strings.ToUpper(code) {
+			t.Errorf("countryNames[%q] = %q: не ISO alpha-2", name, code)
+		}
+		if name != strings.ToLower(name) {
+			t.Errorf("countryNames[%q]: ключ не в нижнем регистре", name)
+		}
+	}
+}
+
+func TestIsAllowedCountry(t *testing.T) {
+	for code, want := range map[string]bool{"RU": true, "BY": true, "PL": false, "KZ": false, "": false, "ru": false} {
+		if got := IsAllowedCountry(code); got != want {
+			t.Errorf("IsAllowedCountry(%q) = %v, want %v", code, got, want)
+		}
+	}
+}
+
+// Политика определяется списком, а не кодом: добавление страны — данные.
+func TestCountryAllowedList(t *testing.T) {
+	ruOnly := map[string]bool{"RU": true}
+	withPL := map[string]bool{"RU": true, "BY": true, "PL": true}
+	noRU := map[string]bool{"BY": true}
+	tests := []struct {
+		name     string
+		allowed  map[string]bool
+		explicit string
+		policy   CountryPolicy
+		code     string
+		inScope  bool
+	}{
+		{"BY вне списка", ruOnly, "Беларусь", NoFallback, "BY", false},
+		{"PL вне списка", ruOnly, "Польша", NoFallback, "PL", false},
+		{"PL добавлена", withPL, "Польша", NoFallback, "PL", true},
+		{"RU остаётся", withPL, "Россия", NoFallback, "RU", true},
+		{"KZ не добавлен", withPL, "Казахстан", NoFallback, "KZ", false},
+		{"fallback RU без RU в списке", noRU, "", RUOnlyFallback, "RU", false},
+		{"явная RU без RU в списке", noRU, "Россия", NoFallback, "RU", false},
+		{"нет страны, NoFallback", withPL, "", NoFallback, "", false},
+	}
+	for _, tt := range tests {
+		code, inScope := countryIn(tt.explicit, tt.policy, tt.allowed)
+		if code != tt.code || inScope != tt.inScope {
+			t.Errorf("%s: countryIn(%q) = (%q, %v), want (%q, %v)", tt.name, tt.explicit, code, inScope, tt.code, tt.inScope)
 		}
 	}
 }

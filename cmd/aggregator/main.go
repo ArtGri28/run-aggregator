@@ -23,6 +23,7 @@ import (
 	"aggregator/internal/bot"
 	"aggregator/internal/dedup"
 	"aggregator/internal/ingest"
+	"aggregator/internal/ingest/sources/heroleague"
 	"aggregator/internal/ingest/sources/marathonec"
 	"aggregator/internal/ingest/sources/probeg"
 	"aggregator/internal/store"
@@ -146,7 +147,7 @@ func openStore(ctx context.Context) (*store.Store, error) {
 // newSources — единственное место регистрации источников: пакет ingest их
 // не импортирует. f — сетевой загрузчик (боту не нужен: nil).
 func newSources(f *ingest.Fetcher) []ingest.Source {
-	return []ingest.Source{marathonec.New(f), probeg.New(f)}
+	return []ingest.Source{marathonec.New(f), probeg.New(f), heroleague.New(f)}
 }
 
 // newRunner собирает Runner из настроек наблюдения и дедупликации. Worker и

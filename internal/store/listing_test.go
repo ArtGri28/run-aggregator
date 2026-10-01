@@ -12,7 +12,14 @@ import (
 // listEvent сохраняет событие выдачи; id растут в порядке вызовов.
 func listEvent(t *testing.T, s *Store, date, city, cityKey string, typ event.Type, meters ...int) int64 {
 	t.Helper()
+	return listEventIn(t, s, "RU", date, city, cityKey, typ, meters...)
+}
+
+// listEventIn — listEvent для события страны country (ISO alpha-2).
+func listEventIn(t *testing.T, s *Store, country, date, city, cityKey string, typ event.Type, meters ...int) int64 {
+	t.Helper()
 	e := sampleEvent()
+	e.CountryCode = country
 	e.Title, e.TitleNorm = "Забег "+date+" "+city, "zabeg "+date+cityKey
 	e.StartDate, e.EndDate = mustDateFixed(date), nil
 	e.City, e.CityKey, e.Type = city, cityKey, typ
@@ -194,5 +201,72 @@ func TestRootEventID(t *testing.T) {
 	exec(t, "UPDATE events SET merged_into_id = $1 WHERE id = $2", d, e)
 	if _, err := s.RootEventID(ctx, d); err == nil || errors.Is(err, ErrNotFound) {
 		t.Fatalf("RootEventID(cycle) err = %v, want non-ErrNotFound error", err)
+	}
+}
+
+// Страна — отдельный фильтр: пусто — любая, код — только эта страна; город
+// определяется парой (страна, city_key), одинаковый ключ в двух странах не
+// смешивается. LIMIT и OFFSET после перенумерации параметров работают.
+func TestListEventsCountry(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	ruMsk := listEventIn(t, s, "RU", "2026-10-01", "Москва", "moscow", event.TypeRoad, 5000)
+	byMinsk := listEventIn(t, s, "BY", "2026-10-02", "Минск", "minsk", event.TypeRoad, 10000)
+	ruLyuban := listEventIn(t, s, "RU", "2026-10-03", "Любань", "lyuban", event.TypeTrail, 21097)
+	byLyuban := listEventIn(t, s, "BY", "2026-10-04", "Любань", "lyuban", event.TypeTrail, 21097)
+	byGomel := listEventIn(t, s, "BY", "2026-10-05", "Гомель", "gomel", event.TypeRoad, 42195)
+	hidden := listEventIn(t, s, "BY", "2026-10-06", "Минск", "minsk", event.TypeRoad, 5000)
+	exec(t, "UPDATE events SET is_listed = false WHERE id = $1", hidden)
+
+	from := mustDateFixed("2026-10-01")
+	cases := []struct {
+		name string
+		f    event.Filter
+		want []int64
+	}{
+		{"пусто — любая страна", event.Filter{From: from}, []int64{ruMsk, byMinsk, ruLyuban, byLyuban, byGomel}},
+		{"RU", event.Filter{From: from, CountryCode: "RU"}, []int64{ruMsk, ruLyuban}},
+		{"BY", event.Filter{From: from, CountryCode: "BY"}, []int64{byMinsk, byLyuban, byGomel}},
+		{"страны без событий", event.Filter{From: from, CountryCode: "PL"}, []int64{}},
+		{"страна и город", event.Filter{From: from, CountryCode: "BY", CityKey: "minsk"}, []int64{byMinsk}},
+		{"город чужой страны — пусто", event.Filter{From: from, CountryCode: "RU", CityKey: "minsk"}, []int64{}},
+		{"одинаковый city_key: RU", event.Filter{From: from, CountryCode: "RU", CityKey: "lyuban"}, []int64{ruLyuban}},
+		{"одинаковый city_key: BY", event.Filter{From: from, CountryCode: "BY", CityKey: "lyuban"}, []int64{byLyuban}},
+		{"одинаковый city_key без страны — оба", event.Filter{From: from, CityKey: "lyuban"}, []int64{ruLyuban, byLyuban}},
+		{"страна и тип", event.Filter{From: from, CountryCode: "BY", Type: event.TypeTrail}, []int64{byLyuban}},
+		{"страна и корзина", event.Filter{From: from, CountryCode: "BY",
+			Distances: []event.DistanceRange{{Lo: 30000, Hi: 43000}}}, []int64{byGomel}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			items, err := s.ListEvents(ctx, tc.f, 20, 0)
+			if err != nil {
+				t.Fatalf("ListEvents: %v", err)
+			}
+			if got := listIDs(items); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("ListEvents = %v, want %v", got, tc.want)
+			}
+			if n, err := s.CountEvents(ctx, tc.f); err != nil || n != len(tc.want) {
+				t.Fatalf("CountEvents = %d, %v; want %d", n, err, len(tc.want))
+			}
+		})
+	}
+
+	// LIMIT/OFFSET при фильтре страны: страница 2 из BY по одному.
+	items, err := s.ListEvents(ctx, event.Filter{From: from, CountryCode: "BY"}, 1, 1)
+	if err != nil || !reflect.DeepEqual(listIDs(items), []int64{byLyuban}) {
+		t.Fatalf("ListEvents(BY, 1, 1) = %v, %v; want [%d]", listIDs(items), err, byLyuban)
+	}
+}
+
+// Строка списка несёт страну события.
+func TestListItemCountry(t *testing.T) {
+	s := testStore(t)
+	listEventIn(t, s, "RU", "2026-10-01", "Москва", "moscow", event.TypeRoad, 5000)
+	listEventIn(t, s, "BY", "2026-10-02", "Минск", "minsk", event.TypeRoad, 5000)
+	items, err := s.ListEvents(context.Background(), event.Filter{From: mustDateFixed("2026-10-01")}, 10, 0)
+	if err != nil || len(items) != 2 || items[0].CountryCode != "RU" || items[1].CountryCode != "BY" {
+		t.Fatalf("ListEvents = %+v, %v; want страны RU, BY", items, err)
 	}
 }

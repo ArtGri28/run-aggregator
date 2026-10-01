@@ -84,7 +84,7 @@ func TestMonthOptions(t *testing.T) {
 }
 
 func TestFilterLabels(t *testing.T) {
-	if got, want := summaryLine(userFilters{}, ""), "Дата: все будущие · Город: вся Россия · Дистанция: любая · Тип: любой"; got != want {
+	if got, want := summaryLine(userFilters{}, "", false), "Дата: все будущие · Город: вся Россия · Дистанция: любая · Тип: любой"; got != want {
 		t.Fatalf("summaryLine(default) = %q, want %q", got, want)
 	}
 	for date, want := range map[string]string{"": "все будущие", "a": "все будущие", "30": "30 дней",
@@ -93,7 +93,7 @@ func TestFilterLabels(t *testing.T) {
 			t.Errorf("dateLabel(%q) = %q, want %q", date, got, want)
 		}
 	}
-	got := summaryLine(userFilters{Dist: []int{0, 3}, Type: "trail", City: "x"}, "<b>Тула&")
+	got := summaryLine(userFilters{Dist: []int{0, 3}, Type: "trail", City: "x"}, "<b>Тула&", false)
 	want := "Дата: все будущие · Город: &lt;b&gt;Тула&amp; · Дистанция: до 5 км, 30–43 км, марафон · Тип: Трейл"
 	if got != want {
 		t.Fatalf("summaryLine = %q, want %q", got, want)
@@ -435,5 +435,186 @@ func TestStaleMonthFilter(t *testing.T) {
 	press(t, b, api, "f:t:road")
 	if raw, _, err := s.Filters(ctx, 42); err != nil || strings.Contains(string(raw), "m202608") {
 		t.Fatalf("после изменения filters=%s err=%v; want без m202608", raw, err)
+	}
+}
+
+func TestSetCountry(t *testing.T) {
+	f := userFilters{Date: "nm", City: "minsk", Type: "road", Dist: []int{1}, Country: "BY"}
+	// Та же страна: город сохраняется.
+	if got := f.setCountry("BY"); !reflect.DeepEqual(got, f) {
+		t.Errorf("setCountry(BY) при BY = %+v, want без изменений", got)
+	}
+	// Другая страна, все страны, страна по умолчанию: город сбрасывается, остальное — нет.
+	for _, c := range []string{"RU", "PL", "*", "-", ""} {
+		got := f.setCountry(c)
+		want := userFilters{Date: "nm", Type: "road", Dist: []int{1}, Country: c}
+		if c == "-" || c == "RU" { // страна по умолчанию хранится как ""
+			want.Country = ""
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("setCountry(%q) = %+v, want %+v", c, got, want)
+		}
+	}
+	// Страна по умолчанию → конкретная и обратно.
+	g := userFilters{City: "moscow"}
+	if got := g.setCountry("BY"); got.Country != "BY" || got.City != "" {
+		t.Errorf("setCountry(BY) из страны по умолчанию = %+v", got)
+	}
+	if got := g.setCountry(""); !reflect.DeepEqual(got, g) {
+		t.Errorf("setCountry(\"\") из страны по умолчанию = %+v, want без изменений", got)
+	}
+	// Исходное значение не меняется.
+	if f.Country != "BY" || f.City != "minsk" {
+		t.Errorf("исходные фильтры изменены: %+v", f)
+	}
+	// Снять страну: возврат к стране по умолчанию, город сбрасывается.
+	if got := f.unset('k'); !reflect.DeepEqual(got, userFilters{Date: "nm", Type: "road", Dist: []int{1}}) {
+		t.Errorf("unset(k) = %+v", got)
+	}
+	// Кнопки: f:k:<значение> и f:x:k.
+	for data, want := range map[string]userFilters{
+		"f:k:BY": {Country: "BY"}, "f:k:*": {Country: "*"},
+		"f:k:-": {City: "moscow"}, // страна по умолчанию → по умолчанию: та же страна, город остаётся
+	} {
+		c, err := parseCallback(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mut := mutation(c)
+		if mut == nil {
+			t.Fatalf("%s: mutation = nil", data)
+		}
+		if got := mut(userFilters{City: "moscow"}); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %+v, want %+v", data, got, want)
+		}
+	}
+	if c, _ := parseCallback("f:k"); mutation(c) != nil {
+		t.Error("f:k без значения должна только открывать подменю")
+	}
+	c, _ := parseCallback("f:x:k")
+	if got := mutation(c)(f); !reflect.DeepEqual(got, userFilters{Date: "nm", Type: "road", Dist: []int{1}}) {
+		t.Errorf("f:x:k = %+v", got)
+	}
+	// JSON страны по умолчанию не отличается от старого.
+	if raw, err := json.Marshal(userFilters{Country: "BY"}.setCountry("")); err != nil || string(raw) != "{}" {
+		t.Errorf("json страны по умолчанию = %s, %v; want {}", raw, err)
+	}
+}
+
+func TestLoadFiltersCountry(t *testing.T) {
+	today := day(2026, 9, 29)
+	for raw, want := range map[string]string{
+		`{}`:                            "",
+		`{"date":"nm","city":"moscow"}`: "", // старый JSON без country
+		`{"country":""}`:                "",
+		`{"country":"*"}`:               "*",
+		`{"country":"BY"}`:              "BY",
+		`{"country":"RU"}`:              "RU",
+		`{"country":"PL"}`:              "PL",
+		`{"country":"by"}`:              "",
+		`{"country":"By"}`:              "",
+		`{"country":"XYZ"}`:             "",
+		`{"country":"B"}`:               "",
+		`{"country":"ВУ"}`:              "",
+		`{"country":"-"}`:               "",
+		`{"country":"**"}`:              "",
+		`{"country":" BY"}`:             "",
+		`{"country":5}`:                 "",
+		`{"country":["BY"]}`:            "",
+		`{"country":null}`:              "",
+	} {
+		got := loadFilters([]byte(raw), today)
+		if got.Country != want {
+			t.Errorf("loadFilters(%s).Country = %q, want %q", raw, got.Country, want)
+		}
+	}
+	// Остальные фильтры страной не затрагиваются; значение страны вне
+	// формата не сбрасывает их.
+	got := loadFilters([]byte(`{"date":"nm","city":"minsk","dist":[1],"type":"road","country":"BY"}`), today)
+	if want := (userFilters{Date: "nm", City: "minsk", Dist: []int{1}, Type: "road", Country: "BY"}); !reflect.DeepEqual(got, want) {
+		t.Errorf("loadFilters(полный) = %+v, want %+v", got, want)
+	}
+	// Город не живёт при «всех странах».
+	if got := loadFilters([]byte(`{"country":"*","city":"lyuban","type":"road"}`), today); !reflect.DeepEqual(got, userFilters{Country: "*", Type: "road"}) {
+		t.Errorf("loadFilters(* и город) = %+v", got)
+	}
+	got = loadFilters([]byte(`{"date":"nm","city":"moscow","country":"XYZ"}`), today)
+	if want := (userFilters{Date: "nm", City: "moscow"}); !reflect.DeepEqual(got, want) {
+		t.Errorf("loadFilters(мусорная страна) = %+v, want %+v", got, want)
+	}
+}
+
+// Страна в параметрах выдачи: "" — страна по умолчанию RU (подставляет бот),
+// "*" — без ограничения по стране, код — как есть; остальные поля прежние.
+func TestFilterQueryCountry(t *testing.T) {
+	today := day(2026, 9, 29)
+	for country, want := range map[string]string{"": "RU", "RU": "RU", "BY": "BY", "PL": "PL", "*": ""} {
+		q := userFilters{Country: country, City: "minsk", Type: "trail", Dist: []int{1}}.query(today)
+		if q.CountryCode != want || q.CityKey != "minsk" || q.Type != event.TypeTrail ||
+			len(q.Distances) != 1 || q.Distances[0] != (event.DistanceRange{Lo: buckets[1].lo, Hi: buckets[1].hi}) {
+			t.Errorf("query(country %q) = %+v, want CountryCode %q", country, q, want)
+		}
+	}
+	// Пустые фильтры — Россия, остальное как раньше.
+	if q := (userFilters{}).query(today); q.CountryCode != "RU" || q.CityKey != "" || q.Type != "" || q.Distances != nil {
+		t.Errorf("query(пусто) = %+v", q)
+	}
+	// Старые фильтры без country и мусорное значение страны — Россия.
+	for _, raw := range []string{`{}`, `{"date":"nm"}`, `{"city":"moscow"}`, `{"city":"lyuban"}`, `{"country":"XYZ"}`, `{"country":"by"}`} {
+		if q := loadFilters([]byte(raw), today).query(today); q.CountryCode != "RU" {
+			t.Errorf("query(%s).CountryCode = %q, want RU", raw, q.CountryCode)
+		}
+	}
+}
+
+func TestEffectiveCountry(t *testing.T) {
+	for country, want := range map[string][2]string{
+		"": {"RU", "RU"}, "RU": {"RU", "RU"}, "BY": {"BY", "BY"}, "PL": {"PL", "PL"}, "*": {"*", ""},
+	} {
+		f := userFilters{Country: country}
+		if got := f.effectiveCountry(); got != want[0] {
+			t.Errorf("effectiveCountry(%q) = %q, want %q", country, got, want[0])
+		}
+		if got := f.countryCode(); got != want[1] {
+			t.Errorf("countryCode(%q) = %q, want %q", country, got, want[1])
+		}
+	}
+	if defaultCountry != "RU" {
+		t.Errorf("defaultCountry = %q, want RU", defaultCountry)
+	}
+}
+
+// Фильтры старого пользователя (без country) загружаются и сохраняются без
+// изменения filters_v; повторный выбор той же страны — тоже.
+func TestLegacyFiltersKeepVersion(t *testing.T) {
+	s, _, b := seeded(t)
+	ctx := context.Background()
+	const legacy = `{"date":"nm","city":"moscow","dist":[1,2],"type":"road"}`
+	if _, _, err := s.UpdateFilters(ctx, 42, func([]byte) ([]byte, error) { return []byte(legacy), nil }); err != nil {
+		t.Fatal(err)
+	}
+	f0, v0 := filtersV(t, b)
+
+	f1, v1, err := b.update(ctx, 42, func(f userFilters) userFilters { return f })
+	if err != nil || v1 != v0 || !reflect.DeepEqual(f1, f0) || f1.Country != "" {
+		t.Fatalf("сохранение без изменений: v %d→%d, %+v→%+v, %v", v0, v1, f0, f1, err)
+	}
+	// Страна по умолчанию → "-" не меняет ни JSON, ни версию.
+	if _, v, err := b.update(ctx, 42, func(f userFilters) userFilters { return f.setCountry("-") }); err != nil || v != v0 {
+		t.Fatalf("setCountry(-) v = %d, %v; want %d", v, err, v0)
+	}
+	// Конкретная страна: версия растёт, город другой страны сброшен.
+	f2, v2, err := b.update(ctx, 42, func(f userFilters) userFilters { return f.setCountry("BY") })
+	if err != nil || v2 != v0+1 || f2.Country != "BY" || f2.City != "" || f2.Date != "nm" {
+		t.Fatalf("setCountry(BY): v %d, %+v, %v", v2, f2, err)
+	}
+	// Двойное нажатие той же кнопки версию не меняет.
+	if _, v3, err := b.update(ctx, 42, func(f userFilters) userFilters { return f.setCountry("BY") }); err != nil || v3 != v2 {
+		t.Fatalf("повторный setCountry(BY) v = %d, %v; want %d", v3, err, v2)
+	}
+	// Возврат к стране по умолчанию.
+	f4, v4, err := b.update(ctx, 42, func(f userFilters) userFilters { return f.unset('k') })
+	if err != nil || v4 != v2+1 || f4.Country != "" {
+		t.Fatalf("unset(k): v %d, %+v, %v", v4, f4, err)
 	}
 }

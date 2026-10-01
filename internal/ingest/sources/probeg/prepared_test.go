@@ -33,6 +33,7 @@ type preparedRecord struct {
 	Region          string `json:"region"`
 	City            string `json:"city"`
 	CityKey         string `json:"city_key"`
+	Address         string `json:"address,omitempty"`
 	Timezone        string `json:"timezone"`
 	Type            string `json:"type"`
 	Distances       []int  `json:"distances"`
@@ -54,7 +55,7 @@ func TestPreparedGolden(t *testing.T) {
 		r := preparedRecord{
 			ExternalID: p.Source.ExternalID, InScope: p.InScope, Title: e.Title, TitleNorm: e.TitleNorm,
 			StartDate: e.StartDate.Format(time.DateOnly), CountryCode: e.CountryCode, Region: e.Region,
-			City: e.City, CityKey: e.CityKey, Timezone: e.Timezone, Type: string(e.Type),
+			City: e.City, CityKey: e.CityKey, Address: e.Address, Timezone: e.Timezone, Type: string(e.Type),
 			RegistrationURL: e.RegistrationURL, GroupKey: p.Source.GroupKey, Distances: []int{},
 		}
 		if e.EndDate != nil {
@@ -107,17 +108,15 @@ func TestPreparedStats(t *testing.T) {
 	series := map[string][]ingest.Prepared{}
 	for _, p := range out {
 		byID[p.Source.ExternalID] = p
-		if p.InScope && p.Event.CountryCode != "RU" {
+		if p.InScope && !normalize.IsAllowedCountry(p.Event.CountryCode) {
 			t.Errorf("%s: в каталоге с CountryCode %q", p.Source.ExternalID, p.Event.CountryCode)
 		}
 		if k := p.Source.GroupKey; k != "" {
 			series[k] = append(series[k], p)
 		}
 	}
-	for _, id := range []string{"83368", "84016"} { // Беларусь; серия без города
-		if p, ok := byID[id]; !ok || p.InScope {
-			t.Errorf("%s: есть %v, InScope %v; want вне каталога", id, ok, p.InScope)
-		}
+	if p, ok := byID["84016"]; !ok || p.InScope { // серия без города
+		t.Errorf("84016: есть %v, InScope %v; want вне каталога", ok, p.InScope)
 	}
 	if s := series["series:"+normalize.TitleNorm("5 вёрст Алёшкинский лес")]; len(s) != 1 || s[0].Event.StartDate.Format(time.DateOnly) != "2026-10-03" {
 		t.Errorf("серия 84009: %d записей", len(s))
@@ -166,13 +165,52 @@ func TestSanityReportFixture(t *testing.T) {
 	}
 	rep := b.String()
 	m := regexp.MustCompile(`Серии \(group_key\): ключей — (\d+) \| записей — (\d+) \| ключей без города — (\d+)`).FindStringSubmatch(rep)
-	f := regexp.MustCompile(`иностранная — (\d+)`).FindStringSubmatch(rep)
+	f := regexp.MustCompile(`\| BY — (\d+) \| иностранная — (\d+)`).FindStringSubmatch(rep)
 	if !strings.Contains(rep, "## Страна и серии") || m == nil || f == nil {
 		t.Fatalf("нет раздела «Страна и серии»:\n%s", rep)
 	}
-	keys, noCity, foreign := atoi(m[1]), atoi(m[3]), atoi(f[1])
-	if keys < 180 || keys > 191 || noCity < 135 || noCity > 145 || foreign < 8 {
-		t.Errorf("ключей %d (180–191), без города %d (135–145), иностранных %d (≥ 8)", keys, noCity, foreign)
+	keys, noCity, by, foreign := atoi(m[1]), atoi(m[3]), atoi(f[1]), atoi(f[2])
+	if keys < 180 || keys > 191 || noCity < 135 || noCity > 145 || by < 8 || foreign != 0 {
+		t.Errorf("ключей %d (180–191), без города %d (135–145), BY %d (≥ 8), иностранных %d (0)", keys, noCity, by, foreign)
 	}
 	t.Logf("%s; %s", m[0], f[0])
+}
+
+// TestPreparedBelarus — белорусские строки фикстуры проходят Prepare в
+// каталог: страна BY, область и район из строки места, город без префикса
+// населённого пункта; область не классифицируется по перечню субъектов РФ
+// (нет нераспознанных областей).
+func TestPreparedBelarus(t *testing.T) {
+	out, st := prepareFixture(t)
+	if st.UnrecognizedRegion != 0 {
+		t.Errorf("UnrecognizedRegion = %d, want 0", st.UnrecognizedRegion)
+	}
+	want := map[string]struct{ city, key, region, address string }{
+		"83357": {"Колбовичи", "kolbovichi", "Брестская область", "Барановичский район"},
+		"80726": {"Малорита", "malorita", "Брестская область", ""},
+		"83368": {"Гомель", "gomel", "", ""},
+		"83363": {"Пышки", "pyshki", "Гродненская область", "Гродненский район"},
+		"76135": {"Любань", "lyuban", "Минская область", ""},
+		"84200": {"Раубичи", "raubichi", "Минская область", "Минский район"},
+		"85364": {"Клиденяты", "klidenyaty", "Гродненская область", "Сморгонский район"},
+		"85151": {"Молодечно", "molodechno", "Минская область", ""},
+		"76142": {"Вязье", "vyaze", "Могилёвская область", "Осиповичский район"},
+		"77919": {"Минск", "minsk", "", ""},
+	}
+	got := 0
+	for _, p := range out {
+		w, ok := want[p.Source.ExternalID]
+		if !ok {
+			continue
+		}
+		got++
+		e := p.Event
+		if !p.InScope || e.CountryCode != "BY" || e.City != w.city || e.CityKey != w.key || e.Region != w.region || e.Address != w.address {
+			t.Errorf("%s: InScope %v, %q/%q/%q/%q/%q; want BY/%q/%q/%q/%q", p.Source.ExternalID, p.InScope,
+				e.CountryCode, e.City, e.CityKey, e.Region, e.Address, w.city, w.key, w.region, w.address)
+		}
+	}
+	if got != len(want) {
+		t.Errorf("найдено %d из %d белорусских записей", got, len(want))
+	}
 }

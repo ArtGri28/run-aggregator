@@ -49,6 +49,12 @@ type SourceEvent struct {
 	// прогоне сворачиваются в Prepare до одной — единственная разрешённая
 	// склейка внутри источника (DDP-05).
 	GroupKey string `json:"group_key,omitempty"`
+	// Address — уточнение места сверх города и области (район и т. п.);
+	// попадает в events.address как есть.
+	Address string `json:"address,omitempty"`
+	// Timezone — IANA-зона площадки, если источник её сообщает; используется,
+	// когда зону не определяет справочник городов.
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // RawDoc — один загруженный документ источника.

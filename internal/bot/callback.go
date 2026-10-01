@@ -18,7 +18,8 @@ import (
 //	f:c[:-|<city_key>]       город
 //	f:b[:-|0..4]             корзина дистанции
 //	f:t[:-|<тип>]            тип
-//	f:x[:d|c|b|t]            сбросить всё / один фильтр
+//	f:k[:-|*|<ISO>]          страна: подменю / по умолчанию / все страны / код
+//	f:x[:d|c|b|t|k]          сбросить всё / один фильтр
 //	p:<стр>:v<N>             страница списка (N — версия фильтров)
 //	e:<id>:<стр>:v<N>        карточка
 //	r:<a|y|n>:<runID>        админ: принятие прогона
@@ -46,6 +47,7 @@ const (
 	cbDupeNo
 	cbDupeRej
 	cbDupeSkip
+	cbCountry
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -61,13 +63,14 @@ type callback struct {
 var (
 	errCallback = errors.New("неверный callback")
 	cityKeyRE   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+	countryRE   = regexp.MustCompile(`^[A-Z]{2}$`)
 	monthRE     = regexp.MustCompile(`^m(20[0-9]{2})(0[1-9]|1[0-2])$`)
 )
 
 const maxCityKeyBytes = 60 // 64 − len("f:c:")
 
-var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "c": cbCity, "b": cbBucket, "t": cbType, "x": cbReset}
-var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbCity: "c", cbBucket: "b", cbType: "t", cbReset: "x"}
+var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "c": cbCity, "b": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
+var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbCity: "c", cbBucket: "b", cbType: "t", cbCountry: "k", cbReset: "x"}
 
 var dKinds = map[string]cbKind{"m": cbDupeAsk, "y": cbDupeYes, "n": cbDupeNo, "x": cbDupeRej, "s": cbDupeSkip}
 var dLetters = map[cbKind]string{cbDupeAsk: "m", cbDupeYes: "y", cbDupeNo: "n", cbDupeRej: "x", cbDupeSkip: "s"}
@@ -93,6 +96,10 @@ func validDate(s string) bool {
 
 func validCityKey(s string) bool { return len(s) <= maxCityKeyBytes && cityKeyRE.MatchString(s) }
 
+// validCountry — значение фильтра страны: "" (по умолчанию), "*" (все страны)
+// или код ISO alpha-2 заглавными. Входит ли страна в каталог — не здесь.
+func validCountry(s string) bool { return s == "" || s == "*" || countryRE.MatchString(s) }
+
 // validValue проверяет значение f:<вид>:<value>.
 func validValue(k cbKind, v string) bool {
 	switch k {
@@ -104,8 +111,10 @@ func validValue(k cbKind, v string) bool {
 		return v == "-" || (len(v) == 1 && v[0] >= '0' && v[0] < '0'+byte(len(buckets)))
 	case cbType:
 		return v == "-" || validType(v)
+	case cbCountry:
+		return v == "-" || (v != "" && validCountry(v))
 	case cbReset:
-		return v == "d" || v == "c" || v == "b" || v == "t"
+		return v == "d" || v == "c" || v == "b" || v == "t" || v == "k"
 	}
 	return false
 }
@@ -214,7 +223,7 @@ func parseCallback(data string) (callback, error) {
 func (c callback) encode() (string, error) {
 	var s string
 	switch c.Kind {
-	case cbSummary, cbDate, cbCity, cbBucket, cbType, cbReset:
+	case cbSummary, cbDate, cbCity, cbBucket, cbType, cbCountry, cbReset:
 		s = "f:" + fLetters[c.Kind]
 		if c.Value != "" {
 			s += ":" + c.Value

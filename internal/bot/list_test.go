@@ -278,14 +278,14 @@ func TestCardSourceNames(t *testing.T) {
 	sc := cardScreen(e, []store.EventSource{
 		{Code: "marathonec", URL: "https://marathonec.ru/e/1"},
 		{Code: "probeg", URL: "https://probeg.org/event/123/"},
-	}, 1, 1)
+	}, 1, 1, placePlain)
 	if want := `<a href="https://marathonec.ru/e/1">Марафонец</a>, <a href="https://probeg.org/event/123/">ПроБЕГ</a>`; !strings.Contains(sc.text, want) {
 		t.Fatalf("sources: want %q in\n%s", want, sc.text)
 	}
-	if sourceName("probeg") != "ПроБЕГ" || sourceName("zzz") != "zzz" {
+	if sourceName("probeg") != "ПроБЕГ" || sourceName("heroleague") != "Лига Героев" || sourceName("zzz") != "zzz" {
 		t.Fatalf("sourceName: probeg=%q zzz=%q", sourceName("probeg"), sourceName("zzz"))
 	}
-	sc = cardScreen(e, []store.EventSource{{Code: "probeg", URL: `https://probeg.org/event/1/"><b>x`}}, 1, 1)
+	sc = cardScreen(e, []store.EventSource{{Code: "probeg", URL: `https://probeg.org/event/1/"><b>x`}}, 1, 1, placePlain)
 	if strings.Contains(sc.text, `"><b>x`) || !strings.Contains(sc.text, "ПроБЕГ") {
 		t.Fatalf("probeg source not escaped:\n%s", sc.text)
 	}
@@ -346,7 +346,7 @@ func TestCardEscapingAndURLs(t *testing.T) {
 	}
 
 	// Ссылка источника с чужой схемой — только имя, без href.
-	sc := cardScreen(e, []store.EventSource{{Code: "marathonec", URL: "javascript:x"}, {Code: "new-src", URL: "https://ok.test/a?b=1&c=2"}}, 1, 1)
+	sc := cardScreen(e, []store.EventSource{{Code: "marathonec", URL: "javascript:x"}, {Code: "new-src", URL: "https://ok.test/a?b=1&c=2"}}, 1, 1, placePlain)
 	if strings.Contains(sc.text, "javascript") || !strings.Contains(sc.text, "Марафонец, ") ||
 		!strings.Contains(sc.text, `<a href="https://ok.test/a?b=1&amp;c=2">new-src</a>`) {
 		t.Fatalf("sources: %s", sc.text)
@@ -383,7 +383,7 @@ func TestValidURL(t *testing.T) {
 
 func TestLongTexts(t *testing.T) {
 	long := strings.Repeat("Я", 300)
-	sc := listScreen([]store.ListItem{{ID: 1, Title: long, StartDate: fixtureToday, City: "Тула"}}, 1, 1, 1)
+	sc := listScreen([]store.ListItem{{ID: 1, Title: long, StartDate: fixtureToday, City: "Тула"}}, 1, 1, 1, false)
 	row := listRows(sc.text)[0]
 	title := strings.TrimPrefix(row, "1. 29.09 · Тула · ")
 	if utf8.RuneCountInString(title) != maxListTitle || !strings.HasSuffix(title, "…") {
@@ -392,7 +392,7 @@ func TestLongTexts(t *testing.T) {
 
 	card := cardScreen(event.Event{Title: long, StartDate: fixtureToday, City: strings.Repeat("Г", 300), Address: long,
 		Description: strings.Repeat("я", 1000), Type: event.TypeTrail, Status: event.StatusScheduled, IsListed: true,
-		Distances: []event.Distance{{Meters: 21097, Label: long}}}, nil, 1, 1)
+		Distances: []event.Distance{{Meters: 21097, Label: long}}}, nil, 1, 1, placePlain)
 	if n := utf8.RuneCountInString(card.text); n > 4096 {
 		t.Fatalf("card text = %d runes, want <= 4096", n)
 	}
@@ -403,7 +403,7 @@ func TestListScreenShape(t *testing.T) {
 		{ID: 11, Title: "Раз", StartDate: fixtureToday, City: "Тула", Distances: []int{5000, 21097}},
 		{ID: 12, Title: "Два", StartDate: fixtureToday, Status: event.StatusCancelled},
 	}
-	sc := listScreen(items, 12, 2, 4)
+	sc := listScreen(items, 12, 2, 4, false)
 	var got []string
 	for _, r := range sc.kb.InlineKeyboard {
 		for _, bt := range r {

@@ -97,3 +97,32 @@ func TestSanityReportCountrySeries(t *testing.T) {
 		}
 	}
 }
+
+// Разрешённая страна не РФ (BY) считается отдельно от иностранных, а её
+// область не попадает в «НЕТ в перечне» (перечень субъектов РФ не применяется).
+func TestSanityReportAllowedCountry(t *testing.T) {
+	recs := []SourceEvent{
+		{ExternalID: "1", Country: "Россия", Region: "Московская область", City: "Химки"},
+		{ExternalID: "2", Country: "Беларусь", Region: "Минская область", City: "Любань"},
+		{ExternalID: "3", Country: "Республика Беларусь", Region: "Минская область", City: "Минск"},
+		{ExternalID: "4", Country: "Беларусь", City: "Гомель"},
+		{ExternalID: "5", Country: "Казахстан", Region: "Алматинская область", City: "Алматы"},
+	}
+	var b bytes.Buffer
+	if err := SanityReport(&b, "probeg", 1, time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC), recs); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, s := range []string{
+		"Страна: RU — 1 | BY — 3 | иностранная — 1 | не указана — 0",
+		"| Минская область | страна BY | 2 |",
+		"| (пусто) | страна BY | 1 | Гомель |",
+	} {
+		if !strings.Contains(out, s) {
+			t.Errorf("report has no %q:\n%s", s, out)
+		}
+	}
+	if strings.Contains(out, "НЕТ в перечне | ") {
+		t.Errorf("область другой страны помечена «НЕТ в перечне»:\n%s", out)
+	}
+}

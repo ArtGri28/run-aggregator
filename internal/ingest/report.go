@@ -25,6 +25,17 @@ const (
 // regionRank — порядок в таблице: сначала подозрительные.
 var regionRank = map[string]int{regionNotRF: 0, regionForeign: 0, regionMulti: 1, regionEmpty: 1, regionRF: 2}
 
+// rank — место статуса в таблице; область другой страны («страна BY») — как
+// область из перечня: перечень субъектов РФ к ней не применяется.
+func rank(status string) int {
+	if r, ok := regionRank[status]; ok {
+		return r
+	}
+	return rankDefault
+}
+
+const rankDefault = 2
+
 // longDistanceM — дистанции длиннее показываются для проверки склеек.
 const longDistanceM = 100_000
 
@@ -54,6 +65,8 @@ func SanityReport(w io.Writer, source string, runID int64, startedAt time.Time, 
 				names = rec.RegionSlugs
 			}
 			name, status = strings.Join(names, " + "), regionMulti
+		case otherCountry(rec.Country):
+			name, status = cmp.Or(region, "(пусто)"), "страна "+normalize.CountryCode(rec.Country)
 		case region == "":
 			name, status = "(пусто)", regionEmpty
 		default:
@@ -92,7 +105,7 @@ func SanityReport(w io.Writer, source string, runID int64, startedAt time.Time, 
 	}
 
 	rows := slices.SortedFunc(maps.Values(groups), func(a, b *group) int {
-		return cmp.Or(cmp.Compare(regionRank[a.status], regionRank[b.status]),
+		return cmp.Or(cmp.Compare(rank(a.status), rank(b.status)),
 			cmp.Compare(b.rows, a.rows), strings.Compare(a.name, b.name), strings.Compare(a.status, b.status))
 	})
 
@@ -132,6 +145,7 @@ func SanityReport(w io.Writer, source string, runID int64, startedAt time.Time, 
 // (при no_fallback — вне каталога), её города показываются для проверки.
 func writeCountrySeries(sb *strings.Builder, recs []SourceEvent) {
 	var ru, foreign, unknown int
+	other := map[string]int{} // разрешённые страны не РФ: код → записей
 	unknownCities := map[string]int{}
 	seriesRows := 0
 	seriesCity := map[string]bool{} // ключ серии → есть запись с городом
@@ -142,6 +156,8 @@ func writeCountrySeries(sb *strings.Builder, recs []SourceEvent) {
 		switch code := normalize.CountryCode(rec.Country); {
 		case code == "RU":
 			ru++
+		case code != "" && normalize.IsAllowedCountry(code):
+			other[code]++
 		case code != "" || countryKind == normalize.RegionForeign || regionKind == normalize.RegionForeign:
 			foreign++
 		default:
@@ -162,7 +178,11 @@ func writeCountrySeries(sb *strings.Builder, recs []SourceEvent) {
 		}
 	}
 	sb.WriteString("## Страна и серии\n\n")
-	fmt.Fprintf(sb, "Страна: RU — %d | иностранная — %d | не указана — %d\n\n", ru, foreign, unknown)
+	countries := fmt.Sprintf("RU — %d", ru)
+	for _, code := range slices.Sorted(maps.Keys(other)) {
+		countries += fmt.Sprintf(" | %s — %d", code, other[code])
+	}
+	fmt.Fprintf(sb, "Страна: %s | иностранная — %d | не указана — %d\n\n", countries, foreign, unknown)
 	fmt.Fprintf(sb, "Не указана, города (первые 10): %s\n\n", topCities(unknownCities, 10))
 	fmt.Fprintf(sb, "Серии (group_key): ключей — %d | записей — %d | ключей без города — %d\n\n", len(seriesCity), seriesRows, noCity)
 }
@@ -191,4 +211,10 @@ func writeList(sb *strings.Builder, lines []string) {
 	for _, l := range lines {
 		sb.WriteString("- " + l + "\n")
 	}
+}
+
+// otherCountry — у записи явная страна с ISO-кодом не РФ.
+func otherCountry(country string) bool {
+	code := normalize.CountryCode(country)
+	return code != "" && code != "RU"
 }

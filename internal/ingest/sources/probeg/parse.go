@@ -169,9 +169,9 @@ func parseRow(cells []*html.Node, doc ingest.RawDoc) []ingest.SourceEvent {
 	}
 
 	date, end := parseDate(text(cells[colDate]), doc.FetchedAt)
-	var region, city, cntry string
+	var region, city, cntry, address string
 	if cells[colCity] != nil {
-		region, city, cntry = resolvePlace(text(cells[colCity]), group)
+		region, city, cntry, address = resolvePlace(text(cells[colCity]), group)
 	}
 	base := ingest.SourceEvent{
 		Date:            date,
@@ -180,6 +180,7 @@ func parseRow(cells []*html.Node, doc ingest.RawDoc) []ingest.SourceEvent {
 		City:            city,
 		Region:          region,
 		Country:         cntry,
+		Address:         address,
 		RegistrationURL: registrationURL(cells[colLinks], doc.URL),
 	}
 	out := make([]ingest.SourceEvent, 0, len(links))
@@ -273,15 +274,19 @@ func atoi(s string) int {
 	return n
 }
 
-// resolvePlace — область, город и страна по строке места «Страна или
-// субъект, …, населённый пункт» (D-01, Pattern 1):
-//   - первый компонент — иностранная страна: Region = компонент, Country пусто;
+// resolvePlace — область, город, страна и уточнение места по строке места
+// «Страна или субъект, …, населённый пункт» (D-01, Pattern 1):
+//   - первый компонент — страна с ISO-кодом не РФ (справочник normalize):
+//     Country = компонент, Region = второй компонент (область) при трёх и
+//     более компонентах, address = компоненты между областью и населённым
+//     пунктом (район). Входит ли страна в каталог, решает Prepare;
+//   - иностранная страна без ISO-кода: Region = компонент, Country пусто;
 //   - субъект РФ: Region = каноническое имя, Country «Россия»; у групповой
 //     строки с городом федерального значения город — он сам (Pitfall 4);
 //   - один компонент (голый город): «Россия» только по normalize.IsRFCity;
 //   - несколько компонентов с нераспознанным первым: Region = компонент,
 //     Country пусто — страна не определена, запись видна как нераспознанная.
-func resolvePlace(raw string, group bool) (region, city, cntry string) {
+func resolvePlace(raw string, group bool) (region, city, cntry, address string) {
 	var parts []string
 	for p := range strings.SplitSeq(raw, ",") {
 		if p = strings.TrimSpace(p); p != "" {
@@ -289,24 +294,30 @@ func resolvePlace(raw string, group bool) (region, city, cntry string) {
 		}
 	}
 	if len(parts) == 0 {
-		return "", "", ""
+		return "", "", "", ""
 	}
 	city = normalize.City(parts[len(parts)-1])
 	canon, kind := normalize.ClassifyRegion(parts[0])
-	switch {
+	switch code := normalize.CountryCode(parts[0]); {
+	case code != "" && code != "RU":
+		if len(parts) > 2 {
+			region = parts[1]
+			address = strings.Join(parts[2:len(parts)-1], ", ")
+		}
+		return region, city, parts[0], address
 	case kind == normalize.RegionForeign:
-		return parts[0], city, ""
+		return parts[0], city, "", ""
 	case kind == normalize.RegionRF:
 		if group && federalCities[canon] {
 			city = canon
 		}
-		return canon, city, country
+		return canon, city, country, ""
 	case len(parts) > 1:
-		return parts[0], city, ""
+		return parts[0], city, "", ""
 	case normalize.IsRFCity(city):
-		return "", city, country
+		return "", city, country, ""
 	}
-	return "", city, ""
+	return "", city, "", ""
 }
 
 // distances — фрагменты ячейки (span.nobr, а без них — текст между <br>),
