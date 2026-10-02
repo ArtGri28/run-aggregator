@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 milestone: v1.27.0
-current_phase: 5
-current_phase_name: multiple-sources-deduplication
+current_phase: 06
+current_phase_name: Production
 status: executing
 stopped_at: все 8 планов Phase 5 выполнены; проверка безопасности (05-SECURITY.md) и верификация (05-VERIFICATION.md, human_needed) выполнены; фаза не закрыта — ждёт решения владельца
-last_updated: "2026-10-01T18:38:26.000Z"
-last_activity: 2026-10-01
-last_activity_desc: Phase 5 — ревью, проверка безопасности и верификация выполнены (7dd35e3); в ROADMAP добавлены Phase 7 и 8; Phase 5 не закрыта
-state_head: 7dd35e36b12ac39b4af0b333b7b88463639ede2f
+last_updated: "2026-10-02T05:04:05.559Z"
+last_activity: 2026-10-02
+last_activity_desc: Phase 06 execution started
+state_head: b7935b93e48961df2490943765314bf32ddcf8da
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 28
+  total_plans: 37
   completed_plans: 28
 ---
 
@@ -23,14 +23,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-25)
 
 **Core value:** Полный, актуальный и без дублей каталог забегов
-**Current focus:** Phase 5 — Multiple Sources & Deduplication (выкат и приёмка)
+**Current focus:** Phase 06 — Production
 
 ## Current Position
 
-Phase: 5 (multiple-sources-deduplication) — EXECUTING
-Plan: 05-01…05-07 выполнены и закоммичены (bdb7025); 05-08 (выкат): задачи 1–2 закоммичены (faa8ee5), задачи 3–4 выполнены владельцем, задача 5 — keep-off (D-23), задача 6 не выполнялась. По сохранённым локальным логам `agg verify` на VPS развёрнуты faa8ee511c52 (01.10 10:42) и e8005e8f2940 (01.10 13:55), ПроБЕГ и heroleague приняты, в `/dupes` confirmed 86 и rejected 8, очередь пуста; оговорки приёмки — в 05-08-SUMMARY.md
-Status: In Progress — все 8 планов выполнены; ревью (05-REVIEW.md), проверка безопасности (05-SECURITY.md, 45 из 45 угроз закрыто) и верификация (05-VERIFICATION.md, human_needed, блокеров нет) выполнены; до закрытия — только решение владельца. DEDUP_AUTO_MERGE=false (D-23); решения D-18…D-26 в 05-CONTEXT.md; D-21 перенесён в Phase 7 (D-26)
-Last activity: 2026-10-01 — Phase 5: ревью, проверка безопасности и верификация выполнены; в ROADMAP добавлены Phase 7 и 8; фаза не закрыта
+Phase: 06 (Production) — EXECUTING
+Plan: 1 of 9
+Status: Executing Phase 06
+Last activity: 2026-10-02 — Phase 06 execution started
+
+Phase 5 (multiple-sources-deduplication) формально не закрыта и ждёт решения владельца: все 8 планов выполнены, верификация `human_needed` (05-VERIFICATION.md), наблюдения в production владельцем не подтверждены. Phase 6 выполняется при открытой Phase 5 (D-16 в 06-CONTEXT.md).
+`DEDUP_AUTO_MERGE=false` (D-23 Phase 5); Phase 6 это значение не меняет, включение — только отдельным решением владельца.
 
 Progress: [█████░░░░░] 50% (4 из 8 фаз закрыты)
 
