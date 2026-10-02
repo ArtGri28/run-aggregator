@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-25)
 ## Current Position
 
 Phase: 06 (Production) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 06
-Last activity: 2026-10-02 — Phase 06 execution started
+Plan: 2 of 9 — 06-01 выполнен (06-01-SUMMARY.md); 06-02 не начат, ждёт согласования владельца
+Status: Executing Phase 06 — VPS не менялся; 06-04 остановлен до перепланирования (`REPLAN 06-04: диагностика часов`), бэкап на VPS не запускается до подтверждённой синхронизации времени
+Last activity: 2026-10-02 — 06-01: аудит VPS только чтением выполнен владельцем, решения записаны (age=install, clock=diagnose, backup_run=root-console, size_warn=log, a5=confirmed)
 
 Phase 5 (multiple-sources-deduplication) формально не закрыта и ждёт решения владельца: все 8 планов выполнены, верификация `human_needed` (05-VERIFICATION.md), наблюдения в production владельцем не подтверждены. Phase 6 выполняется при открытой Phase 5 (D-16 в 06-CONTEXT.md).
 `DEDUP_AUTO_MERGE=false` (D-23 Phase 5); Phase 6 это значение не меняет, включение — только отдельным решением владельца.
