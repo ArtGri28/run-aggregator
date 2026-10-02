@@ -8,6 +8,7 @@
 #   agg load <TAG>       stdin: несжатый архив docker save ровно одного образа aggregator:<TAG>
 #   agg env-init         stdin: токен, ADMIN_TG_IDS, OWNER_CONTACT (три строки); только если .env нет
 #   agg preflight <TAG> | deploy <TAG> | verify | rollback | host-preflight | host-verify
+#   agg backup-status    состояние бэкапа, только чтение
 set -euo pipefail
 
 # Сначала — перезапуск с пустым окружением и из «/»: ни одна переменная вызывающего
@@ -28,7 +29,7 @@ L=/usr/local/lib/aggregator
 MAX=$((1024 * 1024 * 1024)) # предел размера архива образа, байт
 
 usage() {
-  echo "usage: agg load|preflight|deploy <TAG> | env-init | verify | rollback | host-preflight | host-verify" >&2
+  echo "usage: agg load|preflight|deploy <TAG> | env-init | verify | rollback | host-preflight | host-verify | backup-status" >&2
   exit 2
 }
 tag() { [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || { echo "STOP: неверный TAG" >&2; exit 2; }; }
@@ -111,5 +112,6 @@ case "$1" in
   rollback)       [ $# -eq 1 ] || usage; run rollback.sh ;;
   host-preflight) [ $# -eq 1 ] || usage; run host-preflight.sh ;;
   host-verify)    [ $# -eq 1 ] || usage; run host-verify.sh ;;
+  backup-status)  [ $# -eq 1 ] || usage; run backup-status.sh ;;
   *) usage ;;
 esac

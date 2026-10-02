@@ -5,7 +5,13 @@
 #   selftest      — итоговая строка раздела: ok только без провалов;
 #   tracer, iso-oracle, retention, rotate-dir, rotate-state, publish, sync, clock-rotate, fail-paths — копия
 #   deploy/vps/backup.sh на заглушках (docker, age, timedatectl, flock, sleep, sync, date) и чистые
-#   функции deploy/vps/backup-lib.sh (ISO-неделя по оракулу python3, ротация 7 + 4).
+#   функции deploy/vps/backup-lib.sh (ISO-неделя по оракулу python3, ротация 7 + 4);
+#   copy-* — шаги 6–7 backup.sh: настоящий curl отправляет копию в локальную заглушку Bot API
+#   (python3, 127.0.0.1, случайный порт); токен и идентификатор канала выдуманы и собираются
+#   при запуске, адрес настоящего API не используется;
+#   recipient-format, status-*, apply-* — backup-status.sh и backup-apply.sh на копиях с
+#   подменёнными путями; pkg-*, host-words, oneliner-lines — состав пакета, agg, sudoers,
+#   режимы host-apply.sh и однострочники.
 # Без аргумента Docker не нужен. С аргументом pg поднимается одноразовый PostgreSQL 17
 # (копия docker-compose.test.yml: проект backup-probe-test, порт 127.0.0.1:55433, данные в
 # tmpfs): замер дампов для BACKUP_MIN_BYTES (D-21), проверка counters_sql и допущение A4.
@@ -17,7 +23,9 @@ HERE=$PWD
 
 T=$(mktemp -d)
 PROBE_FILE=""
+API_PID=""
 cleanup() {
+  if [ -n "$API_PID" ]; then kill "$API_PID" 2>/dev/null || true; fi
   if [ -n "$PROBE_FILE" ]; then docker compose -f "$PROBE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true; fi
   rm -rf "$T"
 }
@@ -261,7 +269,7 @@ mk_env() {
   local rd='/\[ "\$(id -u)" -eq 0 \]/d'
   E=$T/$1
   if [ "${2:-}" = keeproot ]; then rd='/^# нет такой строки$/d'; fi
-  mkdir -p "$E/bin" "$E/lib" "$E/dir" "$E/opt"
+  mkdir -p "$E/bin" "$E/lib" "$E/dir" "$E/opt" "$E/etc"
   : > "$E/opt/docker-compose.yml"
   : > "$E/bin/calls.log"
   : > "$E/marks.log"
@@ -276,10 +284,12 @@ mk_env() {
     -e "s#^F=/opt/aggregator/docker-compose.yml\$#F=$E/opt/docker-compose.yml#" \
     -e "s#^LOCK=/run/aggregator-backup.lock\$#LOCK=$E/lock#" \
     -e "s#^LOG=/var/log/aggregator-backup.log\$#LOG=$E/log#" \
+    -e "s#^CONF=/etc/aggregator-backup/telegram.curl\$#CONF=$E/etc/telegram.curl#" \
     -e "$rd" "$VPS/backup.sh" > "$E/backup.sh"
   if [ "$(grep -c "^export PATH=$E/bin" "$E/backup.sh")" != 1 ] || ! grep -q "^L=$E/lib\$" "$E/backup.sh" \
     || ! grep -q "^DIR=$E/dir\$" "$E/backup.sh" || ! grep -q "^F=$E/opt/docker-compose.yml\$" "$E/backup.sh" \
-    || ! grep -q "^LOCK=$E/lock\$" "$E/backup.sh" || ! grep -q "^LOG=$E/log\$" "$E/backup.sh"; then
+    || ! grep -q "^LOCK=$E/lock\$" "$E/backup.sh" || ! grep -q "^LOG=$E/log\$" "$E/backup.sh" \
+    || ! grep -q "^CONF=$E/etc/telegram.curl\$" "$E/backup.sh"; then
     bad "backup: не удалось подготовить копию backup.sh ($1)"
   fi
   if [ "${2:-}" != keeproot ] && grep -q 'id -u' "$E/backup.sh"; then bad "backup: проверка root осталась в копии ($1)"; fi
@@ -298,7 +308,12 @@ case "$*" in
     ;;
   *"INSERT INTO heartbeats"*)
     [ ! -e "$E/sw.mark" ] || exit 1
+    case "$*" in *"('backup_copy')"*) [ ! -e "$E/sw.markcopy" ] || exit 1 ;; esac
     echo "$*" | sed -n "s/.*VALUES ('\([a-z_]*\)').*/\1/p" >> "$E/marks.log"
+    ;;
+  *"now() - beat_at"*)
+    [ ! -e "$E/sw.agesfail" ] || exit 1
+    cat "$E/sw.ages" 2>/dev/null || echo "none none"
     ;;
   *psql*)
     case "$(cat "$E/sw.counters" 2>/dev/null)" in
@@ -327,6 +342,11 @@ EOF
   chmod +x "$E/bin/docker" "$E/bin/age"
   stub "$E/bin" flock 'echo "$PPID" > '"$E/pid; test ! -e $E/sw.flock" # pid запуска — для killstub
   stub "$E/bin" sleep ':'
+  # curl: настоящий; аргументы каждого вызова пишутся в curl.args (секретов в них быть не должно),
+  # имена в каталоге секретов на момент вызова — в curl.ls
+  printf '%s\n' '#!/bin/bash' "echo \"\$*\" >> \"$E/curl.args\"" "ls -A \"$E/etc\" >> \"$E/curl.ls\" 2>/dev/null" \
+    "exec $REALCURL \"\$@\"" > "$E/bin/curl"
+  chmod +x "$E/bin/curl"
   # sync: на диск ничего не сбрасывает. Пишет в sync.log аргументы, имена в каталоге копий и
   # число отметок на момент вызова; при номере вызова из sw.syncfail возвращает 1. Проверяется
   # только место и порядок вызовов и обработка кода возврата, не сам fsync.
@@ -359,6 +379,723 @@ ncalls() { grep -c -- "^$1" "$E/bin/calls.log" || true; }
 # leak: файлы с открытым текстом дампа в $E (кроме самих заглушек)
 leak() { grep -rl --exclude-dir=bin PLAINTEXT-DUMP-MARKER "$E" || true; }
 
+# ---- Phase 6, 06-03: внешняя копия (шаги 6–7) --------------------------------
+REALCURL=$(PATH=/usr/bin:/bin:/usr/local/bin command -v curl || true)
+# Выдуманные значения собираются из частей: строки, похожей на токен, в файле нет.
+TOK_A=7700001
+TOK_B=$(printf '%035d' 0 | tr 0 k)
+TOK="$TOK_A:$TOK_B"
+CHAT="-100$((5500011122))"
+API_PORT=""
+# api_start: заглушка Bot API. Режим ответа читается из $T/api.mode на каждый запрос:
+#   ok | http500 | ok500 (HTTP 500 с телом успешного ответа) | forbidden | garbage | mismatch. Журнал $T/api.log — строка на запрос:
+#   <метод> token=match|other chat_id=<id> file=<имя> bytes=<n> sha256=<hex> reply=<код> caption=<JSON-строка>
+# Сам токен в журнал не пишется.
+api_start() {
+  echo ok > "$T/api.mode"
+  : > "$T/api.log"
+  python3 -I - "$T/api.log" "$T/api.mode" "$T/api.port" "$TOK" "$CHAT" <<'PYAPI' &
+import hashlib, http.server, json, re, sys, urllib.parse
+
+log, modef, portf, token, chat = sys.argv[1:6]
+
+
+class H(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def reply(self, code, body):
+        b = body if isinstance(body, bytes) else json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(b)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(b)
+        return code
+
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        m = re.fullmatch(r"/bot([^/]+)/(sendDocument|getChat)", urllib.parse.urlsplit(self.path).path)
+        fields, fname, doc = {}, "", None
+        bm = re.search(r'boundary=("?)([^";]+)\1', self.headers.get("Content-Type", ""))
+        if bm:
+            for part in body.split(b"--" + bm.group(2).encode()):
+                head, sep, val = part.partition(b"\r\n\r\n")
+                if not sep:
+                    continue
+                if val.endswith(b"\r\n"):
+                    val = val[:-2]
+                h = head.decode("utf-8", "replace")
+                nm = re.search(r'[; ]name="([^"]*)"', h)
+                if not nm:
+                    continue
+                if nm.group(1) == "document":
+                    fn = re.search(r'filename="([^"]*)"', h)
+                    doc, fname = val, (fn.group(1) if fn else "")
+                else:
+                    fields[nm.group(1)] = val.decode("utf-8", "replace")
+        else:
+            fields = {k: v[0] for k, v in urllib.parse.parse_qs(body.decode("utf-8", "replace")).items()}
+        with open(modef) as f:
+            mode = f.read().strip()
+        method = m.group(2) if m else "unknown"
+        tk = "match" if m and m.group(1) == token else "other"
+        n = len(doc) if doc is not None else 0
+        if tk != "match":
+            code = self.reply(404, {"ok": False, "error_code": 404, "description": "Not Found"})
+        elif mode == "http500":
+            code = self.reply(500, b"Internal Server Error BODY-MARKER")
+        elif mode == "forbidden":
+            code = self.reply(403, {"ok": False, "error_code": 403, "description": "Forbidden: BODY-MARKER"})
+        elif mode == "garbage":
+            code = self.reply(200, b"<html>BODY-MARKER not json</html>")
+        elif method == "getChat":
+            if fields.get("chat_id") == chat:
+                code = self.reply(200, {"ok": True, "result": {"id": int(chat), "type": "channel"}})
+            else:
+                code = self.reply(400, {"ok": False, "error_code": 400, "description": "Bad Request: chat not found"})
+        else:
+            size = n - 1 if mode == "mismatch" else n
+            code = self.reply(500 if mode == "ok500" else 200, {"ok": True, "result": {"message_id": 1, "document": {"file_name": fname, "file_size": size}}})
+        with open(log, "a") as f:
+            f.write("%s token=%s chat_id=%s file=%s bytes=%d sha256=%s reply=%d caption=%s\n" % (
+                method, tk, fields.get("chat_id", ""), fname, n,
+                hashlib.sha256(doc).hexdigest() if doc is not None else "-", code,
+                json.dumps(fields.get("caption", ""), ensure_ascii=False)))
+
+
+srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+with open(portf, "w") as f:
+    f.write(str(srv.server_address[1]))
+srv.serve_forever()
+PYAPI
+  API_PID=$!
+  local i=0
+  while [ ! -s "$T/api.port" ] && [ "$i" -lt 100 ]; do /bin/sleep 0.1; i=$((i + 1)); done
+  API_PORT=$(cat "$T/api.port" 2>/dev/null || true)
+  if [ -z "$API_PORT" ] || [ -z "$REALCURL" ]; then bad "copy: заглушка Bot API не запустилась или нет curl"; return 1; fi
+}
+# api_mode <режим>: режим ответа заглушки и чистый журнал
+api_mode() { echo "$1" > "$T/api.mode"; : > "$T/api.log"; }
+# api_conf [порт]: конфиг curl текущего окружения $E — адрес заглушки с выдуманным токеном и
+# идентификатор канала (A2: поле form в файле конфига)
+api_conf() {
+  printf 'url = "http://127.0.0.1:%s/bot%s/sendDocument"\nform = "chat_id=%s"\n' "${1:-$API_PORT}" "$TOK" "$CHAT" > "$E/etc/telegram.curl"
+  chmod 600 "$E/etc/telegram.curl"
+}
+# api_n <начало строки>: сколько строк журнала заглушки начинается так
+api_n() { grep -c -- "^$1" "$T/api.log" || true; }
+# caption: подпись последнего sendDocument (раскодированная, с переводами строк)
+caption() {
+  grep '^sendDocument ' "$T/api.log" | tail -n 1 | sed 's/.* caption=//' | python3 -I -c 'import json, sys; sys.stdout.write(json.loads(sys.stdin.read()))'
+}
+# nosecret: выдуманные токен и идентификатор канала не попали в вывод, ошибки, лог запуска и
+# аргументы curl; нарушение дополнительно считается в LEAKS для случая copy-secret-silence
+LEAKS=0
+nosecret() {
+  if cat "$E/out" "$E/err" "$E/log" "$E/curl.args" 2>/dev/null | grep -qF -e "$TOK_B" -e "$CHAT"; then LEAKS=$((LEAKS + 1)); return 1; fi
+  if cat "$E/out" "$E/err" "$E/log" 2>/dev/null | grep -qF BODY-MARKER; then LEAKS=$((LEAKS + 1)); return 1; fi
+}
+# cend <id> <описание>: итог случая — «ok   <id> …» или «FAIL <id> …»
+cend() { if [ -z "$PB" ]; then ok "$1 $2"; else bad "$1 $2$PB"; fi; PB=""; }
+# today_ok: сегодняшняя копия пригодна, три файла на месте, временных нет
+today_ok() {
+  local f=$E/dir/aggregator-2026-10-01.dump.age
+  usable "$f" && [ -f "$f.sha256" ] && [ -f "$f.meta" ] && [ -z "$(ls "$E"/dir/*.partial* "$E"/dir/.copy-response.* 2>/dev/null)" ]
+}
+# only_backup: в marks.log только отметки backup (ни одной backup_copy)
+only_backup() { [ -s "$E/marks.log" ] && ! grep -qvx backup "$E/marks.log"; }
+# big <байт>: длина заглушечного дампа, при которой файл копии ровно <байт>
+big() { echo $(($1 - AGEHDR)) > "$E/sw.dumpbytes"; }
+
+t_copy() {
+  local f N cap before sha m
+  # copy-tracer: один сквозной путь до COPY OK
+  mk_env copytr
+  api_mode ok; api_conf
+  f=$E/dir/aggregator-2026-10-01.dump.age
+  run_bk
+  N=$((AGEHDR + BACKUP_MIN_BYTES + 1000))
+  need '[ "$RC" = 0 ]'
+  need 'grep -q "^BACKUP OK " "$E/out" && grep -qx "ROTATE OK keep=1 delete=0" "$E/out" && grep -qx "COPY OK size=$N" "$E/out"'
+  need '[ "$(wc -l < "$T/api.log" | tr -d " ")" = 1 ] && [ "$(api_n "sendDocument token=match chat_id=$CHAT file=aggregator-2026-10-01.dump.age bytes=$N ")" = 1 ]'
+  sha=$(cut -d' ' -f1 "$f.sha256")
+  need 'grep -q " sha256=$sha reply=200 " "$T/api.log" && [ "$sha" = "$(_sha256 "$f")" ]'
+  cap=$(caption)
+  local cap_re='^aggregator-[0-9]{4}-[0-9]{2}-[0-9]{2}\.dump\.age sha256=[0-9a-f]{64} size=[0-9]+ counts=[a-z_]+=[0-9a-z:|]+( [a-z_]+=[0-9a-z:|]+)*$' mig_re=' migration=[0-9]+$'
+  need '[[ $cap =~ $cap_re ]] && [ "$(printf "%s\n" "$cap" | wc -l | tr -d " ")" = 1 ] && [ "${#cap}" -le 1024 ]'
+  need '[ "$cap" = "aggregator-2026-10-01.dump.age sha256=$sha size=$N counts=$(cat "$f.meta")" ]'
+  need '[[ $cap == *" counts=events_listed="* ]] && [[ $cap == *" users="* ]] && [[ $cap =~ $mig_re ]]'
+  need '[ "$(cat "$E/marks.log")" = "backup
+backup_copy" ]'
+  need 'grep -q -- "--config $E/etc/telegram.curl" "$E/curl.args" && ! grep -q "127.0.0.1\|/bot\|://" "$E/curl.args"'
+  need 'today_ok && nosecret'
+  cend copy-tracer "копия -> curl --config -> ответ Bot API -> backup_copy -> COPY OK, код 0"
+
+  # copy-no-config
+  mk_env copync
+  api_mode ok
+  run_bk
+  need '[ "$RC" = 2 ] && grep -q "^BACKUP OK " "$E/out" && grep -qx "COPY FAIL reason=no-config" "$E/out" && ! grep -q "COPY OK" "$E/out"'
+  need 'today_ok && only_backup && [ ! -s "$T/api.log" ] && [ ! -e "$E/curl.args" ] && nosecret'
+  cend copy-no-config "конфига нет -> COPY FAIL reason=no-config, код 2, запросов нет"
+
+  # copy-http: HTTP 500, HTTP 500 с телом успешного ответа, HTTP 403 с ok=false, HTTP 200 не JSON,
+  # закрытый порт
+  mk_env copyhttp
+  for m in http500 ok500 forbidden garbage closed; do
+    if [ "$m" = closed ]; then api_mode ok; api_conf 1; else api_mode "$m"; api_conf; fi
+    run_bk
+    need '[ "$RC" = 2 ] && grep -q "^BACKUP OK " "$E/out" && grep -qx "COPY FAIL reason=http" "$E/out" && ! grep -q "COPY OK" "$E/out"'
+    case "$m" in
+      http500 | ok500) need 'grep -qx "COPY HTTP status=500 curl=0 error_code=none" "$E/out"' ;;
+      forbidden) need 'grep -qx "COPY HTTP status=403 curl=0 error_code=403" "$E/out"' ;;
+      garbage) need 'grep -qx "COPY HTTP status=200 curl=0 error_code=none" "$E/out"' ;;
+      closed) need 'grep -qE "^COPY HTTP status=000 curl=[1-9][0-9]* error_code=none\$" "$E/out" && [ ! -s "$T/api.log" ]' ;;
+    esac
+    need 'today_ok && only_backup && nosecret'
+  done
+  cend copy-http "HTTP 500, 403 с ok=false, не JSON, закрытый порт -> COPY FAIL reason=http, код 2"
+
+  # copy-mismatch
+  mk_env copymm
+  api_mode mismatch; api_conf
+  run_bk
+  need '[ "$RC" = 2 ] && grep -q "^BACKUP OK " "$E/out" && grep -qx "COPY FAIL reason=mismatch" "$E/out" && ! grep -q "COPY OK" "$E/out"'
+  need 'today_ok && only_backup && [ "$(api_n "sendDocument token=match")" = 1 ] && nosecret'
+  cend copy-mismatch "file_size на 1 меньше -> COPY FAIL reason=mismatch, код 2"
+
+  # copy-mark-fail
+  mk_env copymk
+  api_mode ok; api_conf
+  : > "$E/sw.markcopy"
+  run_bk
+  need '[ "$RC" = 2 ] && grep -q "^BACKUP OK " "$E/out" && grep -qx "COPY FAIL reason=mark" "$E/out" && ! grep -q "COPY OK" "$E/out"'
+  need 'today_ok && only_backup && [ "$(api_n "sendDocument token=match")" = 1 ] && nosecret'
+  cend copy-mark-fail "доставлено, запись backup_copy упала -> COPY FAIL reason=mark, код 2"
+
+  # copy-too-large
+  mk_env copybig
+  api_mode ok; api_conf
+  big $((BACKUP_MAX_BYTES + 1))
+  run_bk
+  need '[ "$RC" = 2 ] && grep -q "^BACKUP OK " "$E/out" && grep -qx "SIZE WARN bytes=$((BACKUP_MAX_BYTES + 1))" "$E/out" && grep -qx "COPY FAIL reason=too-large" "$E/out"'
+  need 'today_ok && only_backup && [ ! -e "$E/curl.args" ] && [ ! -s "$T/api.log" ] && nosecret'
+  cend copy-too-large "размер BACKUP_MAX_BYTES + 1 -> SIZE WARN, COPY FAIL reason=too-large, curl не вызывался"
+
+  # copy-max-edge
+  mk_env copymax
+  api_mode ok; api_conf
+  big "$BACKUP_MAX_BYTES"
+  run_bk
+  need '[ "$RC" = 0 ] && grep -qx "SIZE WARN bytes=$BACKUP_MAX_BYTES" "$E/out" && grep -qx "COPY OK size=$BACKUP_MAX_BYTES" "$E/out"'
+  need '[ "$(api_n "sendDocument token=match chat_id=$CHAT file=aggregator-2026-10-01.dump.age bytes=$BACKUP_MAX_BYTES ")" = 1 ]'
+  need '[ "$(cat "$E/marks.log")" = "backup
+backup_copy" ] && today_ok && nosecret'
+  cend copy-max-edge "размер ровно BACKUP_MAX_BYTES -> SIZE WARN, COPY OK, код 0"
+
+  # copy-size-warn: ровно порог и на 1 меньше; DECISION size_warn=log — третьей отметки нет
+  mk_env copywarn
+  api_mode ok; api_conf
+  big "$BACKUP_WARN_BYTES"
+  run_bk
+  cap=$(caption)
+  need '[ "$BACKUP_WARN_BYTES" = 40000000 ] && [ "$RC" = 0 ] && grep -qx "SIZE WARN bytes=40000000" "$E/out" && grep -qx "COPY OK size=40000000" "$E/out"'
+  need '[ "$(printf "%s\n" "$cap" | wc -l | tr -d " ")" = 2 ] && [ "$(printf "%s\n" "$cap" | sed -n 2p)" = "SIZE WARN bytes=40000000" ]'
+  need '[ "$(printf "%s\n" "$cap" | sed -n 1p)" = "aggregator-2026-10-01.dump.age sha256=$(cut -d" " -f1 "$E/dir/aggregator-2026-10-01.dump.age.sha256") size=40000000 counts=$(cat "$E/dir/aggregator-2026-10-01.dump.age.meta")" ]'
+  need '[ "$(cat "$E/marks.log")" = "backup
+backup_copy" ] && nosecret'
+  mk_env copywarn1
+  api_mode ok; api_conf
+  big $((BACKUP_WARN_BYTES - 1))
+  run_bk
+  cap=$(caption)
+  need '[ "$RC" = 0 ] && ! grep -q "SIZE WARN" "$E/out" && grep -qx "COPY OK size=$((BACKUP_WARN_BYTES - 1))" "$E/out"'
+  need '[ "$(printf "%s\n" "$cap" | wc -l | tr -d " ")" = 1 ] && [ "$(cat "$E/marks.log")" = "backup
+backup_copy" ] && nosecret'
+  if grep -qx 'DECISION size_warn=log' "$SUMMARY01" 2>/dev/null; then
+    need '! grep -q "backup_size_warn" "$VPS/backup.sh"' # решение log: вызова отметки размера в коде нет
+  else
+    PB="$PB
+       - DECISION size_warn=log не найдено: при alert нужны вызов mark backup_size_warn и его проверки"
+  fi
+  cend copy-size-warn "ровно BACKUP_WARN_BYTES -> SIZE WARN в выводе и второй строкой подписи; на 1 меньше — нет"
+
+  # copy-resend: сбой, затем две успешные отправки той же даты
+  mk_env copyre
+  api_mode http500; api_conf
+  run_bk
+  need '[ "$RC" = 2 ] && grep -qx "COPY FAIL reason=http" "$E/out"'
+  echo ok > "$T/api.mode"
+  run_bk
+  need '[ "$RC" = 0 ] && grep -q "^COPY OK size=" "$E/out"'
+  run_bk
+  need '[ "$RC" = 0 ] && grep -q "^COPY OK size=" "$E/out"'
+  need '[ "$(grep -c "^sendDocument token=match .* file=aggregator-2026-10-01.dump.age .* reply=200 " "$T/api.log")" = 2 ] && [ "$(api_n sendDocument)" = 3 ]'
+  need '[ "$(ls -A "$E/dir" | wc -l | tr -d " ")" = 3 ] && today_ok && nosecret'
+  need '[ "$(cat "$E/marks.log")" = "backup
+backup
+backup_copy
+backup
+backup_copy" ]'
+  cend copy-resend "повторный запуск отправляет копию той же даты заново; локально одна копия"
+
+  # copy-after-dump-fail: шаги 1–4 не прошли — отправки нет
+  mk_env copydf
+  api_mode ok; api_conf
+  echo half > "$E/sw.dump"
+  run_bk
+  need '[ "$RC" = 1 ] && grep -qx "BACKUP FAIL stage=dump" "$E/out" && ! grep -q "COPY" "$E/out" && [ ! -s "$T/api.log" ] && [ ! -e "$E/curl.args" ]'
+  mk_env copymf
+  api_mode ok; api_conf
+  : > "$E/sw.mark"
+  run_bk
+  need '[ "$RC" = 1 ] && grep -qx "BACKUP FAIL stage=mark" "$E/out" && ! grep -q "COPY" "$E/out" && [ ! -s "$T/api.log" ] && [ ! -e "$E/curl.args" ] && [ ! -s "$E/marks.log" ]'
+  cend copy-after-dump-fail "сбой дампа или отметки backup -> код 1, строк COPY и запросов нет"
+
+  # copy-after-rotate-abort: ротация остановлена, отправка выполняется
+  mk_env copyra
+  api_mode ok; api_conf
+  mkcopy "$E/dir" 2099-01-01 good
+  mkcopy "$E/dir" 2026-08-10 partial
+  before=$(names "$E/dir")
+  run_bk
+  need '[ "$RC" = 3 ] && grep -qx "ROTATE ABORT reason=future-date" "$E/out" && ! grep -q "ROTATE OK" "$E/out" && grep -q "^COPY OK size=" "$E/out"'
+  need '[ -z "$(comm -23 <(printf "%s\n" "$before") <(names "$E/dir"))" ] && [ "$(cat "$E/marks.log")" = "backup
+backup_copy" ] && nosecret'
+  api_mode http500
+  run_bk
+  need '[ "$RC" = 2 ] && grep -qx "ROTATE ABORT reason=future-date" "$E/out" && grep -qx "COPY FAIL reason=http" "$E/out"'
+  need '[ -z "$(comm -23 <(printf "%s\n" "$before") <(names "$E/dir"))" ] && nosecret'
+  cend copy-after-rotate-abort "ROTATE ABORT и удавшаяся отправка -> код 3; с HTTP 500 -> код 2"
+
+  # copy-tmpfile: файл для ответа создать не удалось — curl не запускался
+  mk_env copytmp
+  api_mode ok; api_conf
+  stub "$E/bin" mktemp 'exit 1'
+  run_bk
+  need '[ "$RC" = 2 ] && grep -q "^BACKUP OK " "$E/out" && grep -qx "COPY HTTP status=000 curl=skipped error_code=tmpfile" "$E/out" && grep -qx "COPY FAIL reason=http" "$E/out"'
+  need 'today_ok && only_backup && [ ! -e "$E/curl.args" ] && [ ! -s "$T/api.log" ] && nosecret'
+  cend copy-tmpfile "нет файла для ответа -> COPY HTTP curl=skipped error_code=tmpfile, COPY FAIL reason=http, curl не вызывался"
+
+  # copy-secret-silence: итог по всем случаям выше
+  need '[ "$LEAKS" = 0 ]'
+  need '! grep -nE -- "(--trace|--verbose|set -[a-z]*x)" "$VPS/backup.sh"'
+  need '[ "$(grep -v "^ *#" "$VPS/backup.sh" | grep -c "curl ")" = 1 ] && grep -v "^ *#" "$VPS/backup.sh" | grep "curl " | grep -q -- "--config \"\$CONF\""'
+  cend copy-secret-silence "токен, идентификатор канала и тело ответа не попали в вывод, лог и аргументы curl"
+}
+
+# ---- Phase 6, 06-03: backup-status.sh, backup-apply.sh, пакет ------------------
+CRONLINE='0 3 * * * root /bin/bash /usr/local/lib/aggregator/backup.sh'
+# Имя узла настоящего API собрано из частей: тесты к нему не обращаются, адрес в копиях
+# скриптов заменяется на заглушку, а в исходном backup-apply.sh проверяется только константа.
+APIHOST="api.tele""gram.org"
+# st_env <имя>: окружение mk_env + копия backup-status.sh с путями в $E; по умолчанию всё в
+# порядке: две пригодные копии, свежие отметки, часы, cron, файл секретов 600.
+st_env() {
+  mk_env "$1"
+  sed -e "s#^export PATH=.*#export PATH=$E/bin:/usr/bin:/bin:/usr/sbin:/sbin#" \
+    -e "s#^L=/usr/local/lib/aggregator\$#L=$E/lib#" \
+    -e "s#^DIR=/var/backups/aggregator\$#DIR=$E/dir#" \
+    -e "s#^F=/opt/aggregator/docker-compose.yml\$#F=$E/opt/docker-compose.yml#" \
+    -e "s#^CRON=/etc/cron.d/aggregator-backup\$#CRON=$E/cron#" \
+    -e "s#^CONF=/etc/aggregator-backup/telegram.curl\$#CONF=$E/etc/telegram.curl#" "$VPS/backup-status.sh" > "$E/backup-status.sh"
+  if ! grep -q "^L=$E/lib\$" "$E/backup-status.sh" || ! grep -q "^DIR=$E/dir\$" "$E/backup-status.sh" \
+    || ! grep -q "^CRON=$E/cron\$" "$E/backup-status.sh" || ! grep -q "^CONF=$E/etc/telegram.curl\$" "$E/backup-status.sh" \
+    || ! grep -q "^F=$E/opt/docker-compose.yml\$" "$E/backup-status.sh" || [ "$(grep -c "^export PATH=$E/bin" "$E/backup-status.sh")" != 1 ]; then
+    bad "status: не удалось подготовить копию backup-status.sh ($1)"
+  fi
+  fill_range "$E/dir" 2026-09-30 2026-10-01
+  echo "100 200" > "$E/sw.ages"
+  printf '%s\n' "$CRONLINE" > "$E/cron"
+  echo "секреты не читаются" > "$E/etc/telegram.curl"
+  chmod 600 "$E/etc/telegram.curl"
+}
+run_st() {
+  RC=0
+  /bin/bash "$E/backup-status.sh" > "$E/out" 2> "$E/err" || RC=$?
+}
+# st_lines <семь строк состояния через перевод строки>: первые семь строк вывода ровно такие
+st_head() { sed -n '1,7p' "$E/out"; }
+# tree <каталог>...: имена, права и суммы файлов — для проверки «только чтение»
+tree() { for d in "$@"; do ls -lR "$d" | cut -c1-10,30-; find "$d" -type f -exec shasum -a 256 {} + | sort; done; }
+
+t_status() {
+  local N L7 before
+  N=$((BACKUP_MIN_BYTES + 1000))
+  L7="backup_age_s=100
+backup_copy_age_s=200
+copies=2
+latest=aggregator-2026-10-01.dump.age size=$N usable=yes
+clock=ok
+cron=present
+telegram_config=present"
+  st_env stok
+  run_st
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/out")" = "$L7
+STATUS OK" ] && [ ! -s "$E/err" ]'
+  cend status-ok "семь строк контракта и STATUS OK, код 0"
+
+  st_env stmiss
+  echo "100 none" > "$E/sw.ages"
+  run_st
+  need '[ "$RC" = 1 ] && grep -qx "backup_age_s=100" "$E/out" && grep -qx "backup_copy_age_s=none" "$E/out"'
+  need '[ "$(sed -n "8,\$p" "$E/out")" = "WARN backup_copy_age
+STATUS WARN" ]'
+  cend status-copy-missing "backup свежая, backup_copy нет -> backup_copy_age_s=none, STATUS WARN, код 1"
+
+  st_env ststale
+  echo "93601 100" > "$E/sw.ages"
+  run_st
+  need '[ "$RC" = 1 ] && [ "$(sed -n "8,\$p" "$E/out")" = "WARN backup_age
+STATUS WARN" ]'
+  echo "93600 93600" > "$E/sw.ages"
+  run_st
+  need '[ "$RC" = 0 ] && grep -qx "STATUS OK" "$E/out" && ! grep -q "^WARN" "$E/out"'
+  cend status-stale "возраст 93601 с -> STATUS WARN; 93600 с — не причина"
+
+  st_env stdb
+  : > "$E/sw.agesfail"
+  run_st
+  need '[ "$RC" = 1 ] && [ "$(st_head)" = "backup_age_s=unknown
+backup_copy_age_s=unknown
+$(printf "%s\n" "$L7" | sed -n "3,7p")" ]'
+  need '[ "$(sed -n "8,\$p" "$E/out")" = "WARN backup_age
+WARN backup_copy_age
+STATUS WARN" ]'
+  echo "мусор; rm -rf /" > "$E/sw.ages"; rm "$E/sw.agesfail"
+  run_st
+  need '[ "$RC" = 1 ] && grep -qx "backup_age_s=unknown" "$E/out" && grep -qx "backup_copy_age_s=unknown" "$E/out"'
+  cend status-db-down "БД недоступна или ответ не по формату -> оба возраста unknown, остальные строки есть, STATUS WARN"
+
+  st_env stbad
+  mkcopy "$E/dir" 2026-10-01 badsum
+  run_st
+  need '[ "$RC" = 1 ] && grep -qx "latest=aggregator-2026-10-01.dump.age size=$N usable=no" "$E/out"'
+  need '[ "$(sed -n "8,\$p" "$E/out")" = "WARN usable
+STATUS WARN" ]'
+  cend status-unusable "у последней копии не сходится SHA-256 -> usable=no, STATUS WARN"
+
+  st_env stsize
+  { printf 'age-encryption.org/v1\n'; head -c $((BACKUP_WARN_BYTES - AGEHDR)) /dev/zero | tr '\0' x; } > "$E/dir/aggregator-2026-10-01.dump.age"
+  printf '%s  %s\n' "$(_sha256 "$E/dir/aggregator-2026-10-01.dump.age")" aggregator-2026-10-01.dump.age > "$E/dir/aggregator-2026-10-01.dump.age.sha256"
+  run_st
+  need '[ "$RC" = 1 ] && grep -qx "latest=aggregator-2026-10-01.dump.age size=$BACKUP_WARN_BYTES usable=yes" "$E/out"'
+  need '[ "$(sed -n "8,\$p" "$E/out")" = "SIZE WARN bytes=$BACKUP_WARN_BYTES
+WARN size
+STATUS WARN" ]'
+  cend status-size-warn "последняя копия не меньше BACKUP_WARN_BYTES -> SIZE WARN, STATUS WARN"
+
+  # прочие причины: нет копий, часы, cron, файл секретов (нет или права не 600)
+  st_env stwarn
+  rm "$E"/dir/aggregator-*
+  echo no > "$E/clock.seq"
+  echo "# пусто" > "$E/cron"
+  chmod 644 "$E/etc/telegram.curl"
+  run_st
+  need '[ "$RC" = 1 ] && [ "$(cat "$E/out")" = "backup_age_s=100
+backup_copy_age_s=200
+copies=0
+latest=none
+clock=unsynced
+cron=absent
+telegram_config=present
+WARN copies
+WARN clock
+WARN cron
+WARN telegram_config
+STATUS WARN" ]'
+  rm "$E/etc/telegram.curl" "$E/cron"
+  run_st
+  need 'grep -qx "telegram_config=absent" "$E/out" && grep -qx "WARN telegram_config" "$E/out" && grep -qx "cron=absent" "$E/out"'
+  cend status-warns "нет копий, часы, cron, файл секретов -> по строке WARN на причину"
+
+  st_env stro
+  mkcopy "$E/dir" 2026-08-10 partial
+  mkcopy "$E/dir" 2026-08-11 nosum
+  before=$(tree "$E/dir" "$E/etc" "$E/lib" "$E/opt"; cat "$E/cron")
+  run_st
+  need '[ "$(tree "$E/dir" "$E/etc" "$E/lib" "$E/opt"; cat "$E/cron")" = "$before" ]'
+  need '[ "$(ncalls docker)" = 1 ] && ! grep -qiE "insert|update|delete|drop|alter|create" "$E/bin/calls.log" && [ ! -s "$E/marks.log" ]'
+  need '[ ! -e "$E/log" ] && [ ! -e "$E/lock" ]'
+  need '! grep -v "^ *#" "$VPS/backup-status.sh" | grep -nE "(^|[^a-z_])(rm|mv|cp|install|mkdir|chmod|chown|touch|tee|mark|publish|flock)([^a-z_]|\$)|>>|INSERT|UPDATE|DELETE"'
+  cend status-readonly "каталоги до и после запуска одинаковы, записи в БД нет"
+}
+
+# ap_env <имя>: окружение mk_env + копия backup-apply.sh с путями в $E, без проверки root и
+# владельца; адрес API — заглушка. Каталогов копий и секретов и лога ещё нет.
+ap_env() {
+  mk_env "$1"
+  rmdir "$E/etc"
+  mkdir -p "$E/var" "$E/crond"
+  sed -e "s#^export PATH=.*#export PATH=$E/bin:/usr/bin:/bin:/usr/sbin:/sbin#" \
+    -e "s#^DIR=/var/backups/aggregator\$#DIR=$E/var/backups#" \
+    -e "s#^CONFDIR=/etc/aggregator-backup\$#CONFDIR=$E/etc#" \
+    -e "s#^LOG=/var/log/aggregator-backup.log\$#LOG=$E/var/backup.log#" \
+    -e "s#^ENVF=/opt/aggregator/.env\$#ENVF=$E/opt/app.env#" \
+    -e "s#^CRON=/etc/cron.d/aggregator-backup\$#CRON=$E/crond/aggregator-backup#" \
+    -e "s#^RUN=/usr/local/lib/aggregator/backup.sh\$#RUN=$E/lib/backup.sh#" \
+    -e "s#^API=https://$APIHOST\$#API=http://127.0.0.1:$API_PORT#" \
+    -e '/\[ "\$(id -u)" -eq 0 \]/d' -e 's/ -o root -g root//g' "$VPS/backup-apply.sh" > "$E/backup-apply.sh"
+  if ! grep -q "^DIR=$E/var/backups\$" "$E/backup-apply.sh" || ! grep -q "^CONFDIR=$E/etc\$" "$E/backup-apply.sh" \
+    || ! grep -q "^LOG=$E/var/backup.log\$" "$E/backup-apply.sh" || ! grep -q "^ENVF=$E/opt/app.env\$" "$E/backup-apply.sh" \
+    || ! grep -q "^CRON=$E/crond/aggregator-backup\$" "$E/backup-apply.sh" || ! grep -q "^RUN=$E/lib/backup.sh\$" "$E/backup-apply.sh" \
+    || ! grep -q "^API=http://127.0.0.1:$API_PORT\$" "$E/backup-apply.sh" || grep -q 'id -u\|root -g' "$E/backup-apply.sh" \
+    || grep -q "https://\|$APIHOST" "$E/backup-apply.sh" \
+    || [ "$(grep -c "^export PATH=$E/bin" "$E/backup-apply.sh")" != 1 ]; then
+    bad "apply: не удалось подготовить копию backup-apply.sh ($1)"
+  fi
+}
+# run_ap <режим> <строки stdin>...
+run_ap() {
+  local mode=$1
+  shift
+  RC=0
+  printf '%s\n' "$@" | /bin/bash "$E/backup-apply.sh" "$mode" > "$E/out" 2> "$E/err" || RC=$?
+}
+perm() { ls -ld "$1" | cut -c1-10; }
+# conf_want: ожидаемое содержимое файла секретов для выдуманных значений
+conf_want() { printf 'url = "http://127.0.0.1:%s/bot%s/sendDocument"\nform = "chat_id=%s"\n' "$API_PORT" "$TOK" "$CHAT"; }
+
+t_apply() {
+  local KEY c SK c1 c2
+  # recipient-format
+  KEY=$(cat "$VPS/backup-recipient")
+  local key_re='^age1[0-9a-z]{58}$'
+  need '[[ $KEY =~ $key_re ]] && [ "$(wc -l < "$VPS/backup-recipient" | tr -d " ")" = 1 ]'
+  need 'grep -qx "AGE_RECIPIENT=$KEY" "$SUMMARY01"'
+  need 'grep -q "\"\$L/backup-recipient\"" "$VPS/backup.sh"'
+  SK="AGE-SECRET""-KEY-" # префикс приватного ключа age; собран из частей, чтобы файл теста его не содержал
+  need '! grep -rIq -- "$SK" "$HERE" "$HERE/../cmd" "$HERE/../internal" "$HERE/../migrations"'
+  cend recipient-format "backup-recipient — одна строка age1…, равная ключу из 06-01; backup.sh читает её из своего каталога"
+
+  # apply-words: неверное слово — ничего не создано; confirm() дословно как в host-apply.sh
+  ap_env apword
+  api_mode ok
+  run_ap dirs NO
+  need '[ "$RC" = 1 ] && [ ! -e "$E/var/backups" ] && [ ! -e "$E/etc" ] && [ ! -e "$E/var/backup.log" ] && ! grep -q "APPLY OK" "$E/out"'
+  mkdir -p "$E/etc" "$E/var/backups"
+  : > "$E/lib/backup.sh"
+  run_ap telegram telegram "$TOK" "$CHAT"
+  need '[ "$RC" = 1 ] && [ -z "$(ls -A "$E/etc")" ] && [ ! -s "$T/api.log" ] && ! grep -q "APPLY OK\|TELEGRAM OK" "$E/out" && nosecret'
+  run_ap cron cron
+  need '[ "$RC" = 1 ] && [ -z "$(ls -A "$E/crond")" ] && ! grep -q "APPLY OK" "$E/out"'
+  RC=0; /bin/bash "$E/backup-apply.sh" other > "$E/out" 2> "$E/err" < /dev/null || RC=$?
+  need '[ "$RC" = 2 ] && grep -q "^usage: backup-apply.sh dirs|telegram|cron\$" "$E/err"'
+  c1=$(sed -n '/^confirm() {/,/^}/p' "$VPS/backup-apply.sh")
+  c2=$(sed -n '/^confirm() {/,/^}/p' "$VPS/host-apply.sh")
+  need '[ -n "$c1" ] && [ "$c1" = "$c2" ]'
+  cend apply-words "неверное слово в каждом режиме -> ничего не создано, код 1"
+
+  # apply-dirs
+  ap_env apdirs
+  run_ap dirs "DIRS"$'\r'
+  need '[ "$RC" = 0 ] && [ "$(perm "$E/var/backups")" = "drwx------" ] && [ "$(perm "$E/etc")" = "drwx------" ] && [ "$(perm "$E/var/backup.log")" = "-rw-------" ]'
+  need 'tail -n 1 "$E/out" | grep -q ": APPLY OK mode=dirs\$" && [ ! -s "$E/var/backup.log" ]'
+  echo "прежняя строка" > "$E/var/backup.log"
+  chmod 644 "$E/var/backup.log"
+  run_ap dirs DIRS
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/var/backup.log")" = "прежняя строка" ] && [ "$(perm "$E/var/backup.log")" = "-rw-------" ]'
+  cend apply-dirs "слово DIRS -> каталоги 700, лог 600, повтор лог не обрезает"
+
+  # apply-telegram (продолжение того же окружения: каталоги уже есть)
+  api_mode ok
+  run_ap telegram TELEGRAM "$TOK"$'\r' "$CHAT"$'\r'
+  need '[ "$RC" = 0 ] && grep -qx "TELEGRAM OK" "$E/out" && [ "$(tail -n 1 "$E/out")" = "APPLY OK mode=telegram" ]'
+  need '[ "$(wc -l < "$T/api.log" | tr -d " ")" = 1 ] && [ "$(api_n "getChat token=match chat_id=$CHAT ")" = 1 ]'
+  need '[ "$(perm "$E/etc/telegram.curl")" = "-rw-------" ] && [ "$(cat "$E/etc/telegram.curl")" = "$(conf_want)" ] && [ "$(ls -A "$E/etc")" = telegram.curl ]'
+  need 'grep -q -- "--config -" "$E/curl.args" && nosecret'
+  need '[ "$(wc -l < "$E/curl.ls" | tr -d " ")" = 1 ] && grep -q "^\.getchat\." "$E/curl.ls"' # при getChat в каталоге только файл ответа
+  cend apply-telegram "TELEGRAM, токен и идентификатор на stdin -> getChat, файл 600, TELEGRAM OK; значений нет в выводе и аргументах curl"
+
+  # apply-to-backup: конфиг из режима telegram даёт COPY OK в backup.sh
+  api_mode ok
+  run_bk
+  need '[ "$RC" = 0 ] && grep -q "^COPY OK size=" "$E/out" && [ "$(api_n "sendDocument token=match chat_id=$CHAT ")" = 1 ] && nosecret'
+  cend apply-to-backup "файл секретов из режима telegram -> COPY OK в backup.sh"
+
+  # apply-telegram-bad: формат токена, формат идентификатора, getChat с ok=false — прежний файл цел
+  cp "$E/etc/telegram.curl" "$E/prev.curl"
+  api_mode ok
+  run_ap telegram TELEGRAM "abc" "$CHAT"
+  need '[ "$RC" = 1 ] && grep -q "^STOP: неверный формат токена" "$E/err" && [ ! -s "$T/api.log" ]'
+  run_ap telegram TELEGRAM "$TOK" "12ab"
+  need '[ "$RC" = 1 ] && grep -q "^STOP: неверный формат идентификатора" "$E/err" && [ ! -s "$T/api.log" ] && nosecret'
+  run_ap telegram TELEGRAM "$TOK" "-1009"
+  need '[ "$RC" = 1 ] && grep -q "^STOP: getChat не подтвердил доступ бота к каналу (HTTP 400, curl 0)" "$E/err" && [ "$(api_n "getChat token=match chat_id=-1009 ")" = 1 ]'
+  need 'cmp -s "$E/etc/telegram.curl" "$E/prev.curl" && [ "$(ls -A "$E/etc")" = telegram.curl ] && ! grep -q "TELEGRAM OK\|APPLY OK" "$E/out" && nosecret'
+  rm "$E/etc/telegram.curl"
+  api_mode forbidden
+  run_ap telegram TELEGRAM "$TOK" "$CHAT"
+  need '[ "$RC" = 1 ] && [ -z "$(ls -A "$E/etc")" ] && grep -q "HTTP 403" "$E/err" && nosecret'
+  need '! grep -q "^\.telegram\." "$E/curl.ls"' # файл с секретами не создавался ни при одном вызове getChat
+  cend apply-telegram-bad "неверный формат или getChat с ok=false -> файла нет (прежний цел), код 1"
+
+  # apply-telegram-project-token
+  ap_env approj
+  mkdir -p "$E/etc"
+  printf 'POSTGRES_PASSWORD=x\nTELEGRAM_BOT_TOKEN=%s\nADMIN_TG_IDS=1\n' "$TOK" > "$E/opt/app.env"
+  api_mode ok
+  run_ap telegram TELEGRAM "$TOK" "$CHAT"
+  need '[ "$RC" = 1 ] && grep -q "^STOP: это токен бота проекта" "$E/err" && [ -z "$(ls -A "$E/etc")" ] && [ ! -s "$T/api.log" ] && nosecret'
+  cend apply-telegram-project-token "токен бота проекта -> STOP, файла нет"
+
+  # apply-cron
+  ap_env apcron
+  mkdir -p "$E/etc" "$E/var/backups"
+  : > "$E/lib/backup.sh"
+  run_ap cron CRON
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/crond/aggregator-backup")" = "0 3 * * * root /bin/bash $E/lib/backup.sh" ] && [ "$(perm "$E/crond/aggregator-backup")" = "-rw-r--r--" ]'
+  need '[ "$(ls -A "$E/crond")" = aggregator-backup ] && tail -n 1 "$E/out" | grep -q ": APPLY OK mode=cron\$"'
+  # строка контракта: путь запуска в скрипте и строка, которую ищет backup-status.sh
+  need 'grep -qx "RUN=/usr/local/lib/aggregator/backup.sh" "$VPS/backup-apply.sh" && grep -qxF "CRON_LINE='"'"'$CRONLINE'"'"'" "$VPS/backup-status.sh"'
+  need 'grep -qxF "    LINE=\"0 3 * * * root /bin/bash \$RUN\"" "$VPS/backup-apply.sh"'
+  rm "$E/crond/aggregator-backup"
+  echo no > "$E/clock.seq"
+  run_ap cron CRON
+  need '[ "$RC" = 1 ] && grep -q "^STOP: часы не синхронизированы" "$E/err" && [ -z "$(ls -A "$E/crond")" ]'
+  echo yes > "$E/clock.seq"
+  rm "$E/lib/backup.sh"
+  run_ap cron CRON
+  need '[ "$RC" = 1 ] && grep -q "^STOP: нет " "$E/err" && [ -z "$(ls -A "$E/crond")" ]'
+  cend apply-cron "CRON при синхронизированных часах -> одна строка расписания; часы или backup.sh — STOP"
+
+  need '[ "$(grep -c "read -rs" "$VPS/backup-apply.sh")" = 2 ] && [ "$(grep -c "$APIHOST" "$VPS/backup-apply.sh")" = 1 ] && grep -qx "API=https://$APIHOST" "$VPS/backup-apply.sh"'
+  need '! grep -nE -- "(--trace|--verbose|set -[a-z]*x)" "$VPS/backup-apply.sh"'
+  cend apply-static "два скрытых ввода, одна строка API=, без подробного вывода"
+}
+
+# decided <точная строка решения 06-01>
+decided() { grep -qx -- "$1" "$SUMMARY01" 2>/dev/null; }
+
+t_pkg() {
+  local f n ONE LIBW LIBI SUDO m W c x y z u o
+  ONE=$("$HERE/oneliner.sh" testalias)
+  # pkg-names
+  n=0
+  local pkg_re='^[a-z-]+(\.sh|\.yml)?$'
+  for f in $("$HERE/oneliner.sh" files); do
+    n=$((n + 1))
+    need '[ -f "$HERE/../$f" ] && [[ ${f##*/} =~ $pkg_re ]]'
+  done
+  need '[ "$n" = 17 ] && [ "$("$HERE/oneliner.sh" sums | wc -l | tr -d " ")" = 17 ]'
+  cend pkg-names "17 файлов пакета существуют, имена по шаблону"
+
+  # pkg-lib: список LIB= из agg-install.sh на SHA256SUMS пакета равен набору lib из installed
+  mkdir -p "$T/pkg"
+  "$HERE/oneliner.sh" sums > "$T/pkg/SHA256SUMS"
+  LIBW=$(cd "$T/pkg" && eval "$(grep '^LIB=' "$VPS/agg-install.sh")" && printf '%s\n' $LIB | sort)
+  LIBI=$("$HERE/oneliner.sh" installed | awk '{print $2}' | sed -n 's#^/usr/local/lib/aggregator/##p' | sort)
+  need '[ -n "$LIBW" ] && [ "$LIBW" = "$LIBI" ] && [ "$(grep -c "^LIB=" "$VPS/agg-install.sh")" = 1 ]'
+  need '[ "$("$HERE/oneliner.sh" installed | wc -l | tr -d " ")" = 13 ] && "$HERE/oneliner.sh" installed | grep -q "  /usr/local/sbin/agg\$"'
+  need '! printf "%s\n" "$LIBW" | grep -q "backup-apply"'
+  for f in backup.sh backup-lib.sh backup-status.sh backup-recipient; do need 'printf "%s\n" "$LIBW" | grep -qx "$f"'; done
+  cend pkg-lib "LIB= и installed совпадают; backup-apply.sh в lib нет, скрипты бэкапа и ключ есть"
+
+  # pkg-sudoers
+  SUDO=$(grep '^runagg ALL=' "$VPS/agg-install.sh")
+  W='runagg ALL=(root) NOPASSWD: $A load *, $A preflight *, $A deploy *, $A env-init, $A verify, $A rollback, $A host-preflight, $A host-verify, $A backup-status'
+  if decided 'DECISION backup_run=agg'; then W="$W, \$A backup-run"; fi
+  need '[ "$SUDO" = "$W" ]'
+  cend pkg-sudoers "строка sudoers: прежние восемь записей и backup-status без аргументов"
+
+  # pkg-agg
+  mk_env pkgagg
+  sed -e "s#^L=/usr/local/lib/aggregator\$#L=$E/lib#" -e '/\[ "\$(id -u)" -eq 0 \]/d' "$VPS/agg" > "$E/agg"
+  need 'grep -q "^L=$E/lib\$" "$E/agg" && ! grep -q "id -u" "$E/agg"'
+  printf '%s\n' 'echo "STATUS STUB args=$#"' > "$E/lib/backup-status.sh"
+  printf '%s\n' 'echo "APPLY STUB"' > "$E/lib/backup-apply.sh"
+  RC=0; /bin/bash "$E/agg" --clean-env backup-status > "$E/out" 2> "$E/err" || RC=$?
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/out")" = "STATUS STUB args=0" ]'
+  RC=0; /bin/bash "$E/agg" --clean-env backup-status extra > "$E/out" 2> "$E/err" || RC=$?
+  need '[ "$RC" = 2 ] && [ ! -s "$E/out" ]'
+  for m in backup-apply backup-apply.sh backup nope; do
+    RC=0; /bin/bash "$E/agg" --clean-env "$m" > "$E/out" 2> "$E/err" || RC=$?
+    need '[ "$RC" = 2 ] && [ ! -s "$E/out" ]'
+  done
+  need '! grep -q "backup-apply" "$VPS/agg"'
+  cend pkg-agg "agg backup-status запускает backup-status.sh; лишний аргумент и backup-apply -> код 2"
+
+  # pkg-optional: необязательные части есть ровно там, где их выбрал владелец в 06-01
+  c=no; x=no; y=no; z=no
+  if decided 'DECISION backup_run=agg'; then c=yes; fi
+  grep -q 'backup-run' "$VPS/agg" && x=yes
+  grep -q 'backup-run' "$VPS/agg-install.sh" && y=yes
+  printf '%s\n' "$ONE" | grep -q 'backup-run' && z=yes
+  need '[ "$x" = "$c" ] && [ "$y" = "$c" ] && [ "$z" = "$c" ]'
+  for m in age curl clock; do
+    case "$m" in
+      age) W='DECISION age=install' ;;
+      curl) W='DECISION curl=install' ;;
+      clock) W='DECISION clock=(ntp-server|chrony)' ;;
+    esac
+    c=no; x=no; y=no; z=no; u=no; o=no
+    if grep -qxE "$W" "$SUMMARY01"; then c=yes; fi
+    grep -qE "^  $m\\)\$" "$VPS/host-apply.sh" && x=yes                                   # ветка case
+    grep -E '^  [a-z|]+\) ;;$' "$VPS/host-apply.sh" | grep -qE "[ |]$m[|)]" && y=yes      # список режимов
+    grep -E 'usage: host-apply.sh ' "$VPS/host-apply.sh" | grep -qE "[ |]$m[|\"]" && u=yes # usage
+    grep -qE "^ +confirm $(printf %s "$m" | tr a-z A-Z)\$" "$VPS/host-apply.sh" && z=yes   # слово
+    printf '%s\n' "$ONE" | grep -q "then bash host-apply.sh $m; else" && o=yes             # однострочник
+    need '[ "$x" = "$c" ] && [ "$y" = "$c" ] && [ "$u" = "$c" ] && [ "$z" = "$c" ] && [ "$o" = "$c" ]'
+  done
+  cend pkg-optional "backup-run и режимы age, curl, clock — только выбранные в 06-01, согласованно в case, usage, слове и однострочниках"
+
+  # host-words: режимы host-apply.sh на заглушках
+  mk_env hostw
+  sed -e '/\[ "\$(id -u)" -eq 0 \]/d' "$VPS/host-apply.sh" > "$E/host-apply.sh"
+  need '! grep -q "id -u" "$E/host-apply.sh"'
+  for f in apt-get apt-cache apt-config unattended-upgrade age; do stub "$E/bin" "$f" ':'; done
+  stub "$E/bin" docker ':'
+  hw() { : > "$E/bin/calls.log"; RC=0; printf '%s\n' "$2" | PATH="$E/bin:/usr/bin:/bin" /bin/bash "$E/host-apply.sh" "$1" > "$E/out" 2> "$E/err" || RC=$?; }
+  if decided 'DECISION age=install'; then
+    hw age age
+    need '[ "$RC" = 1 ] && [ "$(cat "$E/bin/calls.log")" = "apt-cache policy age" ] && ! grep -q "HOST APPLY" "$E/out"'
+    hw age "AGE"$'\r'
+    need '[ "$RC" = 0 ] && [ "$(cat "$E/bin/calls.log")" = "apt-cache policy age
+apt-get update
+apt-get install -y --no-install-recommends age
+age --version" ] && tail -n 1 "$E/out" | grep -q ": HOST APPLY age DONE\$"'
+  fi
+  hw compose NO
+  need '[ "$RC" = 1 ] && [ ! -s "$E/bin/calls.log" ]'
+  hw compose COMPOSE
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/bin/calls.log")" = "apt-get update
+apt-get install -y --no-install-recommends docker-compose-v2
+docker compose version" ] && tail -n 1 "$E/out" | grep -q ": HOST APPLY compose DONE\$"'
+  hw updates NO
+  need '[ "$RC" = 1 ] && [ "$(cat "$E/bin/calls.log")" = "apt-config dump" ]'
+  hw updates UPDATES
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/bin/calls.log")" = "apt-config dump
+apt-get update
+unattended-upgrade -v" ] && [ "$(tail -n 1 "$E/out")" = "HOST APPLY updates DONE" ]'
+  RC=0; PATH="$E/bin:/usr/bin:/bin" /bin/bash "$E/host-apply.sh" nope > "$E/out" 2> "$E/err" < /dev/null || RC=$?
+  need '[ "$RC" = 2 ] && grep -q "^usage: host-apply.sh " "$E/err"'
+  cend host-words "неверное слово — пакеты не ставятся; верное — ожидаемые вызовы; updates и compose как прежде"
+
+  # oneliner-lines
+  for m in dirs telegram cron; do
+    need 'printf "%s\n" "$ONE" | grep "sha256sum -c --quiet SHA256SUMS; then bash backup-apply.sh $m; else echo .STOP: HASH MISMATCH.; fi" | grep -q "^T=\$(mktemp -d)"'
+  done
+  need 'printf "%s\n" "$ONE" | grep -q "^/bin/bash /usr/local/lib/aggregator/backup.sh; echo \"exit=\$?\""'
+  need 'printf "%s\n" "$ONE" | grep -qF "sudo -n /usr/local/sbin/agg backup-status'"'"' 2>&1 | tee \"\$HOME/run-agg-phase6/backup-status.log\""'
+  # строка backup-status на чистой машине: каталога логов нет, ssh — заглушка (сети нет)
+  mk_env onel
+  mkdir "$E/home"
+  stub "$E/bin" ssh 'echo "STATUS STUB"'
+  f=$(printf '%s\n' "$ONE" | sed -n 's/^backup-status: *//p')
+  need '[ -n "$f" ] && [ "$(printf "%s\n" "$f" | wc -l | tr -d " ")" = 1 ]'
+  RC=0; HOME="$E/home" PATH="$E/bin:/usr/bin:/bin" /bin/bash -c "$f" > "$E/out" 2> "$E/err" || RC=$?
+  need '[ "$RC" = 0 ] && [ "$(cat "$E/home/run-agg-phase6/backup-status.log")" = "STATUS STUB" ] && [ "$(perm "$E/home/run-agg-phase6")" = "drwx------" ]'
+  need '[ "$(cat "$E/bin/calls.log")" = "ssh testalias sudo -n /usr/local/sbin/agg backup-status" ]'
+  need 'printf "%s\n" "$ONE" | grep -q "^host-verify:    ssh testalias "' # прежние строки без mkdir
+  need 'printf "%s\n" "$ONE" | grep -qF "tee \"\$HOME/run-agg-phase4/host-verify.log\""'
+  need '! printf "%s\n" "$ONE" | grep -qE "[0-9]{6,}:[A-Za-z0-9_-]{30,}|([0-9]{1,3}\.){3}[0-9]{1,3}|api\.telegram"'
+  cend oneliner-lines "однострочники бэкапа с проверкой хеша, ручной запуск, agg backup-status с логом в run-agg-phase6"
+}
+
 t_tracer() {
   local rc f N npg pkg_re='^[a-z-]+(\.sh|\.yml)?$'
   mk_env tracer
@@ -380,16 +1117,19 @@ t_tracer() {
   : > "$E/marks.log"
   report "tracer: mark принимает только backup и backup_copy"
 
+  api_mode ok; api_conf
   run_bk
   N=$((AGEHDR + BACKUP_MIN_BYTES + 1000))
-  need '[ "$RC" = 2 ]' # S2: внешней копии в этом плане нет — код 2, не 0
+  need '[ "$RC" = 0 ]' # S2: обе отметки, ротация выполнена
+  need 'grep -qx "COPY OK size=$N" "$E/out"'
   need '[ -f "$f" ] && [ -f "$f.sha256" ] && [ -f "$f.meta" ]'
   need '[ -z "$(ls "$E"/dir/*.partial* 2>/dev/null)" ]'
   need 'usable "$f"'
   need 'sum_ok "$E/dir" "aggregator-2026-10-01.dump.age"'
   need '[ "$(cut -c1-10 < <(ls -l "$f"))" = "-rw-------" ]'
   need '[ "$(cat "$f.meta")" = "events_listed=5 users=2 events_merged=0 dedup_candidates=pending:0|confirmed:0|rejected:0 source_alerts=0 heartbeats=0 migration=4" ]'
-  need '[ "$(cat "$E/marks.log")" = backup ]'
+  need '[ "$(cat "$E/marks.log")" = "backup
+backup_copy" ]'
   need 'grep -q -- "-r $TESTKEY" "$E/age.log"'
   need 'grep -qx "BACKUP OK file=aggregator-2026-10-01.dump.age size=$N" "$E/out"'
   need 'grep -qx "ROTATE OK keep=1 delete=0" "$E/out"'
@@ -397,13 +1137,13 @@ t_tracer() {
   need '[ -z "$(leak)" ]'
   need '[ "$(calls "date -u +%F")" = 1 ]' # дата взята один раз
   need '[[ backup.sh =~ $pkg_re ]] && [[ backup-lib.sh =~ $pkg_re ]]'
-  report "tracer: дамп -> .partial -> проверка -> имя -> .sha256/.meta -> backup -> ротация, код 2, открытого текста нет"
+  report "tracer: дамп -> .partial -> проверка -> имя -> .sha256/.meta -> backup -> ротация -> отправка -> backup_copy, код 0, открытого текста нет"
   npg=$(grep -v '^ *#' "$VPS/backup.sh" | grep -c 'pg_dump' || true)
   need '[ "$npg" = 1 ]'
   need '[ "$(grep -v "^ *#" "$VPS/backup.sh" | grep -c "mark backup\$")" = 1 ]'
   need '[ "$(grep -v "^ *#" "$VPS/backup.sh" | grep -c "ROTATE_ABORTED=1")" -ge 1 ]'
-  need '! grep -v "^ *#" "$VPS/backup.sh" | grep -q "backup_copy"'
-  report "tracer: дамп только в конвейере, единственный вызов отметки — backup, отметки backup_copy в скрипте нет"
+  need '[ "$(grep -v "^ *#" "$VPS/backup.sh" | grep -c "mark backup_copy")" = 1 ]'
+  report "tracer: дамп только в конвейере, по одному вызову отметок backup и backup_copy"
 }
 
 t_iso_oracle() {
@@ -827,7 +1567,7 @@ pub_first() {
   mk_env "$1"
   fill_range "$E/dir" 2026-09-29 2026-09-30
   run_bk
-  need '[ "$RC" = 2 ] && [ "$(cat "$E/marks.log")" = backup ]'
+  need '[ "$RC" = 2 ] && [ "$(cat "$E/marks.log")" = backup ] && grep -qx "COPY FAIL reason=no-config" "$E/out"'
   cp "$E/dir/aggregator-2026-10-01.dump.age" "$E/first.age"
   S1=$(sumline "$E/first.age" 2026-10-01)
   need 'same3 "$E/dir/aggregator-2026-10-01.dump.age" "$E/first.age" "$S1" "$CNT1"'
@@ -1056,7 +1796,7 @@ t_clock_rotate() {
   run_bk
   need '[ "$RC" = 2 ]'
   need 'grep -q "^BACKUP OK file=aggregator-2026-10-01.dump.age" "$E/out"'
-  need 'grep -qx "ROTATE ABORT reason=clock" "$E/out" && ! grep -q "ROTATE OK" "$E/out"'
+  need 'grep -qx "ROTATE ABORT reason=clock" "$E/out" && ! grep -q "ROTATE OK" "$E/out" && grep -qx "COPY FAIL reason=no-config" "$E/out"'
   need 'has_all "$E/dir" $(dates_between 2026-09-11 2026-10-01)'
   need '[ "$(cat "$E/marks.log")" = backup ]'
   need '[ "$(calls "timedatectl show -p NTPSynchronized --value")" = 2 ]'
@@ -1206,6 +1946,7 @@ backup" ]'
 # ---- список разделов (следующие планы дописывают сюда) ----------------------
 t_host_audit
 t_selftest
+api_start || true
 t_tracer
 t_iso_oracle
 t_retention
@@ -1215,6 +1956,10 @@ t_publish
 t_sync
 t_clock_rotate
 t_fail_paths
+t_copy
+t_status
+t_apply
+t_pkg
 if [ "${1:-}" = pg ]; then t_pg; fi
 
 if [ "$FAILS" -eq 0 ]; then echo "BACKUP TESTS OK"; else echo "BACKUP TESTS FAIL: $FAILS"; exit 1; fi

@@ -126,7 +126,7 @@
 
 | Источник | Строки |
 |---|---|
-| `backup.sh` | `BACKUP OK file=<имя> size=<байт>`; `BACKUP FAIL stage=clock|dump|verify|sync|mark`; `ROTATE OK keep=<n> delete=<m>`; `ROTATE ABORT reason=empty-keep|future-date|clock|unexpected-object|delete`; `RECOVER OK|FAIL file=<имя>`; `RECOVER SKIP file=<имя> reason=size`; `ROTATE UNVERIFIED count=<n> dates=<до 10 дат>` (S11); `COPY OK size=<байт>`; `COPY FAIL reason=no-config|too-large|http|mismatch`; `SIZE WARN bytes=<n>` |
+| `backup.sh` | `BACKUP OK file=<имя> size=<байт>`; `BACKUP FAIL stage=clock|dump|verify|sync|mark`; `ROTATE OK keep=<n> delete=<m>`; `ROTATE ABORT reason=empty-keep|future-date|clock|unexpected-object|delete`; `RECOVER OK|FAIL file=<имя>`; `RECOVER SKIP file=<имя> reason=size`; `ROTATE UNVERIFIED count=<n> dates=<до 10 дат>` (S11); `COPY OK size=<байт>`; `COPY FAIL reason=no-config|too-large|http|mismatch`; `COPY HTTP status=<код HTTP|000> curl=<код выхода|skipped> error_code=<n|none|tmpfile>` — строка перед `COPY FAIL reason=http` (06-03: только коды, без тела ответа и сообщений `curl`; `curl=skipped error_code=tmpfile` — файл для ответа создать не удалось, `curl` не запускался); `SIZE WARN bytes=<n>` |
 | коды возврата `backup.sh` | `0` — обе отметки; `1` — копии нет, отметок нет, ротации нет; `2` — локальная копия и `backup` есть, `backup_copy` нет |
 | `backup-status.sh` | `backup_age_s=`, `backup_copy_age_s=`, `copies=`, `latest=<имя> size=<байт> usable=yes|no`, `clock=ok|unsynced`, `cron=present|absent`, `telegram_config=present|absent`, итог `STATUS OK` / `STATUS WARN` |
 | `backup-apply.sh` | `APPLY OK mode=<режим>`; для `telegram` дополнительно `TELEGRAM OK` (проверка `getChat`, без вывода значений) |

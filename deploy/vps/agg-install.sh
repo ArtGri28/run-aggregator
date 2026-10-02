@@ -5,7 +5,8 @@
 # файла SHA256SUMS и всех файлов по нему и только тогда запускает этот скрипт.
 # Ставит (всё root:root, runagg на запись недоступно):
 #   /usr/local/sbin/agg (755)
-#   /usr/local/lib/aggregator/ (755): скрипты и docker-compose.yml (644)
+#   /usr/local/lib/aggregator/ (755): скрипты и docker-compose.yml (644), в том числе скрипты
+#   бэкапа и публичный ключ backup-recipient; backup-apply.sh — только root-консоль, не ставится
 #   /etc/sudoers.d/runagg-aggregator (440): runagg может через sudo только agg с
 #   перечисленными подкомандами
 # Не меняет: sudoers Phase 1, группы runagg (в docker не добавляется), ssh, пакеты,
@@ -43,14 +44,14 @@ for d in / /usr /usr/local /usr/local/sbin /usr/local/lib /etc /etc/sudoers.d; d
 done
 
 # В /usr/local/lib/aggregator — всё из пакета, кроме самой обёртки и скриптов root-консоли.
-LIB=$(awk '{print $2}' SHA256SUMS | grep -vxE 'agg|agg-install\.sh|host-apply\.sh|load-postgres\.sh')
+LIB=$(awk '{print $2}' SHA256SUMS | grep -vxE 'agg|agg-install\.sh|host-apply\.sh|load-postgres\.sh|backup-apply\.sh')
 for f in agg $LIB; do
   [[ $f =~ ^[a-z-]+(\.sh|\.yml)?$ ]] || stop "недопустимое имя файла в SHA256SUMS"
 done
 
 cat > sudoers.new <<EOF
 # runagg: только обёртка развёртывания aggregator (deploy/vps/agg-install.sh).
-runagg ALL=(root) NOPASSWD: $A load *, $A preflight *, $A deploy *, $A env-init, $A verify, $A rollback, $A host-preflight, $A host-verify
+runagg ALL=(root) NOPASSWD: $A load *, $A preflight *, $A deploy *, $A env-init, $A verify, $A rollback, $A host-preflight, $A host-verify, $A backup-status
 EOF
 visudo -cqf sudoers.new || stop "sudoers.new не прошёл visudo -c"
 

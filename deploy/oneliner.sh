@@ -10,14 +10,16 @@
 #     файла SHA256SUMS и по нему всех файлов; при несовпадении — «STOP: HASH MISMATCH»,
 #     ничего не запускается;
 #   - Mac: ssh под runagg и «sudo -n /usr/local/sbin/agg <команда>»; вывод команд
-#     только чтения — в $HOME/run-agg-phase4/ вне репозитория.
+#     только чтения — в $HOME/run-agg-phase4/ (бэкап — в $HOME/run-agg-phase6/) вне репозитория.
 set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")/.."
 
 BUNDLE="deploy/vps/agg deploy/vps/agg-install.sh deploy/vps/deploy-apply.sh deploy/vps/deploy-preflight.sh
   deploy/vps/deploy-verify.sh deploy/vps/env-init.sh deploy/vps/host-apply.sh deploy/vps/host-preflight.sh
-  deploy/vps/host-verify.sh deploy/vps/load-postgres.sh deploy/vps/rollback.sh docker-compose.yml"
+  deploy/vps/host-verify.sh deploy/vps/load-postgres.sh deploy/vps/rollback.sh docker-compose.yml
+  deploy/vps/backup.sh deploy/vps/backup-lib.sh deploy/vps/backup-status.sh deploy/vps/backup-recipient
+  deploy/vps/backup-apply.sh"
 STAGE=/home/runagg/agg-deploy
 AGG=/usr/local/sbin/agg
 LIB=/usr/local/lib/aggregator
@@ -33,7 +35,7 @@ case "${1:-}" in
   installed)
     # Как в agg-install.sh: agg — в /usr/local/sbin, в lib — всё, кроме скриптов root-консоли.
     sums | awk -v a="$AGG" -v l="$LIB" '$2 == "agg" {print $1 "  " a; next}
-      $2 != "agg-install.sh" && $2 != "host-apply.sh" && $2 != "load-postgres.sh" {print $1 "  " l "/" $2}'
+      $2 != "agg-install.sh" && $2 != "host-apply.sh" && $2 != "load-postgres.sh" && $2 != "backup-apply.sh" {print $1 "  " l "/" $2}'
     exit 0 ;;
 esac
 
@@ -58,7 +60,13 @@ H=$(sums | sha)
 root() {
   echo "T=\$(mktemp -d) && cp $STAGE/* \"\$T\"/ && cd \"\$T\" && if echo '$H  SHA256SUMS' | sha256sum -c --quiet - && sha256sum -c --quiet SHA256SUMS; then $*; else echo 'STOP: HASH MISMATCH'; fi"
 }
-ro() { echo "ssh$SSHF $ALIAS 'sudo -n $AGG $1' 2>&1 | tee \"\$HOME/run-agg-phase4/$2.log\""; }
+# ro <подкоманда> <имя лога> [каталог логов в $HOME]: без третьего аргумента лог идёт в
+# run-agg-phase4 (каталог создаёт ship.sh); заданный каталог строка создаёт сама (700).
+ro() {
+  local mk=""
+  if [ -n "${3:-}" ]; then mk="mkdir -p -m 700 \"\$HOME/$3\" && "; fi
+  echo "${mk}ssh$SSHF $ALIAS 'sudo -n $AGG $1' 2>&1 | tee \"\$HOME/${3:-run-agg-phase4}/$2.log\""
+}
 rw() { echo "ssh$SSHF $ALIAS 'sudo -n $AGG $1'"; }
 
 cat <<EOF
@@ -76,6 +84,13 @@ $(root bash host-apply.sh updates)
 systemctl reboot   # вручную, когда готовы
 $(root bash host-apply.sh compose)
 
+== Root-консоль: бэкап, каждый шаг только по отдельному разрешению владельца; внешняя копия — временное хранилище в Telegram (D-17) ==
+$(root bash host-apply.sh age)
+$(root bash backup-apply.sh dirs)
+/bin/bash /usr/local/lib/aggregator/backup.sh; echo "exit=\$?"   # ручной запуск бэкапа
+$(root bash backup-apply.sh telegram)    # секреты вводит владелец, ввод скрыт
+$(root bash backup-apply.sh cron)
+
 == Root-консоль: запасной путь postgres:17 (только если agg deploy не смог скачать) ==
 $(root bash load-postgres.sh '<SHA256 postgres17.tar с Mac>')
 
@@ -87,4 +102,5 @@ preflight:      $(ro "preflight $TAG" deploy-preflight)
 deploy:         $(rw "deploy $TAG")    # слово DEPLOY
 verify:         $(ro verify deploy-verify)
 rollback:       $(rw rollback)    # слово ROLLBACK
+backup-status:  $(ro backup-status backup-status run-agg-phase6)
 EOF

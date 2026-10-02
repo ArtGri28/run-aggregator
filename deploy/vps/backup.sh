@@ -2,10 +2,13 @@
 # Локальный зашифрованный бэкап PostgreSQL (Phase 6, D-07): запускается от root по cron в
 # 03:00 (/bin/bash /usr/local/lib/aggregator/backup.sh) или вручную из root-консоли.
 # Шаги: дамп -> age -> .partial с суммой и метаданными -> проверка -> публикация (сумма,
-# метаданные, данные последними) -> повторная проверка итоговых файлов -> отметка backup -> ротация.
+# метаданные, данные последними) -> повторная проверка итоговых файлов -> отметка backup ->
+# ротация -> отправка копии ботом бэкапов в закрытый канал -> отметка backup_copy.
 # Перед публикацией и перед отметкой — sync (ошибка: BACKUP FAIL stage=sync, отметки нет).
-# Открытый дамп на диск не пишется. Коды: 1 — копии нет или отметка backup не записана;
-# 2 — локальная копия и backup есть, backup_copy нет (шагов 6–7 здесь пока нет).
+# Открытый дамп на диск не пишется. Внешняя копия в Telegram — временное хранилище (D-17);
+# локальная копия внешней не считается. Коды: 0 — обе отметки, ротация выполнена;
+# 1 — копии нет или отметка backup не записана; 2 — локальная копия и backup есть,
+# backup_copy нет; 3 — обе отметки есть, ротация остановлена (ROTATE ABORT).
 set -Eeuo pipefail
 umask 077
 export LC_ALL=C
@@ -15,6 +18,7 @@ DIR=/var/backups/aggregator
 F=/opt/aggregator/docker-compose.yml
 LOCK=/run/aggregator-backup.lock
 LOG=/var/log/aggregator-backup.log
+CONF=/etc/aggregator-backup/telegram.curl
 [ "$(id -u)" -eq 0 ] || { echo "STOP: нужен root" >&2; exit 1; }
 
 # shellcheck source=backup-lib.sh
@@ -73,7 +77,8 @@ P=$OUT.partial
 # До начала публикации временные файлы при любом выходе удаляются; после её начала остаются —
 # по ним следующий запуск доводит публикацию.
 PUB=0
-trap '[ "$PUB" = 1 ] || rm -f -- "$P" "$P.sha256" "$P.meta"' EXIT
+RESP=""
+trap '[ "$PUB" = 1 ] || rm -f -- "$P" "$P.sha256" "$P.meta"; [ -z "$RESP" ] || rm -f -- "$RESP"' EXIT
 
 # Предпосылки дампа.
 [ -d "$DIR" ] && [ -w "$DIR" ] && [ -f "$F" ] || fail dump
@@ -116,7 +121,7 @@ fi
 say "BACKUP OK file=aggregator-$D.dump.age size=$SIZE"
 
 # Шаг 5: ротация 7 + 4. ROTATE_ABORTED=1 при любом ROTATE ABORT — вход итогового кода
-# (шаги 6–7 и коды 0 и 3 добавляет следующий план). До первого удаления проверяются все имена
+# (код 3 при обеих отметках). До первого удаления проверяются все имена
 # удаляемых дат: каталог или иной объект, не файл и не ссылка, — ROTATE ABORT
 # reason=unexpected-object, не удалено ничего. Отказ самого удаления — reason=delete: ротация
 # останавливается на этой дате. Данные удаляются отдельным вызовом и первыми: если они не
@@ -175,5 +180,69 @@ rotate() {
 }
 rotate
 
-# Здесь добавляются шаги 6–7 (внешняя копия, отметка backup_copy) и итоговый код по ним.
-exit 2
+# Шаги 6–7 (D-11, D-12, D-20): отправка сегодняшней копии и отметка backup_copy. Выполняется
+# всегда, когда шаги 1–4 прошли, при любом исходе ротации. Сбой отправки ничего не удаляет и
+# не откатывает: копия, её .sha256, .meta и отметка backup остаются.
+# Секреты (D-22): адрес с токеном и идентификатор канала лежат только в $CONF, скрипт его
+# не читает и передаёт curl путём; подробный вывод curl и трассировка не используются,
+# сообщения curl и тело ответа не печатаются. При причине http перед COPY FAIL печатается
+#   COPY HTTP status=<код HTTP|000> curl=<код выхода|skipped> error_code=<n|none|tmpfile>
+# curl=skipped и error_code=tmpfile — файл для ответа создать не удалось, curl не запускался.
+copy_fail() { say "COPY FAIL reason=$1"; return 1; }
+# reply_check FILE SIZE: разбор недоверенного ответа Bot API. Печатает ровно одно из: ok
+# (ok=true и result.document.file_size равен SIZE), mismatch, «bad <error_code|none>».
+# Сравниваются только ok и число; тело ответа не печатается и не исполняется.
+reply_check() {
+  python3 -I - "$1" "$2" <<'PY'
+import json, sys
+
+try:
+    with open(sys.argv[1], "rb") as fh:
+        d = json.load(fh)
+except Exception:
+    print("bad none")
+    sys.exit(0)
+if not isinstance(d, dict) or d.get("ok") is not True:
+    ec = d.get("error_code") if isinstance(d, dict) else None
+    print("bad", ec if type(ec) is int else "none")
+    sys.exit(0)
+r = d.get("result")
+doc = r.get("document") if isinstance(r, dict) else None
+n = doc.get("file_size") if isinstance(doc, dict) else None
+print("ok" if type(n) is int and n == int(sys.argv[2]) else "mismatch")
+PY
+}
+send_copy() {
+  local f=$1 cap http rc=0 res
+  # Подпись: первая строка — имя, сумма, размер и счётчики (её же принимает restore-check.sh);
+  # не длиннее 1024 символов: счётчики ограничены 400 символами.
+  cap="${f##*/} sha256=$SUM size=$SIZE counts=$CNT"
+  if [ "$SIZE" -ge "$BACKUP_WARN_BYTES" ]; then
+    say "SIZE WARN bytes=$SIZE"
+    cap="$cap"$'\n'"SIZE WARN bytes=$SIZE"
+  fi
+  if [ "$SIZE" -gt "$BACKUP_MAX_BYTES" ]; then copy_fail too-large; return 1; fi
+  if [ ! -f "$CONF" ] || [ ! -r "$CONF" ]; then copy_fail no-config; return 1; fi
+  # Ответ API — в файл в каталоге копий (имя вне шаблона копий), удаляется здесь и в trap.
+  rm -f -- "$DIR"/.copy-response.*
+  RESP=$(mktemp "$DIR/.copy-response.XXXXXX") || { RESP=""; say "COPY HTTP status=000 curl=skipped error_code=tmpfile"; copy_fail http; return 1; }
+  http=$(curl -sS --max-time 300 --connect-timeout 20 --config "$CONF" -F "document=@$f" \
+    --form-string "caption=$cap" -o "$RESP" -w '%{http_code}' 2> /dev/null) || rc=$?
+  [[ $http =~ ^[0-9]{3}$ ]] || http=000
+  res=$(reply_check "$RESP" "$SIZE" 2> /dev/null) || res="bad none"
+  rm -f -- "$RESP"
+  RESP=""
+  if [ "$rc" -ne 0 ] || [ "$http" != 200 ] || [ "${res%% *}" = bad ]; then
+    res=${res#bad }
+    [[ $res =~ ^[0-9]+$ ]] || res=none
+    say "COPY HTTP status=$http curl=$rc error_code=$res"
+    copy_fail http
+    return 1
+  fi
+  if [ "$res" != ok ]; then copy_fail mismatch; return 1; fi
+  if ! mark backup_copy; then copy_fail mark; return 1; fi
+  say "COPY OK size=$SIZE"
+}
+if ! send_copy "$OUT"; then exit 2; fi
+[ "$ROTATE_ABORTED" = 0 ] || exit 3
+exit 0
