@@ -3,6 +3,8 @@
 # Каждый раздел — функция t_имя, список вызовов внизу файла. Разделы:
 #   t_host_audit  — deploy/host-audit.sh печатает 14 ключей по контракту, только читает;
 #   selftest      — итоговая строка раздела: ok только без провалов;
+#   clock-diag-*  — deploy/clock-diag.sh (диагностика часов) печатает 13 ключей по контракту,
+#                   только читает, не печатает адреса и имена серверов времени;
 #   tracer, iso-oracle, retention, rotate-dir, rotate-state, publish, sync, clock-rotate, fail-paths — копия
 #   deploy/vps/backup.sh на заглушках (docker, age, timedatectl, flock, sleep, sync, date) и чистые
 #   функции deploy/vps/backup-lib.sh (ISO-неделя по оракулу python3, ротация 7 + 4);
@@ -1096,6 +1098,183 @@ unattended-upgrade -v" ] && [ "$(tail -n 1 "$E/out")" = "HOST APPLY updates DONE
   cend oneliner-lines "однострочники бэкапа с проверкой хеша, ручной запуск, agg backup-status с логом в run-agg-phase6"
 }
 
+# ---- Phase 6, 06-04, задача 0: deploy/clock-diag.sh --------------------------
+# Разрешённые вызовы блока диагностики часов: только чтение состояния.
+CLOCK_ALLOWED='timedatectl show -p NTPSynchronized --value
+timedatectl show -p NTP --value
+timedatectl show -p CanNTP --value
+systemctl show systemd-timesyncd -p LoadState --value
+systemctl is-active systemd-timesyncd
+systemctl is-enabled systemd-timesyncd
+systemctl is-active chrony
+systemctl is-active ntpsec
+systemctl is-active ntp
+systemctl is-active openntpd
+systemd-detect-virt
+timedatectl timesync-status
+date -u +%s'
+# Слова, которых в блоке быть не должно сверх списка FORBID: сетевые пробы и установка времени.
+CLOCK_FORBID='(^|[^a-z_-])(sudo|curl|ping|ntpdate|sntp|chronyc|ntpq|hwclock|set-ntp|set-time|set-timezone|journalctl|logger)([^a-z_-]|$)'
+CLOCK_KEYS="ntp_synchronized ntp_enabled can_ntp timesyncd_unit timesyncd_active timesyncd_enabled other_time_service virt ntp_servers_configured server_contacted packet_count stratum epoch"
+CLOCK_DIRS=""
+
+# clock_dir <имя>: каталог сценария. Заглушки отвечают по файлам сценария:
+#   td.<свойство>  — ответ timedatectl show -p <свойство> --value
+#   td.status      — вывод timedatectl timesync-status (нет файла — код 1)
+#   sc.<слово>     — ответы systemctl: sc.load, sc.active, sc.enabled; sc.on — активные
+#                    «другие» службы через пробел
+#   virt, epoch    — ответы systemd-detect-virt и date -u +%s
+# Каталог настройки timesyncd — $d/etc (в копии блока /etc/systemd заменён на него).
+clock_dir() {
+  local d="$T/$1"
+  mkdir -p "$d/bin" "$d/work" "$d/home" "$d/etc"
+  : > "$d/bin/calls.log"
+  ln -s "$(command -v head)" "$d/bin/head"
+  echo no > "$d/td.NTPSynchronized"; echo yes > "$d/td.NTP"; echo yes > "$d/td.CanNTP"
+  printf '%s\n' '       Server: 192.0.2.10 (ntp.example.net)' 'Poll interval: 34min 8s (min: 32s; max 34min 8s)' \
+    '         Leap: normal' '      Version: 4' '      Stratum: 2' '    Reference: C0000201' '    Precision: 1us (-25)' \
+    'Root distance: 12.345ms (max: 5s)' '       Offset: +1.234ms' '        Delay: 20.5ms' '       Jitter: 1.1ms' \
+    ' Packet count: 7' '    Frequency: +10.5ppm' > "$d/td.status"
+  echo loaded > "$d/sc.load"; echo active > "$d/sc.active"; echo enabled > "$d/sc.enabled"; : > "$d/sc.on"
+  echo kvm > "$d/virt"; echo 1790000000 > "$d/epoch"
+  printf '%s\n' '[Time]' 'NTP=ntp.example.net 192.0.2.10' '#FallbackNTP=ntp.ubuntu.com' > "$d/etc/timesyncd.conf"
+  stub "$d/bin" timedatectl "d=$d"'
+case "$*" in
+  "show -p "*" --value") f=$3; [ -f "$d/td.$f" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/td.$f" ;;
+  timesync-status) [ -f "$d/td.status" ] || { echo "Failed to query server: unit not active" >&2; exit 1; }; while IFS= read -r l; do echo "$l"; done < "$d/td.status" ;;
+  *) echo "неожиданный вызов timedatectl" >&2; exit 64 ;;
+esac'
+  stub "$d/bin" systemctl "d=$d"'
+out() { while IFS= read -r l; do echo "$l"; done < "$1"; }
+case "$*" in
+  "show systemd-timesyncd -p LoadState --value") out "$d/sc.load" ;;
+  "is-active systemd-timesyncd") out "$d/sc.active"; [ "$(out "$d/sc.active")" = active ] ;;
+  "is-enabled systemd-timesyncd") out "$d/sc.enabled" ;;
+  "is-active "*) case " $(out "$d/sc.on") " in *" $2 "*) echo active ;; *) echo inactive; exit 3 ;; esac ;;
+  *) echo "неожиданный вызов systemctl" >&2; exit 64 ;;
+esac'
+  stub "$d/bin" systemd-detect-virt "d=$d"'; while IFS= read -r l; do echo "$l"; done < "$d/virt"'
+  stub "$d/bin" date "d=$d"'; while IFS= read -r l; do echo "$l"; done < "$d/epoch"'
+  stub "$d/bin" sudo 'echo "вызова быть не должно"'
+  sed "s#/etc/systemd#$d/etc#g" "$HERE/clock-diag.sh" > "$d/clock-diag.sh"
+  if [ "$(grep -c "^CONF=$d/etc/timesyncd.conf\$" "$d/clock-diag.sh")" != 1 ]; then bad "clock-diag: путь настройки в блоке не найден ($1)"; fi
+  CLOCK_DIRS="$CLOCK_DIRS $1"
+}
+# run_clock <сценарий>: вывод -> $T/<сценарий>/out, ошибки -> err, код -> CRC
+run_clock() {
+  CRC=0
+  (cd "$T/$1/work" && PATH="$T/$1/bin" HOME="$T/$1/home" /bin/bash "$T/$1/clock-diag.sh") > "$T/$1/out" 2> "$T/$1/err" || CRC=$?
+}
+# cwant <13 значений в порядке контракта>
+cwant() {
+  local k i=1
+  for k in $CLOCK_KEYS; do
+    printf 'CLOCK %s=%s\n' "$k" "${!i}"
+    i=$((i + 1))
+  done
+  echo 'CLOCK END'
+}
+# cchk <сценарий> <13 значений>: вывод ровно такой, код 0, stderr пуст
+cchk() {
+  local n=$1
+  shift
+  run_clock "$n"
+  CWANT=$(cwant "$@")
+  CGOT=$(cat "$T/$n/out")
+  need '[ "$CRC" = 0 ] && [ "$CGOT" = "$CWANT" ] && [ ! -s "$T/$n/err" ]'
+}
+
+t_clock_diag() {
+  local n B k before CWANT CGOT CRC
+  # clock-diag-lines: штатные состояния
+  clock_dir cdbase
+  cchk cdbase no yes yes loaded active enabled none kvm yes yes 7 2 1790000000
+  need '[ "$(wc -l < "$T/cdbase/out" | tr -d " ")" = 14 ] && [ "$(grep -c "^CLOCK [a-z_]*=" "$T/cdbase/out")" -eq 13 ]'
+  clock_dir cdsync # часы синхронизированы, серверы в основном файле не заданы, но есть в дополнительном
+  echo yes > "$T/cdsync/td.NTPSynchronized"
+  printf '%s\n' '[Time]' '#NTP=' 'FallbackNTP=ntp.ubuntu.com' > "$T/cdsync/etc/timesyncd.conf"
+  mkdir "$T/cdsync/etc/timesyncd.conf.d"
+  printf '%s\n' '[Time]' '  NTP= 2001:db8::10' > "$T/cdsync/etc/timesyncd.conf.d/local.conf"
+  echo none > "$T/cdsync/virt"
+  cchk cdsync yes yes yes loaded active enabled none none yes yes 7 2 1790000000
+  clock_dir cdoff # служба выключена, сервер не опрошен, серверы не заданы
+  echo no > "$T/cdoff/td.NTP"
+  echo inactive > "$T/cdoff/sc.active"; echo disabled > "$T/cdoff/sc.enabled"
+  printf '%s\n' '[Time]' '#NTP=' 'NTP=' ' # NTP=ntp.example.net' > "$T/cdoff/etc/timesyncd.conf"
+  printf '%s\n' '       Server: n/a (ntp.example.net)' ' Packet count: 0' > "$T/cdoff/td.status"
+  echo lxc > "$T/cdoff/virt"
+  cchk cdoff no no yes loaded inactive disabled none lxc no no 0 unknown 1790000000
+  clock_dir cdnf # штатной службы нет, работает chrony
+  echo not-found > "$T/cdnf/sc.load"; echo inactive > "$T/cdnf/sc.active"; echo "not-found" > "$T/cdnf/sc.enabled"
+  echo chrony > "$T/cdnf/sc.on"; rm "$T/cdnf/td.status"
+  cchk cdnf no yes yes not-found inactive unknown chrony kvm yes unknown unknown unknown 1790000000
+  clock_dir cdtwo # две другие службы сразу; служба замаскирована; адрес сервера IPv6
+  echo "chrony ntp" > "$T/cdtwo/sc.on"
+  echo masked > "$T/cdtwo/sc.load"; echo failed > "$T/cdtwo/sc.active"; echo masked > "$T/cdtwo/sc.enabled"
+  printf '%s\n' '       Server: 2001:db8::10 (ntp.example.net)' '      Stratum: 3' ' Packet count: 12' > "$T/cdtwo/td.status"
+  cchk cdtwo no yes yes masked failed masked several kvm yes yes 12 3 1790000000
+  cend clock-diag-lines "13 строк по контракту и CLOCK END: штатные состояния, код 0"
+
+  # clock-diag-junk: мусор, адреса и имена узлов в ответах заглушек в вывод не попадают
+  clock_dir cdjunk
+  for k in NTPSynchronized NTP CanNTP; do echo "node.example.com 10.0.0.1" > "$T/cdjunk/td.$k"; done
+  for k in load active enabled; do echo "host-1.example.com; rm -rf /" > "$T/cdjunk/sc.$k"; done
+  echo "KVM Node.Example.com 10.0.0.1" > "$T/cdjunk/virt"
+  echo "Thu Oct  1 00:00:00 UTC 2026 node.example.com" > "$T/cdjunk/epoch"
+  printf '%s\n' 'Server: ntp.example.net' 'Packet count: 10.0.0.1' 'Stratum: node.example.com' 'Server address 192.0.2.10' > "$T/cdjunk/td.status"
+  printf '%s\n' 'host=node.example.com' 'addr 10.0.0.1' > "$T/cdjunk/etc/timesyncd.conf"
+  cchk cdjunk unknown unknown unknown unknown unknown unknown none unknown no no unknown unknown unknown
+  for n in cdbase cdsync cdoff cdnf cdtwo cdjunk; do
+    need '! grep -vqE "^CLOCK (END|[a-z_]+=[a-z0-9-]+)\$" "$T/$n/out"'
+    need '! grep -qiE "example|ubuntu|192\.0\.2|10\.0\.0|2001:db8|([0-9]{1,3}\.){3}[0-9]{1,3}" "$T/$n/out"'
+  done
+  cend clock-diag-junk "мусор, адреса и имена узлов -> unknown; каждая строка по грамматике лога"
+
+  # clock-diag-absent: нет программ, файлов настройки или прав на чтение — unknown, блок доходит до конца
+  clock_dir cdnotd; rm "$T/cdnotd/bin/timedatectl"
+  cchk cdnotd unknown unknown unknown loaded active enabled none kvm yes unknown unknown unknown 1790000000
+  clock_dir cdnosc; rm "$T/cdnosc/bin/systemctl"
+  cchk cdnosc no yes yes unknown unknown unknown unknown kvm yes yes 7 2 1790000000
+  clock_dir cdnovirt; rm "$T/cdnovirt/bin/systemd-detect-virt" "$T/cdnovirt/bin/date"
+  cchk cdnovirt no yes yes loaded active enabled none unknown yes yes 7 2 unknown
+  clock_dir cdnone; rm "$T/cdnone/bin/timedatectl" "$T/cdnone/bin/systemctl" "$T/cdnone/bin/systemd-detect-virt" "$T/cdnone/bin/date"
+  rm "$T/cdnone/etc/timesyncd.conf"
+  cchk cdnone unknown unknown unknown unknown unknown unknown unknown unknown unknown unknown unknown unknown unknown
+  clock_dir cdfail # команды есть, но завершаются ошибкой без вывода
+  rm "$T/cdfail"/td.* "$T/cdfail/virt" "$T/cdfail/epoch" "$T/cdfail"/sc.load "$T/cdfail"/sc.enabled
+  : > "$T/cdfail/sc.active"
+  stub "$T/cdfail/bin" systemd-detect-virt 'exit 1'
+  stub "$T/cdfail/bin" date 'exit 1'
+  cchk cdfail unknown unknown unknown unknown unknown unknown none unknown yes unknown unknown unknown unknown
+  clock_dir cddeny
+  if [ "$(id -u)" = 0 ]; then
+    : # от root файл без прав всё равно читается — случай пропускается
+  else
+    chmod 000 "$T/cddeny/etc/timesyncd.conf"
+    cchk cddeny no yes yes loaded active enabled none kvm unknown yes 7 2 1790000000
+    chmod 600 "$T/cddeny/etc/timesyncd.conf"
+  fi
+  cend clock-diag-absent "нет программ, ошибки команд, нет файла настройки или прав на чтение -> unknown, CLOCK END, код 0"
+
+  # clock-diag-readonly: только разрешённые вызовы чтения, файлов не появилось, настройка не изменилась
+  for n in $CLOCK_DIRS; do
+    before=$(ls -lR "$T/$n/etc" | cut -c1-10,30-; find "$T/$n/etc" -type f -exec shasum -a 256 {} + 2>/dev/null | sort)
+    run_clock "$n"
+    need '[ "$(ls -lR "$T/$n/etc" | cut -c1-10,30-; find "$T/$n/etc" -type f -exec shasum -a 256 {} + 2>/dev/null | sort)" = "$before" ]'
+    need '[ -z "$(grep -vxF "$CLOCK_ALLOWED" "$T/$n/bin/calls.log" || true)" ] && ! grep -q "^sudo" "$T/$n/bin/calls.log"'
+    need '[ -z "$(ls -A "$T/$n/work")$(ls -A "$T/$n/home")" ]'
+  done
+  need '[ "$(sort -u "$T/cdbase/bin/calls.log")" = "$(printf "%s\n" "$CLOCK_ALLOWED" | sort -u)" ]' # полный сценарий делает ровно 13 видов вызовов
+  B=$(grep -v '^[[:space:]]*#' "$HERE/clock-diag.sh")
+  need '! printf "%s\n" "$B" | grep -nE "$FORBID"'
+  need '! printf "%s\n" "$B" | grep -nE "$CLOCK_FORBID"'
+  need '[ "$(printf "%s\n" "$B" | sed -E "s#2?>/dev/null##g; s#2>&1##g; s#>&2##g" | tr -cd ">" | wc -c | tr -d " ")" = 0 ]'
+  need '! printf "%s\n" "$B" | grep -qE "https?://|/dev/(tcp|udp)"'
+  need '[ "$(printf "%s\n" "$B" | grep -c "^val ")" = 13 ] && printf "%s\n" "$B" | tail -n 1 | grep -qx "echo .CLOCK END."'
+  need '! "$HERE/oneliner.sh" files | grep -q "clock-diag"' # блок в пакет не входит
+  cend clock-diag-readonly "только разрешённые вызовы чтения, без повышения прав, файлов и изменений нет; в тексте блока нет изменяющих и сетевых слов"
+}
+
 t_tracer() {
   local rc f N npg pkg_re='^[a-z-]+(\.sh|\.yml)?$'
   mk_env tracer
@@ -1946,6 +2125,7 @@ backup" ]'
 # ---- список разделов (следующие планы дописывают сюда) ----------------------
 t_host_audit
 t_selftest
+t_clock_diag
 api_start || true
 t_tracer
 t_iso_oracle
