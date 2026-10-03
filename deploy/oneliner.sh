@@ -68,6 +68,12 @@ ro() {
   echo "${mk}ssh$SSHF $ALIAS 'sudo -n $AGG $1' 2>&1 | tee \"\$HOME/${3:-run-agg-phase4}/$2.log\""
 }
 rw() { echo "ssh$SSHF $ALIAS 'sudo -n $AGG $1'"; }
+# JRN: счётчики журнала systemd-timesyncd с момента записи aggregator.conf (06-04, задача 6) —
+# root-консоль, только чтение; печатаются только счётчики и вид последней записи, без адресов и имён.
+JRN=$(cat <<'J'
+F=/etc/systemd/timesyncd.conf.d/aggregator.conf; if [ -f "$F" ] && [ ! -L "$F" ]; then echo 'JOURNAL since=ok'; journalctl -u systemd-timesyncd --since "@$(stat -c %Y "$F")" -o cat --no-pager 2>&1 | awk '/^-- /{next} {k=""} /Contacted time server /{k=(index($0,"server [")?"contacted_v6":"contacted_v4");r=0} /Initial clock synchronization/{k="initial_sync";r=0} /Timed out waiting for reply from /{k=(index($0,"from [")?"timeout_v6":"timeout_v4");r++;if(r>m)m=r} k==""{k="other"} {n[k]++;l=k} END{split("contacted_v4 contacted_v6 initial_sync timeout_v4 timeout_v6 other",a," ");for(i=1;i<=6;i++)printf "JOURNAL %s=%d\n",a[i],n[a[i]];printf "JOURNAL max_timeout_run=%d\nJOURNAL last=%s\n",m,(l==""?"none":l)}'; else echo 'JOURNAL since=nofile'; fi; echo 'JOURNAL END'
+J
+)
 
 cat <<EOF
 == Root-консоль провайдера: разовая установка (слово INSTALL) ==
@@ -94,6 +100,7 @@ $(root bash backup-apply.sh cron)
 == Root-консоль: серверы времени (06-04), только по отдельному разрешению владельца на изменение VPS ==
 $(root bash clock-apply.sh apply)    # слово CLOCK
 $(root bash clock-apply.sh undo)    # откат, слово UNCLOCK
+$JRN    # счётчики журнала с момента apply, только чтение
 
 == Root-консоль: запасной путь postgres:17 (только если agg deploy не смог скачать) ==
 $(root bash load-postgres.sh '<SHA256 postgres17.tar с Mac>')

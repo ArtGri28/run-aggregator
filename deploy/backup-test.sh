@@ -1454,6 +1454,36 @@ t_clock_apply() {
   need '[ "$RC" = 1 ] && grep -q "^STOP: .*не удаляется" "$T/caundo/out" && [ "$(ca_dropins caundo)" = "aggregator.conf " ] && [ "$(ca_restarts caundo)" = 0 ]'
   cend clock-apply-undo "undo: нет файла -> NOTHING; неверное слово -> файл на месте; UNCLOCK -> удалён только свой файл, перезапуск; изменённый файл не удаляется"
 
+  # clock-journal: однострочник счётчиков журнала из oneliner.sh (root-консоль, только чтение) на заглушках
+  local jl jd="$T/cajrn"
+  jl=$("$HERE/oneliner.sh" testalias | grep "^F=/etc/systemd/timesyncd.conf.d/aggregator.conf; " | sed "s/    # .*//")
+  need '[ -n "$jl" ] && [ "$("$HERE/oneliner.sh" testalias | grep -c "^F=/etc/systemd/timesyncd.conf.d/aggregator.conf; ")" = 1 ]'
+  mkdir -p "$jd/bin" "$jd/d"
+  stub "$jd/bin" stat 'echo 1790000000'
+  stub "$jd/bin" journalctl "cat \"$jd/j.txt\""
+  jl=${jl//\/etc\/systemd\/timesyncd.conf.d\/aggregator.conf/$jd\/d\/aggregator.conf}
+  jr() { : > "$jd/bin/calls.log"; PATH="$jd/bin:/usr/bin:/bin" /bin/bash -c "$jl" > "$jd/out" 2>&1 || true; }
+  : > "$jd/d/aggregator.conf"
+  printf '%s\n' 'Network configuration changed, trying to establish connection.' \
+    'Timed out waiting for reply from 198.51.100.10:123 (a.ntp.test).' 'Timed out waiting for reply from [2001:db8::1]:123 (b.ntp.test).' \
+    'Timed out waiting for reply from 198.51.100.11:123 (c.ntp.test).' 'Contacted time server 198.51.100.12:123 (d.ntp.test).' \
+    'Initial clock synchronization to Sat 2026-10-03 12:00:00.000 UTC.' > "$jd/j.txt"
+  jr
+  need '[ "$(cat "$jd/out")" = "$(printf "%s\n" "JOURNAL since=ok" "JOURNAL contacted_v4=1" "JOURNAL contacted_v6=0" "JOURNAL initial_sync=1" "JOURNAL timeout_v4=2" "JOURNAL timeout_v6=1" "JOURNAL other=1" "JOURNAL max_timeout_run=3" "JOURNAL last=initial_sync" "JOURNAL END")" ]'
+  need '[ "$(grep "^journalctl" "$jd/bin/calls.log")" = "journalctl -u systemd-timesyncd --since @1790000000 -o cat --no-pager" ]'
+  printf '%s\n' 'Contacted time server [2001:db8::2]:123 (a.ntp.test).' 'Timed out waiting for reply from 198.51.100.10:123 (a.ntp.test).' > "$jd/j.txt"
+  jr
+  need 'grep -qx "JOURNAL contacted_v6=1" "$jd/out" && grep -qx "JOURNAL last=timeout_v4" "$jd/out" && grep -qx "JOURNAL max_timeout_run=1" "$jd/out"'
+  echo '-- No entries --' > "$jd/j.txt"
+  jr
+  need 'grep -qx "JOURNAL last=none" "$jd/out" && grep -qx "JOURNAL other=0" "$jd/out" && grep -qx "JOURNAL END" "$jd/out"'
+  rm -f "$jd/d/aggregator.conf"
+  jr
+  need '[ "$(cat "$jd/out")" = "$(printf "%s\n" "JOURNAL since=nofile" "JOURNAL END")" ] && ! grep -q "^journalctl" "$jd/bin/calls.log"'
+  need '! grep -qE "([0-9]{1,3}\.){3}[0-9]{1,3}|::|\.test" "$jd/out"'
+  need '! printf "%s\n" "$jl" | grep -qE "(^|[^a-z-])(systemctl|timedatectl|rm|mv|cp|chmod|tee|apt|apt-get|sed|curl|wget|ssh)([^a-z-]|$)| >|>>"'
+  cend clock-journal "счётчики журнала timesyncd с момента записи aggregator.conf: v4/v6, первичная синхронизация, серии таймаутов, последняя запись; нет файла -> nofile без журнала; без адресов и имён; только чтение"
+
   # clock-apply-static: адресов в выводе нет; в пакет не входит; только перезапуск этой службы; пакеты не ставятся
   for n in caok canos camis cacat cafor caundo cadns; do
     need '! grep -qE "([0-9]{1,3}\.){3}[0-9]{1,3}|ntp\.ubuntu|example|\.test|pool\.ntp" "$T/$n/out" "$T/$n/err"'
