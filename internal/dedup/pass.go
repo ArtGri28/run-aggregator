@@ -62,55 +62,29 @@ func pass(ctx context.Context, tx *store.Store, c Config) error {
 	// Событие с записью без fields ещё не прошло текущую версию записи —
 	// Fold его полей неполон.
 	evs := slices.DeleteFunc(all, func(e store.DedupEvent) bool { return !e.Complete })
-	slices.SortFunc(evs, func(x, y store.DedupEvent) int {
-		return cmp.Or(x.Start.Compare(y.Start), cmp.Compare(x.ID, y.ID))
-	})
 
 	rejected, err := rejectedRoots(ctx, tx)
 	if err != nil {
 		return err
 	}
 
-	// Окно шире ворот Decide (±1 день): конец первого + 2 дня.
-	var pairs []scored
-	skipped := 0
+	// Пары окна и UniquePartner — общей функцией с калибровкой (M2);
+	// отклонённые по корням пропускаются до Decide.
+	sides := make([]Side, len(evs))
 	for i := range evs {
-		end := evs[i].Start
-		if evs[i].End != nil && evs[i].End.After(end) {
-			end = *evs[i].End
-		}
-		limit := end.AddDate(0, 0, 2)
-		for j := i + 1; j < len(evs) && !evs[j].Start.After(limit); j++ {
-			a, b := &evs[i], &evs[j]
-			if a.CountryCode != b.CountryCode {
-				continue
-			}
-			if a.ID > b.ID {
-				a, b = b, a
-			}
-			if rejected[[2]int64{a.ID, b.ID}] {
-				skipped++
-				continue
-			}
-			v, r := Decide(Pair{A: side(a), B: side(b)}, c)
-			if v != Separate {
-				pairs = append(pairs, scored{a: a, b: b, verdict: v, reasons: r})
-			}
-		}
+		sides[i] = side(&evs[i])
 	}
-
-	// UniquePartner (Pitfall 9): у каждой стороны не больше одного партнёра
-	// с NameSim не ниже High — по чистой схожести, как порог автослияния (D-20).
-	partners := map[int64]int{}
-	for _, p := range pairs {
-		if p.reasons.NameSim >= c.High {
-			partners[p.a.ID]++
-			partners[p.b.ID]++
+	skipped := 0
+	found, _ := Pairs(sides, c, func(a, b int) bool {
+		if rejected[[2]int64{evs[a].ID, evs[b].ID}] {
+			skipped++
+			return true
 		}
-	}
-	for i := range pairs {
-		p := &pairs[i]
-		p.verdict, p.reasons = Decide(Pair{A: side(p.a), B: side(p.b), UniquePartner: partners[p.a.ID] <= 1 && partners[p.b.ID] <= 1}, c)
+		return false
+	})
+	pairs := make([]scored, 0, len(found))
+	for _, p := range found {
+		pairs = append(pairs, scored{a: &evs[p.A], b: &evs[p.B], verdict: p.Verdict, reasons: p.Reasons})
 	}
 	slices.SortStableFunc(pairs, func(x, y scored) int {
 		return cmp.Or(cmp.Compare(y.reasons.Score, x.reasons.Score), cmp.Compare(x.a.ID, y.a.ID), cmp.Compare(x.b.ID, y.b.ID))

@@ -9,11 +9,13 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"aggregator/internal/dedup"
 	"aggregator/internal/ingest"
+	hlsrc "aggregator/internal/ingest/sources/heroleague"
 	mcsrc "aggregator/internal/ingest/sources/marathonec"
 	pbsrc "aggregator/internal/ingest/sources/probeg"
 )
@@ -34,6 +36,8 @@ var calibSources = []struct {
 		time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC), mcsrc.Parse, mcsrc.New(nil).Policy()},
 	{pbsrc.Code, "../ingest/sources/probeg/testdata/year_ahead-2026-09-30.html", pbsrc.CalendarURL,
 		time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC), pbsrc.Parse, pbsrc.New(nil).Policy()},
+	{hlsrc.Code, "../ingest/sources/heroleague/testdata/event_list.json", hlsrc.ListURL,
+		time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC), hlsrc.Parse, hlsrc.New(nil).Policy()},
 }
 
 type calibRef struct {
@@ -110,45 +114,14 @@ func loadCatalog(t *testing.T) []calibEvent {
 	return out
 }
 
-// windowPairs — пары окна, как в dedup.Pass: одна страна, начало второго не
-// позже конца первого + 2 дня; события отсортированы по (Start, EventID).
-func windowPairs(evs []calibEvent, fn func(a, b *calibEvent)) {
-	sorted := make([]*calibEvent, len(evs))
+// calibSides — стороны каталога для dedup.WindowPairs и dedup.Pairs (та же
+// логика пар, что в dedup.Pass, M2); индекс стороны = индекс события.
+func calibSides(evs []calibEvent) []dedup.Side {
+	out := make([]dedup.Side, len(evs))
 	for i := range evs {
-		sorted[i] = &evs[i]
+		out[i] = evs[i].side
 	}
-	slices.SortFunc(sorted, func(x, y *calibEvent) int {
-		return cmp.Or(x.side.Start.Compare(y.side.Start), cmp.Compare(x.side.EventID, y.side.EventID))
-	})
-	for i, a := range sorted {
-		end := a.side.Start
-		if a.side.End.After(end) {
-			end = a.side.End
-		}
-		limit := end.AddDate(0, 0, 2)
-		for _, b := range sorted[i+1:] {
-			if b.side.Start.After(limit) {
-				break
-			}
-			if a.side.CountryCode == b.side.CountryCode {
-				fn(a, b)
-			}
-		}
-	}
-}
-
-// countPartners — число партнёров с NameSim не ниже High у каждого события
-// (как dedup.Pass: только пары с вердиктом не Separate, D-20).
-func countPartners(evs []calibEvent, c dedup.Config) map[int64]int {
-	partners := map[int64]int{}
-	windowPairs(evs, func(a, b *calibEvent) {
-		v, r := dedup.Decide(dedup.Pair{A: a.side, B: b.side}, c)
-		if v != dedup.Separate && r.NameSim >= c.High {
-			partners[a.side.EventID]++
-			partners[b.side.EventID]++
-		}
-	})
-	return partners
+	return out
 }
 
 // judge — правило вердикта по метке. fail — нарушение (тест падает),
@@ -249,6 +222,79 @@ func loadPairs(t *testing.T) []calibPair {
 	return pairs
 }
 
+// unlabeledAuto — пары окна каталога с WouldAuto (как их видит dedup.Pass),
+// которых нет в наборе с подтверждённой меткой (proposed=false, не
+// синтетические) — D-12: такая пара — повод проверить метку до включения
+// автослияния. Результат — ключи сторон, схожесть и вердикт.
+func unlabeledAuto(evs []calibEvent, pairs []calibPair, c dedup.Config) []string {
+	labeled := map[string]bool{}
+	for _, p := range pairs {
+		if p.Proposed || p.Synthetic {
+			continue
+		}
+		labeled[pairKey(p.A.key(), p.B.key())] = true
+	}
+	found, _ := dedup.Pairs(calibSides(evs), c, nil)
+	var out []string
+	for _, p := range found {
+		a, b := &evs[p.A], &evs[p.B]
+		if p.Reasons.WouldAuto && !labeled[pairKey(a.key, b.key)] {
+			out = append(out, fmt.Sprintf("%s | %s (sim=%.2f verdict=%s)", a.key, b.key, p.Reasons.NameSim, p.Verdict))
+		}
+	}
+	return out
+}
+
+func pairKey(x, y string) string {
+	if x > y {
+		x, y = y, x
+	}
+	return x + "|" + y
+}
+
+// thirdSourceReport — пары окна «Лиги Героев» с другими источниками и
+// межисточниковые пары Беларуси (D-13): число пар окна, со схожестью не ниже
+// Low, с WouldAuto, максимальная схожесть; BY-события по источникам.
+func thirdSourceReport(t *testing.T, evs []calibEvent, c dedup.Config) {
+	t.Helper()
+	found, _ := dedup.Pairs(calibSides(evs), c, nil)
+	auto := 0
+	for _, p := range found {
+		if p.Reasons.WouldAuto && (evs[p.A].side.Sources[0].Code == hlsrc.Code || evs[p.B].side.Sources[0].Code == hlsrc.Code) {
+			auto++
+		}
+	}
+	all, low, by := 0, 0, 0
+	maxSim := 0.0
+	dedup.WindowPairs(calibSides(evs), func(i, j int) {
+		a, b := &evs[i], &evs[j]
+		ca, cb := a.side.Sources[0].Code, b.side.Sources[0].Code
+		if ca == cb {
+			return
+		}
+		if a.side.CountryCode == "BY" {
+			by++
+		}
+		if ca != hlsrc.Code && cb != hlsrc.Code {
+			return
+		}
+		all++
+		s := dedup.NameSim(a.side.Title, b.side.Title)
+		maxSim = max(maxSim, s)
+		if s >= c.Low {
+			low++
+		}
+	})
+	byEvents := map[string]int{}
+	for _, e := range evs {
+		if e.side.CountryCode == "BY" {
+			byEvents[e.side.Sources[0].Code]++
+		}
+	}
+	t.Logf("HEROLEAGUE pairs_window=%d auto=%d window_all=%d max_sim=%.2f", low, auto, all, maxSim)
+	t.Logf("BY cross_source_pairs=%d events marathonec=%d probeg=%d heroleague=%d", by, byEvents[mcsrc.Code], byEvents[pbsrc.Code], byEvents[hlsrc.Code])
+}
+
 // TestCalibration — ворота DDP-09 на фикстурах: вердикт Decide для каждой
 // размеченной пары при конфиге LoadConfig() с включённым автослиянием (D-08).
 func TestCalibration(t *testing.T) {
@@ -265,12 +311,17 @@ func TestCalibration(t *testing.T) {
 	for i := range evs {
 		byKey[evs[i].key] = &evs[i]
 	}
-	partners := countPartners(evs, c)
+	_, partners := dedup.Pairs(calibSides(evs), c, nil)
 	if *calibDump {
 		dump(t, evs, partners, c)
 	}
 
 	pairs := loadPairs(t)
+	// D-12: каждая потенциальная AUTO-пара окна фикстур размечена владельцем.
+	for _, u := range unlabeledAuto(evs, pairs, c) {
+		t.Errorf("AUTO-пара окна без подтверждённой метки: %s", u)
+	}
+	thirdSourceReport(t, evs, c)
 	matrix := map[string]map[dedup.Verdict]int{}
 	var confirmed, proposed, falseAuto, missed, pFalseAuto, pMissed int
 	for _, p := range pairs {
@@ -346,7 +397,8 @@ func dump(t *testing.T, evs []calibEvent, partners map[int64]int, c dedup.Config
 	desc := func(e *calibEvent) string {
 		return fmt.Sprintf("%s %s %s/%s «%s» [%s]", e.key, e.side.Start.Format(time.DateOnly), e.side.CityKey, e.city, e.side.Title, e.info)
 	}
-	windowPairs(evs, func(a, b *calibEvent) {
+	dedup.WindowPairs(calibSides(evs), func(i, j int) {
+		a, b := &evs[i], &evs[j]
 		if a.side.Sources[0].Code == b.side.Sources[0].Code {
 			return
 		}
@@ -362,7 +414,8 @@ func dump(t *testing.T, evs []calibEvent, partners map[int64]int, c dedup.Config
 		rows = append(rows, row{s, fmt.Sprintf("DUMP sim=%.2f score=%.2f verdict=%s up=%v gate=%s | %s | %s",
 			s, r.Score, v, up, r.Gate, desc(a), desc(b))})
 	})
-	windowPairs(evs, func(a, b *calibEvent) {
+	dedup.WindowPairs(calibSides(evs), func(i, j int) {
+		a, b := &evs[i], &evs[j]
 		if a.side.Sources[0].Code != b.side.Sources[0].Code {
 			return
 		}
@@ -410,5 +463,33 @@ func TestCalibrationCheck(t *testing.T) {
 		if (fail != "") != tc.fail || (mismatch != "") != tc.mismatch {
 			t.Errorf("%s: fail=%q mismatch=%q", tc.name, fail, mismatch)
 		}
+	}
+}
+
+// TestCalibrationUnlabeledAuto — проверка D-12 сама ловит неразмеченную и
+// неподтверждённую AUTO-пару (синтетический каталог, не фикстуры).
+func TestCalibrationUnlabeledAuto(t *testing.T) {
+	day := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
+	ev := func(id int64, code, ext, title string) calibEvent {
+		return calibEvent{key: code + "/" + ext, side: dedup.Side{EventID: id, Sources: []dedup.SourceRef{{Code: code}},
+			Title: title, Start: day, CountryCode: "RU", CityKey: "ryazan"}}
+	}
+	evs := []calibEvent{
+		ev(1, mcsrc.Code, "1", "Окская тропа"),
+		ev(2, pbsrc.Code, "2", "Окская тропа"),
+		ev(3, hlsrc.Code, "3", "Гонка Героев"),
+	}
+	c := dedup.DefaultConfig()
+	label := func(proposed bool) []calibPair {
+		return []calibPair{{ID: "c01", A: calibRef{pbsrc.Code, "2"}, B: calibRef{mcsrc.Code, "1"}, Label: "same", Kind: "dup", Proposed: proposed}}
+	}
+	if got := unlabeledAuto(evs, nil, c); len(got) != 1 || !strings.Contains(got[0], "marathonec/1") || !strings.Contains(got[0], "probeg/2") {
+		t.Fatalf("без метки: %v, want одна пара marathonec/1–probeg/2", got)
+	}
+	if got := unlabeledAuto(evs, label(true), c); len(got) != 1 {
+		t.Fatalf("метка proposed: %v, want пара не подтверждена", got)
+	}
+	if got := unlabeledAuto(evs, label(false), c); len(got) != 0 {
+		t.Fatalf("подтверждённая метка (стороны в обратном порядке): %v, want пусто", got)
 	}
 }
