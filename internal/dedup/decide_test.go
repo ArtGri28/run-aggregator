@@ -262,3 +262,130 @@ func TestDecideLink(t *testing.T) {
 		})
 	}
 }
+
+// TestDecideWouldAuto — признак потенциального автослияния не зависит от
+// DEDUP_AUTO_MERGE; при выключенном флаге вердикт AutoMerge невозможен (D-21).
+func TestDecideWouldAuto(t *testing.T) {
+	tests := []struct {
+		name  string
+		mod   func(*Pair)
+		would bool
+	}{
+		{"все условия", func(*Pair) {}, true},
+		{"партнёр не единственный", func(p *Pair) { p.UniquePartner = false }, false},
+		{"соседние дни", func(p *Pair) { p.B.Start = oct(25) }, false},
+		{"город разный", func(p *Pair) { p.B.CityKey = "moskva" }, false},
+		{"схожесть между Low и High", func(p *Pair) {
+			p.A.Title, p.B.Title = "Жемчужина золотого кольца", "Суздальский жемчужина золотого кольца"
+		}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := same()
+			tt.mod(&p)
+			vOff, rOff := Decide(p, DefaultConfig())
+			vOn, rOn := Decide(p, autoOn())
+			if rOff.WouldAuto != tt.would || rOn.WouldAuto != tt.would {
+				t.Fatalf("WouldAuto off=%v on=%v, want %v", rOff.WouldAuto, rOn.WouldAuto, tt.would)
+			}
+			wantOn, wantOff := Candidate, Candidate
+			if tt.would {
+				wantOn = AutoMerge
+			}
+			if vOff != wantOff || vOn != wantOn {
+				t.Fatalf("verdict off=%v on=%v, want %v %v", vOff, vOn, wantOff, wantOn)
+			}
+		})
+	}
+}
+
+// TestDecideOffNeverAuto — перебор вариантов пары и порогов (D-10, слой 2):
+// при выключенном флаге вердикта AutoMerge нет; reasons при обоих
+// значениях флага одинаковы; WouldAuto ⇔ AutoMerge при включённом флаге.
+func TestDecideOffNeverAuto(t *testing.T) {
+	type mod func(*Pair)
+	titles := []mod{
+		func(*Pair) {},
+		func(p *Pair) { p.A.Title, p.B.Title = "Белые ночи", "Алые паруса" },
+		func(p *Pair) {
+			p.A.Title, p.B.Title = "Жемчужина золотого кольца", "Суздальский жемчужина золотого кольца"
+		},
+	}
+	dates := []mod{
+		func(*Pair) {},
+		func(p *Pair) { p.B.Start = oct(25) },
+		func(p *Pair) { p.B.Start = oct(26) },
+		func(p *Pair) { p.A.End, p.B.Start = oct(25), oct(25) },
+	}
+	cities := []mod{
+		func(*Pair) {},
+		func(p *Pair) { p.B.CityKey = "moskva" },
+		func(p *Pair) { p.A.CityKey, p.B.CityKey = "", "" },
+	}
+	unique := []mod{func(*Pair) {}, func(p *Pair) { p.UniquePartner = false }}
+	sources := []mod{
+		func(*Pair) {},
+		func(p *Pair) { p.B.Sources = []SourceRef{{Code: "marathonec"}} },
+		func(p *Pair) {
+			p.A.Sources = []SourceRef{{Code: "probeg", GroupKey: "series:x"}}
+			p.B.Sources = []SourceRef{{Code: "probeg", GroupKey: "series:x"}}
+		},
+	}
+	links := []mod{
+		func(*Pair) {},
+		func(p *Pair) {
+			p.A.RegURL, p.B.RegURL = "https://myrace.info/events/2080", "https://myrace.info/events/2080"
+		},
+	}
+	mid := NameSim("Жемчужина золотого кольца", "Суздальский жемчужина золотого кольца")
+	configs := []func(*Config){
+		func(*Config) {},
+		func(c *Config) { c.Low, c.High = mid, mid },
+		func(c *Config) { c.LinkBonus = 0.5 },
+	}
+	n, would := 0, 0
+	for _, a := range titles {
+		for _, b := range dates {
+			for _, c := range cities {
+				for _, d := range unique {
+					for _, e := range sources {
+						for _, f := range links {
+							for _, g := range configs {
+								p := same()
+								for _, m := range []mod{a, b, c, d, e, f} {
+									m(&p)
+								}
+								off := DefaultConfig()
+								g(&off)
+								on := off
+								on.AutoMerge = true
+								vOff, rOff := Decide(p, off)
+								vOn, rOn := Decide(p, on)
+								n++
+								if rOn.WouldAuto {
+									would++
+								}
+								if vOff == AutoMerge {
+									t.Fatalf("%+v: AutoMerge при выключенном флаге", p)
+								}
+								if rOff != rOn {
+									t.Fatalf("%+v: reasons off %+v != on %+v", p, rOff, rOn)
+								}
+								if rOn.WouldAuto != (vOn == AutoMerge) {
+									t.Fatalf("%+v: WouldAuto %v, verdict on %v", p, rOn.WouldAuto, vOn)
+								}
+								if want := vOn; want == AutoMerge && vOff != Candidate || want != AutoMerge && vOff != want {
+									t.Fatalf("%+v: verdict off %v, on %v", p, vOff, vOn)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if would == 0 || would == n {
+		t.Fatalf("перебор без разнообразия: would_auto %d из %d", would, n)
+	}
+	t.Logf("OFFNEVERAUTO cases=%d would_auto=%d", n, would)
+}

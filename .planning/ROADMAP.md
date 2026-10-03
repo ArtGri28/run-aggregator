@@ -237,12 +237,12 @@ Plans:
   4. Процедура отмены слияния описана и проверена на тестовой базе
   5. По каждому из L1–L5 есть результат: воспроизведение и доказательства, затем исправление с тестом либо решение владельца; риск L1 не принимается без владельца
 
-**Plans**: 0/5 plans executed
+**Plans**: 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — Tracer: `would_auto` в `Decide`/`Pass` без миграции (reasons), счётчики прохода, `/dupes`; гарантия нуля слияний при `DEDUP_AUTO_MERGE=false`
+- [x] 07-01-PLAN.md — Tracer: `would_auto` в `Decide`/`Pass` без миграции (reasons), счётчики прохода, `/dupes`; гарантия нуля слияний при `DEDUP_AUTO_MERGE=false`
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -289,5 +289,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
-| 7. Deduplication Transparency | 0/5 | Planned | - |
+| 7. Deduplication Transparency | 1/5 | In Progress | - |
 | 8. Telegram Bot UX | 0/TBD | Not started | - |

@@ -59,6 +59,11 @@ type Reasons struct {
 	GroupKey bool `json:"group_key,omitempty"`
 	// Gate — почему Separate: country, source, dates, name.
 	Gate string `json:"gate,omitempty"`
+	// WouldAuto — пара выполняет все условия автослияния (NameSim не ниже
+	// High без бонуса ссылки, пересечение дат, равный непустой CityKey,
+	// UniquePartner) независимо от DEDUP_AUTO_MERGE (D-21 Phase 5). Сам
+	// признак ничего не сливает. Отсутствие ключа в старых reasons — false.
+	WouldAuto bool `json:"would_auto,omitempty"`
 }
 
 // Decide решает судьбу пары. Ворота, любое закрытое → Separate:
@@ -70,9 +75,10 @@ type Reasons struct {
 //   - name: NameSim не ниже Low (DDP-02, DDP-03).
 //
 // Общая ссылка регистрации прибавляет LinkBonus к Score только при NameSim
-// не ниже Low (DDP-04). AutoMerge — только при c.AutoMerge (D-08), NameSim
-// не ниже High без бонуса ссылки (D-20), пересечении дат (D-05), равном
-// непустом CityKey (D-06) и UniquePartner (DDP-03); иначе Candidate.
+// не ниже Low (DDP-04). Reasons.WouldAuto — NameSim не ниже High без бонуса
+// ссылки (D-20), пересечение дат (D-05), равный непустой CityKey (D-06) и
+// UniquePartner (DDP-03) — считается при любом c.AutoMerge. AutoMerge —
+// только при c.AutoMerge и WouldAuto (D-08); иначе Candidate.
 func Decide(p Pair, c Config) (Verdict, Reasons) {
 	var r Reasons
 	a, b := p.A, p.B
@@ -106,7 +112,8 @@ func Decide(p Pair, c Config) (Verdict, Reasons) {
 		r.Gate = "name"
 		return Separate, r
 	}
-	if c.AutoMerge && s >= c.High && r.DatesOverlap && r.SameCity && p.UniquePartner {
+	r.WouldAuto = s >= c.High && r.DatesOverlap && r.SameCity && p.UniquePartner
+	if c.AutoMerge && r.WouldAuto {
 		return AutoMerge, r
 	}
 	return Candidate, r

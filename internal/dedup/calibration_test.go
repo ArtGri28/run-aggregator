@@ -290,7 +290,12 @@ func TestCalibration(t *testing.T) {
 			}
 		}
 		v, r := dedup.Decide(pair, c)
-		vOff, _ := dedup.Decide(pair, off)
+		vOff, rOff := dedup.Decide(pair, off)
+		// D-10, слой 2 на реальных фикстурах: при выключенном флаге AutoMerge
+		// нет, признак и reasons те же, признак ⇔ AutoMerge при включённом.
+		if vOff == dedup.AutoMerge || rOff != r || r.WouldAuto != (v == dedup.AutoMerge) {
+			t.Errorf("%s: off=%s would_auto=%v verdict=%s; reasons off/on differ: %v", p.ID, vOff, r.WouldAuto, v, rOff != r)
+		}
 		// sim — схожесть названий всегда: Decide не считает её, если пару закрыли ворота раньше.
 		t.Logf("PAIR %s kind=%s label=%s proposed=%v sim=%.2f score=%.2f verdict=%s gate=%s off=%s overlap=%v same_city=%v link=%v up=%v",
 			p.ID, p.Kind, p.Label, p.Proposed, dedup.NameSim(pair.A.Title, pair.B.Title), r.Score, v, r.Gate, vOff, r.DatesOverlap, r.SameCity, r.Link, pair.UniquePartner)

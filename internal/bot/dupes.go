@@ -225,7 +225,8 @@ func (b *Bot) dupeSide(ctx context.Context, id int64) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
-// signals — сработавшие сигналы из reasons; не разобрались — "".
+// signals — сработавшие сигналы из reasons и строка потенциального
+// автослияния (would_auto); не разобрались — "".
 func signals(raw json.RawMessage) string {
 	var r dedup.Reasons
 	if err := json.Unmarshal(raw, &r); err != nil {
@@ -248,7 +249,13 @@ func signals(raw json.RawMessage) string {
 	if r.GroupKey {
 		parts = append(parts, "серия")
 	}
-	return "Сигналы: " + strings.Join(parts, " · ")
+	out := "Сигналы: " + strings.Join(parts, " · ")
+	// При DEDUP_AUTO_MERGE=true такая пара сливается проходом и кандидатом
+	// не становится; ключа нет в старых reasons — строки нет.
+	if r.WouldAuto {
+		out += "\nАвтослияние слило бы эту пару (сейчас выключено)"
+	}
+	return out
 }
 
 // comma — число с n знаками после запятой.

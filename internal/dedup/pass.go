@@ -23,6 +23,15 @@ import (
 // pending-кандидаты, которые больше не проходят, удаляются. Всё — одной
 // транзакцией под LockDedup; ошибка откатывает только проход, каталог
 // прогона уже записан — вызывающий пишет её в лог.
+//
+// Потенциальные автослияния (Reasons.WouldAuto, D-21 Phase 5) считаются при
+// любом c.AutoMerge и в слиянии не участвуют: признак пишется в reasons
+// кандидата и в лог. Счётчики лога: would_auto — пары прохода с признаком
+// (отклонённые по корням не оцениваются); would_auto_shown — записаны
+// кандидатом; would_auto_hidden — не прошли лимит MaxPerEvent;
+// would_auto_decided — пара уже решена администратором (UpsertCandidate
+// вернул 0); при c.AutoMerge ещё would_auto_merged и would_auto_deferred
+// (сторона уже слита в этом проходе). Их сумма равна would_auto.
 func Pass(ctx context.Context, s *store.Store, c Config) error {
 	err := s.InTx(ctx, func(tx *store.Store) error {
 		if err := tx.LockDedup(ctx); err != nil {
@@ -107,11 +116,22 @@ func pass(ctx context.Context, tx *store.Store, c Config) error {
 		return cmp.Or(cmp.Compare(y.reasons.Score, x.reasons.Score), cmp.Compare(x.a.ID, y.a.ID), cmp.Compare(x.b.ID, y.b.ID))
 	})
 
+	var w wouldAuto
+	for _, p := range pairs {
+		if p.reasons.WouldAuto {
+			w.total++
+		}
+	}
+
 	merged := map[int64]bool{}
 	nMerged := 0
 	if c.AutoMerge {
 		for _, p := range pairs {
-			if p.verdict != AutoMerge || merged[p.a.ID] || merged[p.b.ID] {
+			if p.verdict != AutoMerge {
+				continue
+			}
+			if merged[p.a.ID] || merged[p.b.ID] {
+				w.deferred++
 				continue
 			}
 			if err := tx.MergeEvents(ctx, p.b.ID, p.a.ID, "auto", nil, c.Fold()); err != nil {
@@ -119,6 +139,7 @@ func pass(ctx context.Context, tx *store.Store, c Config) error {
 			}
 			merged[p.a.ID], merged[p.b.ID] = true, true
 			nMerged++
+			w.merged++
 		}
 	}
 
@@ -131,6 +152,9 @@ func pass(ctx context.Context, tx *store.Store, c Config) error {
 			continue
 		}
 		if perEvent[p.a.ID] >= c.MaxPerEvent || perEvent[p.b.ID] >= c.MaxPerEvent {
+			if p.reasons.WouldAuto {
+				w.hidden++
+			}
 			continue
 		}
 		reasons, err := json.Marshal(p.reasons)
@@ -146,13 +170,30 @@ func pass(ctx context.Context, tx *store.Store, c Config) error {
 			perEvent[p.a.ID]++
 			perEvent[p.b.ID]++
 		}
+		if p.reasons.WouldAuto {
+			if id != 0 {
+				w.shown++
+			} else {
+				w.decided++
+			}
+		}
 	}
 	if _, err := tx.PrunePendingCandidates(ctx, keep); err != nil {
 		return err
 	}
-	slog.Info("dedup pass", "events", len(evs), "pairs", len(pairs), "candidates", len(keep),
-		"merged", nMerged, "rejected_skipped", skipped)
+	attrs := []any{"events", len(evs), "pairs", len(pairs), "candidates", len(keep),
+		"merged", nMerged, "rejected_skipped", skipped,
+		"would_auto", w.total, "would_auto_shown", w.shown, "would_auto_hidden", w.hidden, "would_auto_decided", w.decided}
+	if c.AutoMerge {
+		attrs = append(attrs, "would_auto_merged", w.merged, "would_auto_deferred", w.deferred)
+	}
+	slog.Info("dedup pass", attrs...)
 	return nil
+}
+
+// wouldAuto — счётчики потенциальных автослияний прохода (см. Pass).
+type wouldAuto struct {
+	total, shown, hidden, decided, merged, deferred int
 }
 
 // rejectedRoots — отклонённые пары как пары корней (меньший id первым).

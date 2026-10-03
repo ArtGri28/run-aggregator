@@ -221,6 +221,12 @@ func TestTracerPass(t *testing.T) {
 // (Черноисточинск) прямо через store, без прогона; payload — JSON записи.
 func addEvent(t *testing.T, s *store.Store, code, ext, title string, days int, payload string) (eventID, rowID int64) {
 	t.Helper()
+	return addEventMod(t, s, code, ext, title, days, payload, nil)
+}
+
+// addEventMod — addEvent с правкой события перед записью (mod может быть nil).
+func addEventMod(t *testing.T, s *store.Store, code, ext, title string, days int, payload string, mod func(*event.Event)) (eventID, rowID int64) {
+	t.Helper()
 	ctx := context.Background()
 	src, err := s.EnsureSource(ctx, code)
 	if err != nil {
@@ -238,6 +244,9 @@ func addEvent(t *testing.T, s *store.Store, code, ext, title string, days int, p
 		t.Fatal(err)
 	}
 	e := raceEvent(title, days)
+	if mod != nil {
+		mod(&e)
+	}
 	if _, _, err := s.SaveEventFor(ctx, rowID, &e, dedup.DefaultConfig().Fold()); err != nil {
 		t.Fatal(err)
 	}
