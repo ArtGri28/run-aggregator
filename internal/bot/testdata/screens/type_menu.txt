@@ -1,0 +1,9 @@
+method: editMessageText
+parse_mode: HTML
+---
+Выберите тип забега
+---
+[Шоссе] → f:t:road
+[Трейл] → f:t:trail
+[Любой] → f:t:-
+[⬅️ Назад] → f:s

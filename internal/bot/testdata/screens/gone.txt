@@ -1,0 +1,6 @@
+method: editMessageText
+parse_mode: HTML
+---
+Событие больше не доступно
+---
+[⬅️ К списку] → p:1:v1
