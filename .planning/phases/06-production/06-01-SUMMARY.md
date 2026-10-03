@@ -52,12 +52,14 @@ commits: 0
 AUDIT_SHA256=f3530c80d8ef05dfc6e3b7e7f1a0b39c6caf75773baa112dbf457bb550767101
 DECISION age=install
 DECISION curl=present
-DECISION clock=diagnose
+DECISION clock=ntp-server
 DECISION backup_run=root-console
 DECISION size_warn=log
 DECISION a5=confirmed
 AGE_RECIPIENT=age1jgcwtml7fy2a4zyjjzu23c7w8pxh787zj43zku8jwj8045pflp9spswxje
-REPLAN 06-04: диагностика часов
+NTP_SERVER=0.europe.pool.ntp.org 1.europe.pool.ntp.org 2.europe.pool.ntp.org 3.europe.pool.ntp.org
+
+Пояснение (2026-10-03, 06-04 задача 0б): решение владельца — `ntp-server`, европейская зона NTP Pool; источник — https://www.ntppool.org/zone/europe. Основание — диагностика `p6-04-clock-diag.log` и `p6-04-ntp-probe.log` (06-04-SUMMARY.md). По сообщению владельца, JustHost подтвердил: исходящий UDP/123 разрешён, собственных NTP-серверов у провайдера нет. Причина таймаутов `ntp.ubuntu.com` не установлена. Строка заменила `DECISION clock=diagnose`; строка `REPLAN 06-04: диагностика часов` снята.
 
 Лог аудита дословно:
 
