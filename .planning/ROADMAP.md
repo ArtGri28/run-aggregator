@@ -237,7 +237,7 @@ Plans:
   4. Процедура отмены слияния описана и проверена на тестовой базе
   5. По каждому из L1–L5 есть результат: воспроизведение и доказательства, затем исправление с тестом либо решение владельца; риск L1 не принимается без владельца
 
-**Plans**: 1/5 plans executed
+**Plans**: 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -246,15 +246,15 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02-PLAN.md — Общая функция пар (M2), тест падает на неразмеченной AUTO-паре, «Лига Героев» и Беларусь в калибровке (метки — владелец)
+- [x] 07-02-PLAN.md — Общая функция пар (M2), тест падает на неразмеченной AUTO-паре, «Лига Героев» и Беларусь в калибровке (метки — владелец)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07-03-PLAN.md — L1–L5: воспроизведение, исправления L1, L2, L3, L5; L4 — решение владельца
+- [x] 07-03-PLAN.md — L1–L5: воспроизведение, исправления L1, L2, L3, L5; L4 — решение владельца
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 07-04-PLAN.md — Отмена слияния: инвентаризация обратимости без отката, решение владельца (D-14), проверка на тестовой базе
+- [x] 07-04-PLAN.md — Отмена слияния: инвентаризация обратимости без отката, решение владельца (D-14), проверка на тестовой базе
 
 **Wave 5** *(blocked on Wave 4 completion и условиях Phase 6, D-03)*
 
@@ -289,5 +289,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
-| 7. Deduplication Transparency | 1/5 | In Progress | - |
+| 7. Deduplication Transparency | 4/5 | In Progress | - |
 | 8. Telegram Bot UX | 0/TBD | Not started | - |

@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"aggregator/internal/event"
@@ -46,8 +47,13 @@ type Runner struct {
 	Log *slog.Logger
 	// PostApply — шаг после применения прогона к каталогу (дедупликация):
 	// вызывается после успешного Run (ok) и после Accept; nil — шага нет.
-	// Ошибка только в лог, статус прогона не меняется.
-	PostApply func(ctx context.Context) error
+	// Ошибка только в лог, статус прогона не меняется. PostApplyTimeout —
+	// его собственный предел (0 → 5 мин), не остаток FinalizeTimeout (L3).
+	PostApply        func(ctx context.Context) error
+	PostApplyTimeout time.Duration
+	// postApplyFailed — ошибки PostApply с запуска процесса (поле лога
+	// post_apply_failed_total).
+	postApplyFailed atomic.Int64
 	// Fold — приоритет источников и допуск дистанций для полей события с
 	// несколькими записями (D-07); нулевое — порядок записей и точные
 	// метры. Заполняет newRunner из настроек дедупликации.
@@ -198,13 +204,17 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 	return res, nil
 }
 
-// postApply выполняет PostApply, если он задан; ошибка — только в лог.
+// postApply выполняет PostApply, если он задан, со своим тайм-аутом и без
+// отмены вместе с ctx (каталог прогона уже записан); ошибка — только в лог
+// со счётчиком ошибок с запуска процесса.
 func (r *Runner) postApply(ctx context.Context, log *slog.Logger) {
 	if r.PostApply == nil {
 		return
 	}
-	if err := r.PostApply(ctx); err != nil {
-		log.Warn("post-apply failed", "err", err)
+	pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), orDefault(r.PostApplyTimeout, 5*time.Minute))
+	defer cancel()
+	if err := r.PostApply(pctx); err != nil {
+		log.Warn("post-apply failed", "err", err, "post_apply_failed_total", r.postApplyFailed.Add(1))
 	}
 }
 

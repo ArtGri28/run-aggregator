@@ -342,3 +342,45 @@ func TestSendDupesDigest(t *testing.T) {
 		t.Fatalf("кнопка = %q, want d:o", got)
 	}
 }
+
+// TestConfirmShownRoots — L1 (ревью Phase 5), воспроизведение: «Да, слить»
+// после изменения сторон между экраном подтверждения и нажатием.
+//   - корень стороны сменился (сторона слита в другое событие) — MergeEvents
+//     удаляет pending-кандидатов проигравшего, кнопка отвечает «уже
+//     обработан», ничего не сливается;
+//   - сторона осталась корнем, но поглотила третье событие — кандидат жив,
+//     подтверждение сливает группу целиком (печать для решения владельца).
+func TestConfirmShownRoots(t *testing.T) {
+	e := newAdminEnv(t)
+	ctx := context.Background()
+	admin := int64(1)
+
+	c, _ := dupeEvent(t, e.s, "third", "Казанский марафон") // меньший id: станет корнем b
+	cid, a, b := seedCandidate(t, e.s, "Казанский марафон")
+	yes := e.oneEdit(t, "d:m:"+run(cid)).button(t, "Да, слить")
+	if err := e.s.MergeEvents(ctx, b, c, "manual", &admin, event.FoldConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	edit := e.oneEdit(t, yes)
+	if ra, err := e.s.RootEventID(ctx, a); err != nil || ra != a {
+		t.Fatalf("корень сменился: после «Да, слить» корень a = %d, %v; want %d", ra, err, a)
+	}
+	rootChange := "merged"
+	if strings.Contains(edit.Form["text"], done(cid)) {
+		rootChange = "already_processed"
+	}
+
+	cid2, a2, b2 := seedCandidate(t, e.s, "Кремлёвский забег")
+	d, _ := dupeEvent(t, e.s, "third", "Кремлёвский забег")
+	yes = e.oneEdit(t, "d:m:"+run(cid2)).button(t, "Да, слить")
+	if err := e.s.MergeEvents(ctx, d, a2, "manual", &admin, event.FoldConfig{}); err != nil { // a2 поглощает d
+		t.Fatal(err)
+	}
+	e.oneEdit(t, yes)
+	rb, _ := e.s.RootEventID(ctx, b2)
+	rd, _ := e.s.RootEventID(ctx, d)
+	t.Logf("L1 REPRO root_change=%s absorbed_side=%s", rootChange, map[bool]string{true: "merged_with_absorbed", false: "not_merged"}[rb == rd])
+	if rootChange != "already_processed" {
+		t.Fatalf("смена корня стороны: %s", edit.Form["text"])
+	}
+}

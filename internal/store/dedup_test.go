@@ -391,7 +391,9 @@ func TestCandidateDigest(t *testing.T) {
 	s.UpsertCandidate(ctx, row[2], ev[1], 0.5, []byte(`{}`))
 	c2, _ := s.UpsertCandidate(ctx, row[3], ev[1], 0.5, []byte(`{}`))
 	check(2, 2)
-	if err := s.MarkCandidatesNotified(ctx); err != nil {
+	if p, fresh, err := s.DigestCandidates(ctx); err != nil || p != 2 || len(fresh) != 2 {
+		t.Fatalf("DigestCandidates = %d, %v, %v; want 2, два id", p, fresh, err)
+	} else if err := s.MarkCandidatesNotified(ctx, fresh); err != nil {
 		t.Fatal(err)
 	}
 	check(2, 0)
@@ -404,4 +406,40 @@ func TestCandidateDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(2, 1)
+}
+
+// TestMergeKeepsManual — L5 (ревью Phase 5): автоматическое слияние не
+// понижает ручную привязку записи проигравшего (manual → auto); статус
+// победителя — воспроизведение (печать).
+func TestMergeKeepsManual(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	x, _ := linked(t, s, "marathonec", "x", sampleEvent())
+	y, _ := linked(t, s, "probeg", "y", sampleEvent())
+	z, rowZ := linked(t, s, "third", "z", sampleEvent())
+	admin := int64(7)
+	if err := s.MergeEvents(ctx, z, y, "manual", &admin, testFold); err != nil {
+		t.Fatal(err)
+	}
+	if got := scalar[string](t, "SELECT match_state FROM source_events WHERE id = $1", rowZ); got != "manual" {
+		t.Fatalf("после ручного слияния match_state = %s", got)
+	}
+	if err := s.MergeEvents(ctx, y, x, "auto", nil, testFold); err != nil {
+		t.Fatal(err)
+	}
+	if got := scalar[string](t, "SELECT event_id || ':' || match_state FROM source_events WHERE id = $1", rowZ); got != itoa(x)+":manual" {
+		t.Fatalf("запись ручного слияния после автоматического = %s, want %d:manual", got, x)
+	}
+
+	// Статус: победитель и проигравший с разными статусами.
+	for _, st := range [][2]string{{"cancelled", "scheduled"}, {"scheduled", "cancelled"}} {
+		w, _ := linked(t, s, "marathonec", "w"+st[0], sampleEvent())
+		l, _ := linked(t, s, "probeg", "l"+st[0], sampleEvent())
+		exec(t, "UPDATE events SET status = $1 WHERE id = $2", st[0], w)
+		exec(t, "UPDATE events SET status = $1 WHERE id = $2", st[1], l)
+		if err := s.MergeEvents(ctx, l, w, "auto", nil, testFold); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("L5 STATUS winner=%s loser=%s result=%s", st[0], st[1], scalar[string](t, "SELECT status FROM events WHERE id = $1", w))
+	}
 }

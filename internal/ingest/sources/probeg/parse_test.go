@@ -430,3 +430,28 @@ func TestResolvePlace(t *testing.T) {
 		}
 	}
 }
+
+// TestSeriesGroupKeyPlace — L4 (воспроизведение до решения владельца):
+// одноимённые серии в разных городах получают один GroupKey, и Prepare
+// сворачивает их в одну запись.
+func TestSeriesGroupKeyPlace(t *testing.T) {
+	recs, err := parsePage(t, fixtureFetched,
+		row("10.10", `<a href="/event/1/">Парк А</a><span>, </span><a href="/event/2/">Парк Б</a>`, "Москва", "5 км", ""),
+		row("17.10", `<a href="/event/3/">Парк А</a><span>, </span><a href="/event/4/">Парк В</a>`, "Пенза", "5 км", ""),
+	)
+	if err != nil || len(recs) != 4 {
+		t.Fatalf("recs = %+v, %v", recs, err)
+	}
+	same := recs[0].GroupKey != "" && recs[0].GroupKey == recs[2].GroupKey && recs[0].City != recs[2].City
+	prep, st := ingest.Prepare(recs, fixtureFetched, New(nil).Policy())
+	kept := 0
+	for _, p := range prep {
+		if p.Source.ExternalID == "1" || p.Source.ExternalID == "3" {
+			kept++
+		}
+	}
+	t.Logf("L4 REPRO same_key=%v cities=%s,%s kept_park_a=%d collapsed=%d", same, recs[0].City, recs[2].City, kept, st.Collapsed)
+	if !same {
+		t.Fatalf("воспроизведение L4: ключи %q и %q", recs[0].GroupKey, recs[2].GroupKey)
+	}
+}

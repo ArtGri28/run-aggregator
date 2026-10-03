@@ -812,3 +812,28 @@ func TestPostApply(t *testing.T) {
 		t.Fatalf("LastRun = %s, want ok", last.Status)
 	}
 }
+
+// TestPostApplyOwnTimeout — L3: проход после применения получает свой
+// тайм-аут (не остаток контекста финализации), ошибки прохода считаются.
+func TestPostApplyOwnTimeout(t *testing.T) {
+	r := testRunner(t)
+	r.FinalizeTimeout = 10 * time.Hour
+	var buf bytes.Buffer
+	r.Log = slog.New(slog.NewTextHandler(&buf, nil))
+	var left time.Duration
+	r.PostApply = func(ctx context.Context) error {
+		if d, ok := ctx.Deadline(); ok {
+			left = time.Until(d)
+		}
+		return errors.New("дедупликация")
+	}
+	src := newMemSource(t, records(1, 10))
+	run(t, r, src, ingest.StatusSuspect)
+	accept(t, r, src)
+	if left <= 0 || left > 10*time.Minute {
+		t.Errorf("тайм-аут PostApply = %v, want свой (не больше 10 мин), не FinalizeTimeout", left)
+	}
+	if !strings.Contains(buf.String(), "post_apply_failed_total=1") {
+		t.Errorf("в логе нет счётчика ошибок прохода:\n%s", buf.String())
+	}
+}

@@ -154,13 +154,16 @@ func (s *Store) PrunePendingCandidates(ctx context.Context, keep []int64) (int64
 
 // MergeEvents сливает корень loserID в корень winnerID одной транзакцией
 // (DDP-06): записи проигравшего переходят к победителю с matchState
-// (auto или manual; out_of_scope остаётся), проигравший получает
+// (auto или manual; out_of_scope остаётся, manual не понижается до auto —
+// L5), проигравший получает
 // merged_into_id и is_listed = false, события, слитые в проигравшего,
 // перевешиваются на победителя (цепочка в один шаг). Поля победителя
 // пересобираются event.Fold записей через saveEventTx (D-17.1). Pending-
 // кандидаты пары подтверждаются с decidedBy (nil — автоматически), прочие
 // pending с участием проигравшего удаляются. События и записи источников
-// не удаляются (D-17.2). Победитель — корень с меньшим id. Блокировки:
+// не удаляются (D-17.2). Слияние пишется в журнал (event_merges: записи с
+// прежним match_state и события цепочки) — для точной отмены (UndoMerge,
+// D-14 Phase 7). Победитель — корень с меньшим id. Блокировки:
 // LockDedup, записи обоих событий, затем события, по возрастанию id.
 // Нет события — ErrNotFound; не корень или одно событие — ErrNotMergeable.
 func (s *Store) MergeEvents(ctx context.Context, loserID, winnerID int64, matchState string, decidedBy *int64, fold event.FoldConfig) error {
@@ -207,24 +210,53 @@ func (s *Store) MergeEvents(ctx context.Context, loserID, winnerID int64, matchS
 	}
 	winnerStatus := evs[0].status // ORDER BY id: победитель первый
 
+	// Прежний match_state каждой записи — в журнал слияния (отмена, D-14).
 	const move = `
-		UPDATE source_events
-		SET event_id = $2, match_state = CASE WHEN match_state = 'out_of_scope' THEN match_state ELSE $3 END
-		WHERE event_id = $1
-		RETURNING id`
+		UPDATE source_events se
+		SET event_id = $2, match_state = CASE WHEN se.match_state IN ('out_of_scope', 'manual') THEN se.match_state ELSE $3 END
+		FROM (SELECT id, match_state FROM source_events WHERE event_id = $1) old
+		WHERE se.id = old.id
+		RETURNING se.id, old.match_state`
 	moved, err := tx.Query(ctx, move, loserID, winnerID, matchState)
 	if err != nil {
 		return fmt.Errorf("merge events: move records: %w", err)
 	}
-	movedIDs, err := pgx.CollectRows(moved, pgx.RowTo[int64])
+	type movedRow struct {
+		ID    int64
+		State string
+	}
+	movedRows, err := pgx.CollectRows(moved, pgx.RowToStructByPos[movedRow])
 	if err != nil {
 		return fmt.Errorf("merge events: move records: %w", err)
+	}
+	movedIDs := make([]int64, len(movedRows))
+	movedStates := make([]string, len(movedRows))
+	for i, r := range movedRows {
+		movedIDs[i], movedStates[i] = r.ID, r.State
 	}
 	if _, err := tx.Exec(ctx, "UPDATE events SET merged_into_id = $2, is_listed = false WHERE id = $1", loserID, winnerID); err != nil {
 		return fmt.Errorf("merge events: mark loser: %w", err)
 	}
-	if _, err := tx.Exec(ctx, "UPDATE events SET merged_into_id = $2 WHERE merged_into_id = $1", loserID, winnerID); err != nil {
+	chained, err := tx.Query(ctx, "UPDATE events SET merged_into_id = $2 WHERE merged_into_id = $1 RETURNING id", loserID, winnerID)
+	if err != nil {
 		return fmt.Errorf("merge events: collapse chain: %w", err)
+	}
+	chainIDs, err := pgx.CollectRows(chained, pgx.RowTo[int64])
+	if err != nil {
+		return fmt.Errorf("merge events: collapse chain: %w", err)
+	}
+	const journal = `
+		WITH m AS (
+			INSERT INTO event_merges (winner_id, loser_id, match_state, decided_by)
+			VALUES ($1, $2, $3, $4) RETURNING id
+		), r AS (
+			INSERT INTO event_merge_records (merge_id, source_event_id, prev_match_state)
+			SELECT m.id, x.id, x.state FROM m, unnest($5::bigint[], $6::text[]) AS x(id, state)
+		)
+		INSERT INTO event_merge_chain (merge_id, event_id)
+		SELECT m.id, c FROM m, unnest($7::bigint[]) AS c`
+	if _, err := tx.Exec(ctx, journal, winnerID, loserID, matchState, decidedBy, movedIDs, movedStates, chainIDs); err != nil {
+		return fmt.Errorf("merge events: journal: %w", err)
 	}
 
 	parts, err := foldPartsTx(ctx, tx, winnerID, 0)
@@ -445,10 +477,25 @@ func (s *Store) LastDigestAt(ctx context.Context) (time.Time, error) {
 	return *at, nil
 }
 
-// MarkCandidatesNotified отмечает новых pending-кандидатов вошедшими в
-// сводку; вызывать после успешной отправки (Pitfall 11).
-func (s *Store) MarkCandidatesNotified(ctx context.Context) error {
-	if _, err := s.db.Exec(ctx, "UPDATE dedup_candidates SET notified_at = now() WHERE state = 'pending' AND notified_at IS NULL"); err != nil {
+// DigestCandidates — ожидающие кандидаты и id новых (ещё не в сводке) одним
+// запросом: сводка считает и отмечает ровно один набор (L2).
+func (s *Store) DigestCandidates(ctx context.Context) (pending int, fresh []int64, err error) {
+	const q = `
+		SELECT count(*) FILTER (WHERE state = 'pending'),
+		       coalesce(array_agg(id ORDER BY id) FILTER (WHERE state = 'pending' AND notified_at IS NULL), '{}')
+		FROM dedup_candidates`
+	if err := s.db.QueryRow(ctx, q).Scan(&pending, &fresh); err != nil {
+		return 0, nil, fmt.Errorf("digest candidates: %w", err)
+	}
+	return pending, fresh, nil
+}
+
+// MarkCandidatesNotified отмечает вошедшими в сводку новых pending-кандидатов
+// из ids — тех, что сводка посчитала (L2); созданные позже остаются новыми.
+// Вызывать после успешной отправки (Pitfall 11).
+func (s *Store) MarkCandidatesNotified(ctx context.Context, ids []int64) error {
+	const q = "UPDATE dedup_candidates SET notified_at = now() WHERE id = ANY($1) AND state = 'pending' AND notified_at IS NULL"
+	if _, err := s.db.Exec(ctx, q, ids); err != nil {
 		return fmt.Errorf("mark candidates notified: %w", err)
 	}
 	return nil

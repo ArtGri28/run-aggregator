@@ -205,3 +205,26 @@ func TestDigestNoAdmins(t *testing.T) {
 		t.Fatalf("вызовы без администраторов: %+v", calls)
 	}
 }
+
+// TestDigestMarksOnlyCounted — L2: кандидат, созданный между подсчётом и
+// отметкой сводки, остаётся новым до следующей сводки.
+func TestDigestMarksOnlyCounted(t *testing.T) {
+	s := storetest.Open(t)
+	ctx := context.Background()
+	digestCandidate(t, s)
+	added := false
+	l := &DigestLoop{Store: s, Admins: []int64{101}, Loc: time.UTC, At: "00:00", Now: time.Now,
+		Send: func(context.Context, int64, string) error {
+			if !added {
+				added = true
+				digestCandidate(t, s) // появился во время отправки
+			}
+			return nil
+		}}
+	if err := l.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if p, f, err := s.CandidateCounts(ctx); err != nil || p != 2 || f != 1 {
+		t.Fatalf("после сводки pending %d, fresh %d, %v; want 2, 1 — новый кандидат не входил в сводку", p, f, err)
+	}
+}

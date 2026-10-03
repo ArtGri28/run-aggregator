@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -30,8 +31,9 @@ import (
 )
 
 const (
-	usage       = "usage: aggregator <bot|worker|migrate|healthcheck>\n       " + workerUsage
-	workerUsage = "usage: aggregator worker [run-once|accept-baseline|sanity-report] --source <код> [--run <id>]"
+	usage        = "usage: aggregator <bot|worker|migrate|healthcheck|unmerge>\n       " + workerUsage + "\n       " + unmergeUsage
+	workerUsage  = "usage: aggregator worker [run-once|accept-baseline|sanity-report] --source <код> [--run <id>]"
+	unmergeUsage = "usage: aggregator unmerge [-apply -by <tg_id>] <id слитого события>"
 )
 
 // errUsage — неверные аргументы: код выхода 2.
@@ -70,13 +72,19 @@ func main() {
 		err = runBot(ctx)
 	case "worker":
 		err = runWorker(ctx, os.Args[2:])
+	case "unmerge":
+		err = runUnmerge(ctx, os.Args[2:])
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
 	}
 
 	if errors.Is(err, errUsage) {
-		fmt.Fprintln(os.Stderr, workerUsage)
+		if subcommand == "unmerge" {
+			fmt.Fprintln(os.Stderr, unmergeUsage)
+		} else {
+			fmt.Fprintln(os.Stderr, workerUsage)
+		}
 		os.Exit(2)
 	}
 	if err != nil {
@@ -323,4 +331,47 @@ func sanityReport(ctx context.Context, s *store.Store, code string, runID int64)
 		return fmt.Errorf("%s: снимок прогона %d: %w", code, last.ID, err)
 	}
 	return ingest.SanityReport(os.Stdout, code, last.ID, last.StartedAt, recs)
+}
+
+// unmergeArgs — id слитого события, -apply и -by (tg_id администратора,
+// обязателен с -apply); иначе errUsage.
+func unmergeArgs(args []string) (id int64, apply bool, by int64, err error) {
+	fs := flag.NewFlagSet("unmerge", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolVar(&apply, "apply", false, "применить отмену; без флага — только проверка")
+	fs.Int64Var(&by, "by", 0, "tg_id администратора, отменяющего слияние")
+	if fs.Parse(args) != nil || fs.NArg() != 1 {
+		return 0, false, 0, errUsage
+	}
+	id, perr := strconv.ParseInt(fs.Arg(0), 10, 64)
+	if perr != nil || id <= 0 || by < 0 || (apply && by == 0) {
+		return 0, false, 0, errUsage
+	}
+	return id, apply, by, nil
+}
+
+// runUnmerge — отмена слияния события (D-14 Phase 7): без -apply только
+// проверка (режим журнала или класс без журнала, что вернётся), с -apply —
+// store.UndoMerge одной транзакцией. Строка UNMERGE — без названий.
+func runUnmerge(ctx context.Context, args []string) error {
+	id, apply, by, err := unmergeArgs(args)
+	if err != nil {
+		return err
+	}
+	dcfg, err := dedup.LoadConfig()
+	if err != nil {
+		return err
+	}
+	s, err := openStore(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	r, err := s.UndoMerge(ctx, id, by, dcfg.Fold(), apply)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("UNMERGE event=%d mode=%s class=%s merge=%d root=%d records=%d chain=%d applied=%t\n",
+		id, r.Mode, r.Class, r.MergeID, r.Root, len(r.Records), len(r.Chain), apply)
+	return nil
 }

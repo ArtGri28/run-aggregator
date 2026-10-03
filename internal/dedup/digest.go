@@ -86,10 +86,11 @@ func (l *DigestLoop) Tick(ctx context.Context) error {
 	if err != nil || !due {
 		return err
 	}
-	pending, fresh, err := l.Store.CandidateCounts(ctx)
-	if err != nil || fresh == 0 {
+	pending, freshIDs, err := l.Store.DigestCandidates(ctx)
+	if err != nil || len(freshIDs) == 0 {
 		return err
 	}
+	fresh := len(freshIDs)
 	text := fmt.Sprintf("Сводка дублей: ожидают решения %d, из них новых %d. Открыть очередь — кнопкой ниже или командой /dupes", pending, fresh)
 	ok := false
 	for _, id := range l.Admins {
@@ -102,7 +103,7 @@ func (l *DigestLoop) Tick(ctx context.Context) error {
 	if !ok {
 		return nil
 	}
-	if err := l.Store.MarkCandidatesNotified(ctx); err != nil {
+	if err := l.Store.MarkCandidatesNotified(ctx, freshIDs); err != nil {
 		return err
 	}
 	l.sent = l.now()

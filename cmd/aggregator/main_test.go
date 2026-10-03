@@ -59,3 +59,26 @@ func TestNewSources(t *testing.T) {
 		t.Fatalf("probeg: Policy = %+v, want NoFallback (D-01)", p)
 	}
 }
+
+func TestUnmergeArgs(t *testing.T) {
+	for _, c := range []struct {
+		args  []string
+		ok    bool
+		apply bool
+	}{
+		{[]string{"12"}, true, false},
+		{[]string{"-apply", "-by", "7", "12"}, true, true},
+		{[]string{"-apply", "12"}, false, false},    // без tg_id администратора
+		{[]string{}, false, false},                  // нет события
+		{[]string{"12", "13"}, false, false},        // два события
+		{[]string{"0"}, false, false},               // id не положительный
+		{[]string{"x"}, false, false},               // не число
+		{[]string{"-by", "-1", "12"}, false, false}, // отрицательный tg_id
+		{[]string{"-unknown", "12"}, false, false},  // неизвестный флаг
+	} {
+		id, apply, _, err := unmergeArgs(c.args)
+		if c.ok != (err == nil) || (c.ok && (id != 12 || apply != c.apply)) {
+			t.Errorf("%v: id=%d apply=%v err=%v", c.args, id, apply, err)
+		}
+	}
+}
