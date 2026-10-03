@@ -19,7 +19,7 @@ BUNDLE="deploy/vps/agg deploy/vps/agg-install.sh deploy/vps/deploy-apply.sh depl
   deploy/vps/deploy-verify.sh deploy/vps/env-init.sh deploy/vps/host-apply.sh deploy/vps/host-preflight.sh
   deploy/vps/host-verify.sh deploy/vps/load-postgres.sh deploy/vps/rollback.sh docker-compose.yml
   deploy/vps/backup.sh deploy/vps/backup-lib.sh deploy/vps/backup-status.sh deploy/vps/backup-recipient
-  deploy/vps/backup-apply.sh"
+  deploy/vps/backup-apply.sh deploy/vps/clock-apply.sh"
 STAGE=/home/runagg/agg-deploy
 AGG=/usr/local/sbin/agg
 LIB=/usr/local/lib/aggregator
@@ -35,7 +35,7 @@ case "${1:-}" in
   installed)
     # Как в agg-install.sh: agg — в /usr/local/sbin, в lib — всё, кроме скриптов root-консоли.
     sums | awk -v a="$AGG" -v l="$LIB" '$2 == "agg" {print $1 "  " a; next}
-      $2 != "agg-install.sh" && $2 != "host-apply.sh" && $2 != "load-postgres.sh" && $2 != "backup-apply.sh" {print $1 "  " l "/" $2}'
+      $2 != "agg-install.sh" && $2 != "host-apply.sh" && $2 != "load-postgres.sh" && $2 != "backup-apply.sh" && $2 != "clock-apply.sh" {print $1 "  " l "/" $2}'
     exit 0 ;;
 esac
 
@@ -90,6 +90,10 @@ $(root bash backup-apply.sh dirs)
 /bin/bash /usr/local/lib/aggregator/backup.sh; echo "exit=\$?"   # ручной запуск бэкапа
 $(root bash backup-apply.sh telegram)    # секреты вводит владелец, ввод скрыт
 $(root bash backup-apply.sh cron)
+
+== Root-консоль: серверы времени (06-04), только по отдельному разрешению владельца на изменение VPS ==
+$(root bash clock-apply.sh apply)    # слово CLOCK
+$(root bash clock-apply.sh undo)    # откат, слово UNCLOCK
 
 == Root-консоль: запасной путь postgres:17 (только если agg deploy не смог скачать) ==
 $(root bash load-postgres.sh '<SHA256 postgres17.tar с Mac>')

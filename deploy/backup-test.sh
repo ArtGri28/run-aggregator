@@ -5,6 +5,8 @@
 #   selftest      — итоговая строка раздела: ok только без провалов;
 #   clock-diag-*  — deploy/clock-diag.sh (диагностика часов) печатает 13 ключей по контракту,
 #                   только читает, не печатает адреса и имена серверов времени;
+#   clock-apply-* — deploy/vps/clock-apply.sh (серверы времени, 06-04 задача 0в) на заглушках
+#                   systemctl, timedatectl, systemd-analyze; адреса — из документационных сетей;
 #   ntp-probe-*   — deploy/ntp-probe.sh: 45 ключей по контракту; пробы — в локальный поддельный
 #                   сервер NTP и DNS (127.0.0.1 и ::1), ровно 4 запроса NTP и 1 DNS, без адресов в выводе;
 #   tracer, iso-oracle, retention, rotate-dir, rotate-state, publish, sync, clock-rotate, fail-paths — копия
@@ -996,8 +998,9 @@ t_pkg() {
     n=$((n + 1))
     need '[ -f "$HERE/../$f" ] && [[ ${f##*/} =~ $pkg_re ]]'
   done
-  need '[ "$n" = 17 ] && [ "$("$HERE/oneliner.sh" sums | wc -l | tr -d " ")" = 17 ]'
-  cend pkg-names "17 файлов пакета существуют, имена по шаблону"
+  need '[ "$n" = 18 ] && [ "$("$HERE/oneliner.sh" sums | wc -l | tr -d " ")" = 18 ]'
+  need '"$HERE/oneliner.sh" sums | grep -qE "^[0-9a-f]{64}  clock-apply\.sh\$"'
+  cend pkg-names "18 файлов пакета (с clock-apply.sh) существуют, имена по шаблону, у каждого SHA-256"
 
   # pkg-lib: список LIB= из agg-install.sh на SHA256SUMS пакета равен набору lib из installed
   mkdir -p "$T/pkg"
@@ -1007,6 +1010,7 @@ t_pkg() {
   need '[ -n "$LIBW" ] && [ "$LIBW" = "$LIBI" ] && [ "$(grep -c "^LIB=" "$VPS/agg-install.sh")" = 1 ]'
   need '[ "$("$HERE/oneliner.sh" installed | wc -l | tr -d " ")" = 13 ] && "$HERE/oneliner.sh" installed | grep -q "  /usr/local/sbin/agg\$"'
   need '! printf "%s\n" "$LIBW" | grep -q "backup-apply"'
+  need '! printf "%s\n" "$LIBW" | grep -q "clock-apply" && ! "$HERE/oneliner.sh" installed | grep -q "clock-apply"'
   for f in backup.sh backup-lib.sh backup-status.sh backup-recipient; do need 'printf "%s\n" "$LIBW" | grep -qx "$f"'; done
   cend pkg-lib "LIB= и installed совпадают; backup-apply.sh в lib нет, скрипты бэкапа и ключ есть"
 
@@ -1286,6 +1290,157 @@ t_clock_diag() {
   need '[ "$(printf "%s\n" "$B" | grep -c "^val ")" = 13 ] && printf "%s\n" "$B" | tail -n 1 | grep -qx "echo .CLOCK END."'
   need '! "$HERE/oneliner.sh" files | grep -q "clock-diag"' # блок в пакет не входит
   cend clock-diag-readonly "только разрешённые вызовы чтения, без повышения прав, файлов и изменений нет; в тексте блока нет изменяющих и сетевых слов"
+}
+
+# ---- clock-apply: deploy/vps/clock-apply.sh на заглушках ---------------------------------
+# Адреса тестов — из документационной сети 198.51.100.0/24 (настоящих серверов нет).
+CA_SRV='198.51.100.10 198.51.100.11'
+# ca_dir <имя> [серверы]: копия скрипта с каталогами в $T/<имя> и списком серверов; заглушки:
+#   systemctl --version -> sc.version; show -p LoadState -> sc.load; restart -> служба «читает»
+#   NTP= из aggregator.conf (sw.mismatch — другой список), синхронизация — yes (sw.nosync — no);
+#   timedatectl show-timesync -p <P> -> rt.<P>; show -p NTPSynchronized -> rt.sync;
+#   systemd-analyze cat-config -> основной файл и drop-in (sw.nocat — без drop-in).
+ca_dir() {
+  local d="$T/$1"
+  mkdir -p "$d/bin" "$d/etc/systemd"
+  : > "$d/bin/calls.log"
+  printf '%s\n' '[Time]' '#NTP=' '#FallbackNTP=ntp.ubuntu.com' > "$d/etc/systemd/timesyncd.conf"
+  echo 'systemd 255 (255.4-1ubuntu8)' > "$d/sc.version"; echo loaded > "$d/sc.load"
+  : > "$d/rt.SystemNTPServers"; : > "$d/rt.LinkNTPServers"; : > "$d/rt.ServerAddress"; echo no > "$d/rt.sync"
+  stub "$d/bin" id 'echo 0'
+  stub "$d/bin" sleep ':'
+  stub "$d/bin" systemctl "d=$d"'
+case "$*" in
+  --version) cat "$d/sc.version" ;;
+  "show systemd-timesyncd -p LoadState --value") cat "$d/sc.load" ;;
+  "restart systemd-timesyncd")
+    if [ -e "$d/sw.mismatch" ]; then echo 198.51.100.99 > "$d/rt.SystemNTPServers"
+    else sed -n "s/^NTP=//p" "$d/etc/systemd/timesyncd.conf.d/aggregator.conf" 2> /dev/null > "$d/rt.SystemNTPServers"; fi
+    set -- $(cat "$d/rt.SystemNTPServers"); echo "${1:-}" > "$d/rt.ServerAddress"
+    if [ -e "$d/sw.nosync" ]; then echo no > "$d/rt.sync"; else echo yes > "$d/rt.sync"; fi ;;
+  *) exit 64 ;;
+esac'
+  stub "$d/bin" timedatectl "d=$d"'
+case "$*" in
+  "show-timesync -p "*" --value") cat "$d/rt.$3" ;;
+  "show -p NTPSynchronized --value") cat "$d/rt.sync" ;;
+  timesync-status) echo "       Server: $(cat "$d/rt.ServerAddress")"; echo " Packet count: 3" ;;
+  *) exit 64 ;;
+esac'
+  stub "$d/bin" systemd-analyze "d=$d"'
+[ "$*" = "cat-config systemd/timesyncd.conf" ] || exit 64
+cat "$d/etc/systemd/timesyncd.conf"
+[ -e "$d/sw.nocat" ] || cat "$d/etc/systemd/timesyncd.conf.d"/*.conf 2> /dev/null || true'
+  sed -e "s#^D=/etc/systemd/timesyncd.conf.d\$#D=$d/etc/systemd/timesyncd.conf.d#" \
+    -e "s#^MAIN=/etc/systemd/timesyncd.conf\$#MAIN=$d/etc/systemd/timesyncd.conf#" \
+    -e "s#^NTP_SERVERS=''\$#NTP_SERVERS='${2-$CA_SRV}'#" "$VPS/clock-apply.sh" > "$d/clock-apply.sh"
+  if [ "$(grep -cE "^(D=$d/etc/systemd/timesyncd\.conf\.d|MAIN=$d/etc/systemd/timesyncd\.conf|NTP_SERVERS='.*')\$" "$d/clock-apply.sh")" != 3 ]; then
+    bad "clock-apply: не удалось подготовить копию ($1)"
+  fi
+}
+# ca <имя> <режим> <ответ>: запуск; код -> RC, вывод -> out (приглашение confirm без перевода строки
+# при вводе из канала отрезается: в консоли перевод строки даёт Enter владельца)
+ca() {
+  : > "$T/$1/bin/calls.log"
+  RC=0
+  printf '%s\n' "$3" | PATH="$T/$1/bin:/usr/bin:/bin" /bin/bash "$T/$1/clock-apply.sh" "$2" > "$T/$1/out" 2> "$T/$1/err" || RC=$?
+  sed -i.bak "s/^Введите слово [A-Z]* для продолжения: //" "$T/$1/out"; rm -f "$T/$1/out.bak"
+}
+ca_restarts() { grep -c '^systemctl restart' "$T/$1/bin/calls.log" || true; }
+ca_dropins() { ls -A "$T/$1/etc/systemd/timesyncd.conf.d" 2> /dev/null | tr '\n' ' '; }
+CA_WANT="# aggregator 06-04 clock
+[Time]
+NTP=198.51.100.10 198.51.100.11"
+t_clock_apply() {
+  local n v
+  # clock-apply-ok: верное слово — файл ровно по контракту, 644, один перезапуск, список совпал
+  ca_dir caok
+  ca caok apply NO
+  need '[ "$RC" = 1 ] && [ -z "$(ca_dropins caok)" ] && [ "$(ca_restarts caok)" = 0 ] && ! grep -q "HOST APPLY" "$T/caok/out"'
+  ca caok apply "CLOCK"$'\r'
+  need '[ "$RC" = 0 ] && [ "$(cat "$T/caok/etc/systemd/timesyncd.conf.d/aggregator.conf")" = "$CA_WANT" ]'
+  need '[ "$(ls -l "$T/caok/etc/systemd/timesyncd.conf.d/aggregator.conf" | cut -c1-10)" = "-rw-r--r--" ] && [ "$(ca_dropins caok)" = "aggregator.conf " ]'
+  need '[ "$(ca_restarts caok)" = 1 ]'
+  need '( for l in servers=2 servers=match server=listed server_family=v4 packet_count=3 clock=ok "HOST APPLY clock DONE"; do grep -qx "$l" "$T/caok/out" || exit 1; done )'
+  need '[ "$(cat "$T/caok/etc/systemd/timesyncd.conf")" = "$(printf "%s\n" "[Time]" "#NTP=" "#FallbackNTP=ntp.ubuntu.com")" ]'
+  # повторный запуск: тот же файл — UNCHANGED, без вопроса и перезапуска
+  ca caok apply ""
+  need '[ "$RC" = 0 ] && [ "$(tail -n 1 "$T/caok/out")" = "HOST APPLY clock UNCHANGED" ] && [ "$(ca_restarts caok)" = 0 ] && ! grep -q "Введите" "$T/caok/out"'
+  cend clock-apply-ok "слово CLOCK: drop-in ровно метка, [Time], NTP=; 644; один перезапуск; servers=match, clock=ok; повтор — UNCHANGED"
+
+  # clock-apply-servers: без решения или с негодными адресами — STOP до любых изменений
+  for v in "" "10.0.0.1" "127.0.0.1" "192.168.1.1" "172.16.0.1" "169.254.1.1" "100.64.0.1" "224.0.0.1" "0.1.2.3" \
+    "300.1.1.1" "198.51.100.010" "ntp.example.net" "198.51.100.10 198.51.100.10" "198.51.100.1 198.51.100.2 198.51.100.3 198.51.100.4 198.51.100.5"; do
+    ca_dir caserv "$v"
+    ca caserv apply CLOCK
+    need '[ "$RC" = 1 ] && grep -q "^STOP: " "$T/caserv/out" && [ -z "$(ca_dropins caserv)" ] && [ "$(ca_restarts caserv)" = 0 ]'
+    rm -rf "$T/caserv"
+  done
+  cend clock-apply-servers "пустой список, частные, служебные, групповые, неверные адреса, имена, повтор, больше 4 -> STOP, ничего не меняется"
+
+  # clock-apply-foreign: чужая настройка, сеть, старая служба — STOP, ничего не трогается
+  ca_dir cafor; mkdir -p "$T/cafor/etc/systemd/timesyncd.conf.d"
+  printf '%s\n' '[Time]' 'NTP=other' > "$T/cafor/etc/systemd/timesyncd.conf.d/aggregator.conf"
+  ca cafor apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*не перезаписывается" "$T/cafor/out" && [ "$(cat "$T/cafor/etc/systemd/timesyncd.conf.d/aggregator.conf")" = "$(printf "%s\n" "[Time]" "NTP=other")" ] && [ "$(ca_restarts cafor)" = 0 ]'
+  ca_dir caoth; mkdir -p "$T/caoth/etc/systemd/timesyncd.conf.d"
+  printf '%s\n' '[Time]' ' FallbackNTP=x' > "$T/caoth/etc/systemd/timesyncd.conf.d/10-local.conf"
+  ca caoth apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*10-local.conf" "$T/caoth/out" && [ "$(ca_dropins caoth)" = "10-local.conf " ] && [ "$(ca_restarts caoth)" = 0 ]'
+  ca_dir camain; printf '%s\n' '[Time]' 'NTP=x' > "$T/camain/etc/systemd/timesyncd.conf"
+  ca camain apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: " "$T/camain/out" && [ -z "$(ca_dropins camain)" ] && [ "$(ca_restarts camain)" = 0 ]'
+  ca_dir calink; echo 203.0.113.5 > "$T/calink/rt.LinkNTPServers"
+  ca calink apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*LinkNTPServers" "$T/calink/out" && [ -z "$(ca_dropins calink)" ]'
+  ca_dir caold; echo 'systemd 238 (238)' > "$T/caold/sc.version"
+  ca caold apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*239" "$T/caold/out" && [ -z "$(ca_dropins caold)" ]'
+  ca_dir canf; echo not-found > "$T/canf/sc.load"
+  ca canf apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*не загружена" "$T/canf/out" && [ -z "$(ca_dropins canf)" ]'
+  cend clock-apply-foreign "чужой aggregator.conf, NTP=/FallbackNTP= в другой настройке, серверы от сети, systemd < 239, нет службы -> STOP, файлы не тронуты"
+
+  # clock-apply-check: настройка не прочитана — файл удалён без перезапуска; после перезапуска — без автоотката
+  ca_dir cacat; touch "$T/cacat/sw.nocat"
+  ca cacat apply CLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*файл удалён" "$T/cacat/out" && [ -z "$(ca_dropins cacat)" ] && [ "$(ca_restarts cacat)" = 0 ]'
+  ca_dir camis; touch "$T/camis/sw.mismatch"
+  ca camis apply CLOCK
+  need '[ "$RC" = 1 ] && grep -qx "servers=mismatch" "$T/camis/out" && grep -q "^STOP: .*undo" "$T/camis/out" && [ "$(ca_dropins camis)" = "aggregator.conf " ] && ! grep -q "HOST APPLY" "$T/camis/out"'
+  ca_dir canos; touch "$T/canos/sw.nosync"
+  ca canos apply CLOCK
+  need '[ "$RC" = 0 ] && grep -qx "clock=unsynced" "$T/canos/out" && grep -qx "HOST APPLY clock DONE" "$T/canos/out" && [ "$(grep -c "^sleep" "$T/canos/bin/calls.log")" = 12 ]'
+  cend clock-apply-check "настройка без ожидаемой строки -> свой файл удалён, без перезапуска; другой список после перезапуска -> STOP без автоотката; нет синхронизации за 60 с -> clock=unsynced"
+
+  # clock-apply-undo: удаляется только свой файл
+  ca_dir caundo
+  ca caundo undo UNCLOCK
+  need '[ "$RC" = 0 ] && [ "$(tail -n 1 "$T/caundo/out")" = "HOST APPLY clock-undo NOTHING" ] && [ "$(ca_restarts caundo)" = 0 ]'
+  ca caundo apply CLOCK
+  ca caundo undo NO
+  need '[ "$RC" = 1 ] && [ "$(ca_dropins caundo)" = "aggregator.conf " ] && [ "$(ca_restarts caundo)" = 0 ]'
+  ca caundo undo UNCLOCK
+  need '[ "$RC" = 0 ] && [ -z "$(ca_dropins caundo)" ] && [ "$(ca_restarts caundo)" = 1 ] && [ "$(tail -n 1 "$T/caundo/out")" = "HOST APPLY clock-undo DONE" ]'
+  need '[ "$(cat "$T/caundo/etc/systemd/timesyncd.conf")" = "$(printf "%s\n" "[Time]" "#NTP=" "#FallbackNTP=ntp.ubuntu.com")" ]'
+  printf '%s\n' "$CA_WANT" '# правка владельца' > "$T/caundo/etc/systemd/timesyncd.conf.d/aggregator.conf"
+  ca caundo undo UNCLOCK
+  need '[ "$RC" = 1 ] && grep -q "^STOP: .*не удаляется" "$T/caundo/out" && [ "$(ca_dropins caundo)" = "aggregator.conf " ] && [ "$(ca_restarts caundo)" = 0 ]'
+  cend clock-apply-undo "undo: нет файла -> NOTHING; неверное слово -> файл на месте; UNCLOCK -> удалён только свой файл, перезапуск; изменённый файл не удаляется"
+
+  # clock-apply-static: адресов в выводе нет; в пакет не входит; только перезапуск этой службы; пакеты не ставятся
+  for n in caok canos camis cacat cafor caundo; do
+    need '! grep -qE "([0-9]{1,3}\.){3}[0-9]{1,3}|ntp\.ubuntu|example" "$T/$n/out" "$T/$n/err"'
+  done
+  # в пакете, но только для root-консоли: две строки с проверкой хеша, не в lib, без подкоманды agg и sudoers
+  need '"$HERE/oneliner.sh" files | tr " " "\n" | grep -qx "deploy/vps/clock-apply.sh"'
+  need 'for m in apply undo; do "$HERE/oneliner.sh" testalias | grep "sha256sum -c --quiet SHA256SUMS; then bash clock-apply.sh $m; else echo .STOP: HASH MISMATCH.; fi" | grep -q "^T=\$(mktemp -d)" || exit 1; done'
+  need '[ "$("$HERE/oneliner.sh" testalias | grep -c "clock-apply.sh")" = 2 ] && ! grep -q "clock-apply" "$VPS/agg"'
+  need '[ "$(grep -v "^ *#" "$VPS/clock-apply.sh" | grep -oE "systemctl [a-z-]+" | sort -u | tr "\n" ";")" = "systemctl --version;systemctl restart;systemctl show;" ]'
+  need '[ "$(grep -v "^ *#" "$VPS/clock-apply.sh" | grep -oE "systemctl (restart|show) [a-z-]+" | sort -u | tr "\n" ";")" = "systemctl restart systemd-timesyncd;systemctl show systemd-timesyncd;" ]'
+  need '! grep -v "^ *#" "$VPS/clock-apply.sh" | grep -qE "(^|[^a-z-])(apt-get|apt|dpkg|chrony|ufw|nft|iptables|timedatectl set|hwclock|date -s|rm -rf)([^a-z-]|$)"'
+  need '[ "$(grep -c "^NTP_SERVERS=\x27\x27\$" "$VPS/clock-apply.sh")" = 1 ]'
+  cend clock-apply-static "адресов в выводе нет; в пакете только для root-консоли (не в lib, не в agg); перезапуск только systemd-timesyncd; пакеты, firewall и время не трогаются; в репозитории список серверов пуст"
 }
 
 # ---- ntp-probe: deploy/ntp-probe.sh на заглушках и локальном поддельном сервере ----------
@@ -2951,6 +3106,7 @@ t_host_audit
 t_selftest
 t_clock_diag
 t_ntp_probe
+t_clock_apply
 api_start || true
 t_tracer
 t_iso_oracle
