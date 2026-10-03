@@ -75,7 +75,7 @@ Phase 7 (приняты владельцем 2026-10-03, не выполнены
 
 ### Bot UX (интерфейс бота)
 
-Proposed (Phase 8, рамочные требования, не выполнены; только существующие функции бота):
+Приняты 2026-10-03 (Phase 8, Pending; только существующие функции бота; объём — 08-CONTEXT.md, D-05…D-16):
 
 - [ ] **UX-01**: Контракт экранов и сценариев (навигация, фильтры, карточка события, пустые состояния) утверждён владельцем до изменения кода
 - [ ] **UX-02**: Реализация соответствует утверждённому контракту; устаревшие кнопки не ломают бот
@@ -213,16 +213,16 @@ Proposed (Phase 8, рамочные требования, не выполнен�
 | PRD-05 | Phase 6 | Pending |
 | PRD-06 | Phase 6 | Pending |
 | PRD-07 | Phase 6 | Pending |
-| UX-01 | Phase 8 | Proposed |
-| UX-02 | Phase 8 | Proposed |
-| UX-03 | Phase 8 | Proposed |
+| UX-01 | Phase 8 | Pending |
+| UX-02 | Phase 8 | Pending |
+| UX-03 | Phase 8 | Pending |
 
 **Coverage:**
 
-- v1 requirements: 62 total (54 исходных + 5 принятых 2026-10-03: DDP-11…15 + 3 proposed: UX-01…03)
+- v1 requirements: 62 total (54 исходных + 8 принятых 2026-10-03: DDP-11…15, UX-01…03)
 - Mapped to phases: 62
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-25*
-*Last updated: 2026-10-03 — DDP-11…15 выполнены локально (Phase 7, 07-01…07-05; на production не выкачены, Phase 7 не закрыта); UX-01…03 остаются proposed*
+*Last updated: 2026-10-03 — DDP-11…15 выполнены локально (Phase 7, 07-01…07-05; на production не выкачены, Phase 7 не закрыта); UX-01…03 приняты (Pending, Phase 8, 08-CONTEXT.md D-16)*
