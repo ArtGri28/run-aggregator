@@ -65,7 +65,7 @@
 - [ ] **DDP-09**: Пороги и схема оценки откалиброваны на размеченном наборе реальных пар (порядка 30–50); автоматическое слияние на нём не даёт ложных слияний
 - [ ] **DDP-10**: Дистанции слитого события — объединение дистанций связанных `source_events` с допуском по метрам
 
-Proposed (Phase 7, проект требований, не выполнены; основание — D-21, D-26 в 05-CONTEXT.md):
+Phase 7 (приняты владельцем 2026-10-03, не выполнены; основание — D-21, D-26 в 05-CONTEXT.md; решения — 07-CONTEXT.md):
 
 - [ ] **DDP-11**: Потенциальные автослияния вычисляются независимо от `DEDUP_AUTO_MERGE`; при выключенном флаге фактических автоматических слияний 0, расчёт не меняет данные каталога
 - [ ] **DDP-12**: Потенциальные автослияния видны администратору в `/dupes`, в логе прохода дедупликации и в `agg verify`
@@ -199,11 +199,11 @@ Proposed (Phase 8, рамочные требования, не выполнен�
 | DDP-08 | Phase 5 | Pending |
 | DDP-09 | Phase 5 | Pending |
 | DDP-10 | Phase 5 | Pending |
-| DDP-11 | Phase 7 | Proposed |
-| DDP-12 | Phase 7 | Proposed |
-| DDP-13 | Phase 7 | Proposed |
-| DDP-14 | Phase 7 | Proposed |
-| DDP-15 | Phase 7 | Proposed |
+| DDP-11 | Phase 7 | Pending |
+| DDP-12 | Phase 7 | Pending |
+| DDP-13 | Phase 7 | Pending |
+| DDP-14 | Phase 7 | Pending |
+| DDP-15 | Phase 7 | Pending |
 | MON-03 | Phase 6 | Pending |
 | MON-04 | Phase 6 | Pending |
 | PRD-01 | Phase 4 | Complete |
@@ -219,10 +219,10 @@ Proposed (Phase 8, рамочные требования, не выполнен�
 
 **Coverage:**
 
-- v1 requirements: 62 total (54 исходных + 8 proposed: DDP-11…15, UX-01…03)
+- v1 requirements: 62 total (54 исходных + 5 принятых 2026-10-03: DDP-11…15 + 3 proposed: UX-01…03)
 - Mapped to phases: 62
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-25*
-*Last updated: 2026-10-01 — proposed-требования Phase 7 и 8, примечания D-24 и D-25*
+*Last updated: 2026-10-03 — DDP-11…15 приняты (Phase 7, 07-CONTEXT.md); UX-01…03 остаются proposed*

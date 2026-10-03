@@ -225,7 +225,8 @@ Plans:
 
 **Goal**: Владелец видит, какие пары слило бы автослияние, и может отменить ошибочное слияние; автослияние остаётся выключенным
 **Depends on**: Phase 6 (выкат и отчёт на production — только после проверенного бэкапа и восстановления)
-**Requirements**: DDP-11, DDP-12, DDP-13, DDP-14, DDP-15 (proposed)
+**Requirements**: DDP-11, DDP-12, DDP-13, DDP-14, DDP-15
+**Execution**: локально при приостановленной Phase 6 (решение владельца 2026-10-03, D-01 в 07-CONTEXT.md); выкат — после RESTORE GATE Phase 6 и отдельного разрешения владельца
 **Note**: основание — D-21, D-23, D-26 в 05-CONTEXT.md и 05-REVIEW.md (H1, M2, L1–L5). Включение `DEDUP_AUTO_MERGE` не входит ни в одну задачу фазы — только отдельным решением владельца
 **Production**: deploy в production и любые изменения VPS — только по отдельному разрешению владельца на конкретный шаг. Упоминание выката в зависимостях и критериях само по себе разрешением не является
 **Success Criteria** (what must be TRUE):
@@ -236,7 +237,28 @@ Plans:
   4. Процедура отмены слияния описана и проверена на тестовой базе
   5. По каждому из L1–L5 есть результат: воспроизведение и доказательства, затем исправление с тестом либо решение владельца; риск L1 не принимается без владельца
 
-**Plans**: TBD
+**Plans**: 0/5 plans executed
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — Tracer: `would_auto` в `Decide`/`Pass` без миграции (reasons), счётчики прохода, `/dupes`; гарантия нуля слияний при `DEDUP_AUTO_MERGE=false`
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md — Общая функция пар (M2), тест падает на неразмеченной AUTO-паре, «Лига Героев» и Беларусь в калибровке (метки — владелец)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-03-PLAN.md — L1–L5: воспроизведение, исправления L1, L2, L3, L5; L4 — решение владельца
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07-04-PLAN.md — Отмена слияния: инвентаризация обратимости без отката, решение владельца (D-14), проверка на тестовой базе
+
+**Wave 5** *(blocked on Wave 4 completion и условиях Phase 6, D-03)*
+
+- [ ] 07-05-PLAN.md — `agg verify`: потенциальные автослияния; меняет пакет `agg` — только после задачи 6 плана 06-04 или разрешения владельца
 
 ### Phase 8: Telegram Bot UX
 
@@ -267,5 +289,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
-| 7. Deduplication Transparency | 0/TBD | Not started | - |
+| 7. Deduplication Transparency | 0/5 | Planned | - |
 | 8. Telegram Bot UX | 0/TBD | Not started | - |
