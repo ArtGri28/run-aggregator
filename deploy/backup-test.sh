@@ -5,6 +5,8 @@
 #   selftest      — итоговая строка раздела: ok только без провалов;
 #   clock-diag-*  — deploy/clock-diag.sh (диагностика часов) печатает 13 ключей по контракту,
 #                   только читает, не печатает адреса и имена серверов времени;
+#   ntp-probe-*   — deploy/ntp-probe.sh: 45 ключей по контракту; пробы — в локальный поддельный
+#                   сервер NTP и DNS (127.0.0.1 и ::1), ровно 4 запроса NTP и 1 DNS, без адресов в выводе;
 #   tracer, iso-oracle, retention, rotate-dir, rotate-state, publish, sync, clock-rotate, fail-paths — копия
 #   deploy/vps/backup.sh на заглушках (docker, age, timedatectl, flock, sleep, sync, date) и чистые
 #   функции deploy/vps/backup-lib.sh (ISO-неделя по оракулу python3, ротация 7 + 4);
@@ -34,8 +36,10 @@ T=$(mktemp -d)
 PROBE_FILE=""
 RESTORE_CID=""
 API_PID=""
+NTPF_PID=""
 cleanup() {
   if [ -n "$API_PID" ]; then kill "$API_PID" 2>/dev/null || true; fi
+  if [ -n "$NTPF_PID" ]; then kill "$NTPF_PID" 2>/dev/null || true; fi
   if [ -n "$RESTORE_CID" ]; then docker rm -f -v $RESTORE_CID >/dev/null 2>&1 || true; fi
   if [ -n "$PROBE_FILE" ]; then docker compose -f "$PROBE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true; fi
   rm -rf "$T"
@@ -1282,6 +1286,286 @@ t_clock_diag() {
   need '[ "$(printf "%s\n" "$B" | grep -c "^val ")" = 13 ] && printf "%s\n" "$B" | tail -n 1 | grep -qx "echo .CLOCK END."'
   need '! "$HERE/oneliner.sh" files | grep -q "clock-diag"' # блок в пакет не входит
   cend clock-diag-readonly "только разрешённые вызовы чтения, без повышения прав, файлов и изменений нет; в тексте блока нет изменяющих и сетевых слов"
+}
+
+# ---- ntp-probe: deploy/ntp-probe.sh на заглушках и локальном поддельном сервере ----------
+NTPP_KEYS="ntp_synchronized ntp_enabled server_name server_family packet_count udp123_sockets dns_ubuntu_v4 dns_ubuntu_v6 dns_cloudflare_v4 dns_cloudflare_v6 route_v4_default route_v6_default"
+for NTPP_P in probe_ubuntu_v4 probe_ubuntu_v6 probe_cloudflare_v4 probe_cloudflare_v6; do
+  NTPP_KEYS="$NTPP_KEYS ${NTPP_P}_sent ${NTPP_P}_reply ${NTPP_P}_reason ${NTPP_P}_rtt_ms ${NTPP_P}_offset_ms"
+done
+NTPP_KEYS="$NTPP_KEYS dns_control_sent dns_control_reply dns_control_reason clocksource ptp_devices ptp_kvm iptables_read iptables_output_policy iptables_rules_123 ip6tables_read ip6tables_output_policy ip6tables_rules_123 vps_epoch"
+NTPP_ALLOWED='timedatectl show -p NTPSynchronized --value
+timedatectl show -p NTP --value
+timedatectl show-timesync -p ServerName --value
+timedatectl show-timesync -p FallbackNTPServers --value
+timedatectl show-timesync -p SystemNTPServers --value
+timedatectl show-timesync -p LinkNTPServers --value
+timedatectl show-timesync -p ServerAddress --value
+timedatectl timesync-status
+ss -H -uan
+getent ahostsv4 localhost
+getent ahostsv6 localhost
+ip -4 route show default
+ip -6 route show default
+sudo -n iptables -S
+sudo -n ip6tables -S
+date -u +%s'
+# Слова, которых в блоке быть не должно: изменение времени, служб, настроек, firewall и файлов.
+NTPP_FORBID='(^|[^a-z_-])(systemctl|set-ntp|set-time|set-timezone|hwclock|ntpdate|sntp|chronyc|ntpq|nft|ufw|curl|wget|nc|ping|journalctl|apt-get|dpkg|rm|mv|cp|tee|touch|mkdir|chmod|chown|kill|reboot|crontab|eval)([^a-z_-]|$)'
+NTPP_DIRS=""
+# ntpf_start: поддельный сервер NTP (127.0.0.1 и ::1, один порт) и DNS (127.0.0.1). Режим — из
+# $T/ntpf.mode (ok | silent | badorigin | badmode | kod — ответ NTP; dnsid | dnsqr | dnsopcode | dnsrcode |
+# dnsq — испорченный ответ DNS при верном NTP), журнал $T/ntpf.log — строка на запрос.
+ntpf_start() {
+  echo ok > "$T/ntpf.mode"
+  : > "$T/ntpf.log"
+  python3 -I - "$T/ntpf.mode" "$T/ntpf.log" "$T/ntpf.port" <<'PYNTP' &
+import os, select, socket, struct, sys, time
+
+modef, logf, portf = sys.argv[1:4]
+for _ in range(50):
+    s6 = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+    s6.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+    s6.bind(("::1", 0))
+    port = s6.getsockname()[1]
+    s4 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s4.bind(("127.0.0.1", port))
+        break
+    except OSError:
+        s4.close(); s6.close()
+d4 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+d4.bind(("127.0.0.1", 0))
+with open(portf, "w") as f:
+    f.write("%d %d" % (port, d4.getsockname()[1]))
+while True:
+    r, _, _ = select.select([s4, s6, d4], [], [])
+    for s in r:
+        data, src = s.recvfrom(512)
+        mode = open(modef).read().strip()
+        kind = "dns" if s is d4 else ("ntp v6" if s is s6 else "ntp v4")
+        with open(logf, "a") as f:
+            f.write("%s len=%d\n" % (kind, len(data)))
+        if mode == "silent":
+            continue
+        if s is d4:
+            qid, flags, rest = data[:2], b"\x81\x80", data[4:]
+            if mode == "dnsid": qid = bytes([data[0] ^ 1, data[1]])
+            if mode == "dnsqr": flags = b"\x01\x80"
+            if mode == "dnsopcode": flags = b"\x89\x80"
+            if mode == "dnsrcode": flags = b"\x81\x82"
+            if mode == "dnsq": rest = rest[:9] + b"x" + rest[10:]
+            s.sendto(qid + flags + rest, src)
+            continue
+        now = time.time() + 2208988800
+        t = struct.pack("!II", int(now), int((now % 1) * 2 ** 32))
+        b0, stratum, origin = 0x24, 2, data[40:48]
+        if mode == "badmode": b0 = 0x23
+        if mode == "kod": stratum = 0
+        if mode == "badorigin": origin = bytes(8)
+        s.sendto(bytes([b0, stratum, 6, 0xEC]) + bytes(20) + origin + t + t, src)
+PYNTP
+  NTPF_PID=$!
+  local i=0
+  while [ ! -s "$T/ntpf.port" ] && [ "$i" -lt 100 ]; do /bin/sleep 0.1; i=$((i + 1)); done
+  read -r NTPF_PORT NTPF_DPORT < "$T/ntpf.port" || true
+  if [ -z "${NTPF_PORT:-}" ]; then bad "ntp-probe: поддельный сервер не запустился"; return 1; fi
+}
+# ntpp_dir <имя>: каталог сценария со штатными ответами заглушек
+ntpp_dir() {
+  local d="$T/$1"
+  mkdir -p "$d/bin" "$d/work" "$d/home" "$d/sys/devices/system/clocksource/clocksource0" "$d/sys/class/ptp/ptp0" "$d/dev"
+  : > "$d/bin/calls.log"
+  ln -s "$(command -v head)" "$d/bin/head"
+  ln -s "$(command -v python3)" "$d/bin/python3"
+  echo kvm-clock > "$d/sys/devices/system/clocksource/clocksource0/current_clocksource"
+  echo "KVM virtual PTP" > "$d/sys/class/ptp/ptp0/clock_name"
+  : > "$d/dev/ptp0"
+  echo no > "$d/td.NTPSynchronized"; echo yes > "$d/td.NTP"
+  echo ntp.ubuntu.com > "$d/ts.ServerName"; echo 192.0.2.10 > "$d/ts.ServerAddress"
+  echo ntp.ubuntu.com > "$d/ts.FallbackNTPServers"; : > "$d/ts.SystemNTPServers"; : > "$d/ts.LinkNTPServers"
+  printf '%s\n' '       Server: 192.0.2.10 (ntp.ubuntu.com)' ' Packet count: 0' > "$d/td.status"
+  printf '%s\n' 'UNCONN 0 0 0.0.0.0:41000 192.0.2.10:123' 'UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:*' > "$d/ss.out"
+  printf '%s\n' '192.0.2.10 STREAM ntp.ubuntu.com' '192.0.2.10 DGRAM' '192.0.2.11 STREAM' > "$d/ge.ahostsv4"
+  : > "$d/ge.ahostsv6"
+  echo 'default via 192.0.2.1 dev eth0' > "$d/ip.-4"; : > "$d/ip.-6"
+  printf '%s\n' '-P INPUT ACCEPT' '-P FORWARD DROP' '-P OUTPUT ACCEPT' '-A INPUT -i lo -j ACCEPT' > "$d/fw.iptables"
+  echo 1790000000 > "$d/epoch"
+  stub "$d/bin" timedatectl "d=$d"'
+case "$*" in
+  "show -p "*" --value") f=$3; [ -f "$d/td.$f" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/td.$f" ;;
+  "show-timesync -p "*" --value") f=$3; [ -f "$d/ts.$f" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/ts.$f" ;;
+  timesync-status) [ -f "$d/td.status" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/td.status" ;;
+  *) exit 64 ;;
+esac'
+  stub "$d/bin" ss "d=$d"'; [ -f "$d/ss.out" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/ss.out"'
+  stub "$d/bin" getent "d=$d"'; [ -f "$d/ge.$1" ] || exit 2; while IFS= read -r l; do echo "$l"; done < "$d/ge.$1"'
+  stub "$d/bin" ip "d=$d"'; [ -f "$d/ip.$1" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/ip.$1"'
+  stub "$d/bin" sudo "d=$d"'; [ "$1" = -n ] && [ "$3" = -S ] && [ -f "$d/fw.$2" ] || exit 1; while IFS= read -r l; do echo "$l"; done < "$d/fw.$2"'
+  stub "$d/bin" date "d=$d"'; while IFS= read -r l; do echo "$l"; done < "$d/epoch"'
+  NTPP_DIRS="$NTPP_DIRS $1"
+}
+# run_ntpp <сценарий> [режим сервера]: вывод -> out, ошибки -> err, код -> NRC, длительность -> NSEC;
+# журнал поддельного сервера за этот запуск -> ntpf.log сценария
+run_ntpp() {
+  local s0
+  echo "${2:-ok}" > "$T/ntpf.mode"; : > "$T/ntpf.log"
+  NRC=0
+  s0=$(date +%s)
+  (cd "$T/$1/work" && PATH="$T/$1/bin" HOME="$T/$1/home" NTPP_UBUNTU="${NTPP_U-localhost}" NTPP_CF=localhost \
+    NTPP_PORT="${NTPP_PT-$NTPF_PORT}" NTPP_DNS=127.0.0.1 NTPP_DNS_PORT="$NTPF_DPORT" NTPP_SYS="$T/$1/sys" NTPP_DEV="$T/$1/dev" \
+    /bin/bash "$HERE/ntp-probe.sh") > "$T/$1/out" 2> "$T/$1/err" || NRC=$?
+  NSEC=$(($(date +%s) - s0))
+  cp "$T/ntpf.log" "$T/$1/ntpf.log"
+}
+# ng <сценарий> <ключ>: значение ключа в выводе
+ng() { sed -n "s/^NTP $2=//p" "$T/$1/out"; }
+# nshape <сценарий>: ключи ровно по контракту и в его порядке, NTP END последней строкой, код 0, stderr пуст
+nshape() {
+  NS=$1
+  NSHAPE_WANT=$(printf '%s\n' $NTPP_KEYS END)
+  need '[ "$NRC" = 0 ] && [ ! -s "$T/$NS/err" ]'
+  need '[ "$(sed -E "s/^NTP ([a-z0-9_]+)(=.*)?\$/\1/" "$T/$NS/out" | sed "s/^NTP //")" = "$NSHAPE_WANT" ]'
+  need '[ "$(tail -n 1 "$T/$NS/out")" = "NTP END" ] && [ "$(wc -l < "$T/$NS/out" | tr -d " ")" = 46 ]'
+  need '! grep -vqE "^NTP (END|[a-z0-9_]+=-?[a-z0-9-]+)\$" "$T/$NS/out"'
+}
+# nreq <сценарий> <v4> <v6> <dns>: сколько запросов получил поддельный сервер
+nreq() {
+  NREQ_GOT="$(grep -c '^ntp v4 len=48$' "$T/$1/ntpf.log" || true) $(grep -c '^ntp v6 len=48$' "$T/$1/ntpf.log" || true) $(grep -c '^dns ' "$T/$1/ntpf.log" || true) $(grep -c . "$T/$1/ntpf.log" || true)"
+  NREQ_WANT="$2 $3 $4 $(($2 + $3 + $4))"
+  need '[ "$NREQ_GOT" = "$NREQ_WANT" ]'
+}
+t_ntp_probe() {
+  local n p x B before
+  if ! ntpf_start; then return; fi
+
+  # ntp-probe-lines: штатный ответ, все четыре пары и контрольный DNS
+  ntpp_dir npbase
+  run_ntpp npbase ok
+  nshape npbase
+  nreq npbase 2 2 1
+  need '[ "$(ng npbase ntp_synchronized) $(ng npbase ntp_enabled) $(ng npbase server_name) $(ng npbase server_family) $(ng npbase packet_count) $(ng npbase udp123_sockets)" = "no yes default v4 0 1" ]'
+  need '[ "$(ng npbase dns_ubuntu_v4) $(ng npbase dns_ubuntu_v6) $(ng npbase route_v4_default) $(ng npbase route_v6_default)" = "2 0 yes no" ]'
+  for p in probe_ubuntu_v4 probe_ubuntu_v6 probe_cloudflare_v4 probe_cloudflare_v6; do
+    need '[ "$(ng npbase ${p}_sent) $(ng npbase ${p}_reply) $(ng npbase ${p}_reason)" = "yes yes none" ]'
+    need '[[ $(ng npbase ${p}_rtt_ms) =~ ^[0-9]+$ ]] && [[ $(ng npbase ${p}_offset_ms) =~ ^-?[0-9]+$ ]]'
+  done
+  need '[ "$(ng npbase dns_control_sent) $(ng npbase dns_control_reply) $(ng npbase dns_control_reason)" = "yes yes none" ]'
+  need '[ "$(ng npbase clocksource) $(ng npbase ptp_devices) $(ng npbase ptp_kvm)" = "kvm-clock 1 yes" ]'
+  need '[ "$(ng npbase iptables_read) $(ng npbase iptables_output_policy) $(ng npbase iptables_rules_123)" = "yes accept 0" ]'
+  need '[ "$(ng npbase ip6tables_read) $(ng npbase ip6tables_output_policy) $(ng npbase ip6tables_rules_123)" = "unavailable unknown unknown" ]'
+  need '[ "$(ng npbase vps_epoch)" = 1790000000 ]'
+  ntpp_dir npcustom # свой сервер, адрес IPv6, правило с портом 123, OUTPUT DROP, сокетов нет
+  echo time.example.net > "$T/npcustom/ts.ServerName"; echo time.example.net > "$T/npcustom/ts.SystemNTPServers"
+  echo 2001:db8::10 > "$T/npcustom/ts.ServerAddress"; : > "$T/npcustom/ss.out"
+  printf '%s\n' '-P OUTPUT DROP' '-A OUTPUT -p udp -m udp --dport 123 -j DROP' '-A OUTPUT -p tcp --dport 1234 -j ACCEPT' > "$T/npcustom/fw.ip6tables"
+  run_ntpp npcustom ok
+  nshape npcustom
+  need '[ "$(ng npcustom server_name) $(ng npcustom server_family) $(ng npcustom udp123_sockets)" = "custom v6 0" ]'
+  need '[ "$(ng npcustom ip6tables_read) $(ng npcustom ip6tables_output_policy) $(ng npcustom ip6tables_rules_123)" = "yes drop 1" ]'
+  cend ntp-probe-lines "45 строк по контракту и NTP END; ответы проверены; ровно 4 запроса NTP (2 v4, 2 v6) и 1 DNS"
+
+  # ntp-probe-timeout: ответа нет — sent=yes, reply=timeout; повторов нет, укладывается в таймауты
+  ntpp_dir nptime
+  run_ntpp nptime silent
+  nshape nptime
+  nreq nptime 2 2 1
+  for p in probe_ubuntu_v4 probe_ubuntu_v6 probe_cloudflare_v4 probe_cloudflare_v6 dns_control; do
+    need '[ "$(ng nptime ${p}_sent) $(ng nptime ${p}_reply) $(ng nptime ${p}_reason)" = "yes timeout none" ]'
+  done
+  need '[ "$(ng nptime probe_ubuntu_v4_rtt_ms) $(ng nptime probe_ubuntu_v4_offset_ms)" = "none none" ]'
+  need '[ "$NSEC" -le 18 ]' # 5 таймаутов по 2 с; с повторами было бы не меньше 20 с
+  cend ntp-probe-timeout "нет ответа: sent=yes reply=timeout; по одному запросу на пару, без повторов, за ${NSEC} с"
+
+  # ntp-probe-invalid: неверный originate, режим, KoD — reply=invalid с причиной
+  for x in badorigin:bad-origin badmode:bad-mode kod:kod; do
+    n=np${x%%:*}
+    ntpp_dir "$n"
+    run_ntpp "$n" "${x%%:*}"
+    nshape "$n"
+    nreq "$n" 2 2 1
+    for p in probe_ubuntu_v4 probe_ubuntu_v6 probe_cloudflare_v4 probe_cloudflare_v6; do
+      NPX="yes invalid ${x#*:} none none"
+      need '[ "$(ng $n ${p}_sent) $(ng $n ${p}_reply) $(ng $n ${p}_reason) $(ng $n ${p}_rtt_ms) $(ng $n ${p}_offset_ms)" = "$NPX" ]'
+    done
+  done
+  cend ntp-probe-invalid "ответ не прошёл проверку (originate, режим, KoD) -> reply=invalid с причиной"
+
+  # ntp-probe-dns: испорченный ответ DNS не выдаётся за успешный (ID, QR, opcode, RCODE, вопрос)
+  for x in dnsid:bad-id dnsqr:not-response dnsopcode:bad-opcode dnsrcode:bad-rcode dnsq:bad-question; do
+    n=np${x%%:*}
+    ntpp_dir "$n"
+    run_ntpp "$n" "${x%%:*}"
+    nshape "$n"
+    nreq "$n" 2 2 1
+    NPX="yes invalid ${x#*:}"
+    need '[ "$(ng $n dns_control_sent) $(ng $n dns_control_reply) $(ng $n dns_control_reason)" = "$NPX" ]'
+    need '[ "$(ng $n probe_ubuntu_v4_reply) $(ng $n probe_cloudflare_v6_reply)" = "yes yes" ]'
+  done
+  cend ntp-probe-dns "ответ DNS с чужим ID, без QR, с opcode или RCODE не 0, с другим вопросом -> reply=invalid; запрос один"
+
+  # ntp-probe-absent: нет программ — unknown, без сетевых запросов; пустая цель — no-address без запроса
+  ntpp_dir npnone
+  rm "$T/npnone/bin/timedatectl" "$T/npnone/bin/ss" "$T/npnone/bin/getent" "$T/npnone/bin/ip" "$T/npnone/bin/sudo" \
+    "$T/npnone/bin/python3" "$T/npnone/bin/date"
+  rm -r "$T/npnone/sys/class/ptp/ptp0" "$T/npnone/dev/ptp0" "$T/npnone/sys/devices"
+  run_ntpp npnone ok
+  nshape npnone
+  nreq npnone 0 0 0
+  need '[ "$(ng npnone ntp_synchronized) $(ng npnone server_name) $(ng npnone packet_count) $(ng npnone udp123_sockets) $(ng npnone dns_ubuntu_v4) $(ng npnone route_v6_default)" = "unknown unknown unknown unknown unknown unknown" ]'
+  need '[ "$(ng npnone probe_ubuntu_v4_sent) $(ng npnone probe_ubuntu_v4_reply) $(ng npnone probe_ubuntu_v4_reason) $(ng npnone dns_control_reason)" = "unknown unknown no-python no-python" ]'
+  need '[ "$(ng npnone clocksource) $(ng npnone ptp_devices) $(ng npnone ptp_kvm) $(ng npnone iptables_read) $(ng npnone vps_epoch)" = "unknown 0 no unavailable unknown" ]'
+  ntpp_dir npnoaddr
+  NTPP_U="" run_ntpp npnoaddr ok
+  nshape npnoaddr
+  nreq npnoaddr 1 1 1
+  need '[ "$(ng npnoaddr probe_ubuntu_v4_sent) $(ng npnoaddr probe_ubuntu_v4_reply) $(ng npnoaddr probe_ubuntu_v4_reason)" = "no skipped no-address" ]'
+  need '[ "$(ng npnoaddr probe_cloudflare_v6_reply)" = yes ] && [ "$(ng npnoaddr dns_ubuntu_v4)" = 0 ]'
+  ntpp_dir npsenderr # отправка не удалась (порт 0): sent=no, а не yes
+  NTPP_PT=0 run_ntpp npsenderr ok
+  nshape npsenderr
+  nreq npsenderr 0 0 1
+  for p in probe_ubuntu_v4 probe_ubuntu_v6 probe_cloudflare_v4 probe_cloudflare_v6; do
+    need '[ "$(ng npsenderr ${p}_sent) $(ng npsenderr ${p}_reply) $(ng npsenderr ${p}_reason)" = "no skipped send-error" ]'
+  done
+  cend ntp-probe-absent "нет программ -> unknown и ни одного запроса; цель без адреса или отказ отправки -> sent=no reply=skipped"
+
+  # ntp-probe-junk: мусор, адреса и имена узлов в ответах заглушек в вывод не попадают
+  ntpp_dir npjunk
+  for x in NTPSynchronized NTP; do echo "node.example.com 10.0.0.1" > "$T/npjunk/td.$x"; done
+  echo "10.0.0.1; rm -rf /" > "$T/npjunk/ts.ServerAddress"
+  echo "Packet count: 10.0.0.1" > "$T/npjunk/td.status"
+  echo "KVM Node.Example.com" > "$T/npjunk/sys/devices/system/clocksource/clocksource0/current_clocksource"
+  echo "-P OUTPUT node.example.com" > "$T/npjunk/fw.iptables"
+  echo "Thu Oct  1 10.0.0.1" > "$T/npjunk/epoch"
+  run_ntpp npjunk ok
+  nshape npjunk
+  need '[ "$(ng npjunk ntp_synchronized) $(ng npjunk server_family) $(ng npjunk packet_count) $(ng npjunk clocksource) $(ng npjunk iptables_output_policy) $(ng npjunk vps_epoch)" = "unknown v4 unknown unknown unknown unknown" ]'
+  for n in $NTPP_DIRS; do
+    need '! { sed "s/^NTP [a-z0-9_]*=//" "$T/$n/out"; cat "$T/$n/err"; } | grep -qiE "example|ubuntu|cloudflare|localhost|127\.0\.0|::1|192\.0\.2|10\.0\.0|2001:db8|([0-9]{1,3}\.){3}[0-9]{1,3}"'
+  done
+  cend ntp-probe-junk "мусор -> unknown; ни адресов, ни имён серверов и узлов в выводе всех сценариев"
+
+  # ntp-probe-readonly: только разрешённые вызовы чтения; файлов нет; в тексте нет изменяющих слов
+  for n in $NTPP_DIRS; do
+    before=$(find "$T/$n/sys" "$T/$n/dev" -exec ls -ld {} + 2> /dev/null | cut -c1-10,30-)
+    : > "$T/$n/bin/calls.log"
+    NTPP_U=localhost run_ntpp "$n" ok
+    need '[ -z "$(grep -vxF "$NTPP_ALLOWED" "$T/$n/bin/calls.log" || true)" ]'
+    need '[ -z "$(ls -A "$T/$n/work")$(ls -A "$T/$n/home")" ]'
+    need '[ "$(find "$T/$n/sys" "$T/$n/dev" -exec ls -ld {} + 2> /dev/null | cut -c1-10,30-)" = "$before" ]'
+  done
+  need '[ "$(sort -u "$T/npbase/bin/calls.log")" = "$(printf "%s\n" "$NTPP_ALLOWED" | sort -u)" ]'
+  B=$(grep -v '^[[:space:]]*#' "$HERE/ntp-probe.sh")
+  need '! printf "%s\n" "$B" | grep -nE "$NTPP_FORBID"'
+  need '[ "$(printf "%s\n" "$B" | grep -c "sudo")" = 1 ] && printf "%s\n" "$B" | grep -qF "rules=\$(sudo -n \"\$1\" -S < /dev/null"'
+  need '[ "$(printf "%s\n" "$B" | grep "^fw " | tr "\n" ";")" = "fw iptables iptables;fw ip6tables ip6tables;" ]'
+  need '[ "$(printf "%s\n" "$B" | sed "/<<.PY.\$/,/^PY\$/d" | sed -E "s#[0-9]?> ?/dev/null##g; s#[0-9]?>&[0-9]##g" | tr -cd ">" | wc -c | tr -d " ")" = 0 ]'
+  need '[ "$(printf "%s\n" "$B" | grep -c "^val ")" -ge 10 ] && printf "%s\n" "$B" | tail -n 1 | grep -qx "echo .NTP END."'
+  need '! "$HERE/oneliner.sh" files | grep -q "ntp-probe"'
+  cend ntp-probe-readonly "только разрешённые вызовы чтения, sudo только -n iptables/ip6tables -S, файлов и изменений нет; блок не в пакете"
+  kill "$NTPF_PID" 2> /dev/null || true
+  NTPF_PID=""
 }
 
 t_tracer() {
@@ -2666,6 +2950,7 @@ backup" ]'
 t_host_audit
 t_selftest
 t_clock_diag
+t_ntp_probe
 api_start || true
 t_tracer
 t_iso_oracle
