@@ -93,7 +93,7 @@ commit: 4ecd344
 
 Полный прогон после добавления раздела: `caffeinate -dims /bin/bash deploy/backup-test.sh pg` — код 0, `BACKUP TESTS OK`, 118 строк `ok`, 0 `FAIL`, 789 с; все восемь строк `restore:` и строка `e2e: backup.sh -> restore-check.sh ok`. Разделы `pg`, `restore`, `e2e` дополнительно пройдены с `backup.sh` и `restore-check.sh` под bash 5.3.20. После прогона не осталось контейнеров пробы и временных каталогов.
 
-Эти изменения (`deploy/backup-test.sh`, `STATE.md`, таблица наброска, эта сводка) не закоммичены.
+Эти изменения (`deploy/backup-test.sh`, `STATE.md`, таблица наброска, эта сводка) закоммичены владельцем: `f1d50d8` «test(06-05): end-to-end backup.sh to restore-check.sh test; sync state and outline», родитель `647103e`, отправлен в `origin/main`. Эта запись внесена после коммита и в `f1d50d8` не входит.
 
 ## Отступления от исходного текста плана
 
