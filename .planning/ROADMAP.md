@@ -274,7 +274,40 @@ Plans:
   3. Реализация соответствует контракту; устаревшие кнопки не ломают бот
   4. Владелец прошёл приёмку в Telegram по чек-листу сценариев
 
-**Plans**: TBD
+**Plans**: 0/8 plans executed
+
+Plans:
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — Аудит: снимки всех пользовательских экранов `b165c10` без автообновления эталонов, 08-AUDIT.md (код бота не меняется)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 08-02-PLAN.md — Контракт экранов и сценариев S-xx и чек-листы приёмки; утверждение владельцем (UX-01)
+
+**Wave 3** *(blocked on Wave 2 completion и утверждении контракта)*
+
+- [ ] 08-03-PLAN.md — Версия в `f:`, устаревшие и неизвестные callback без изменения `users`/`events`, внутренняя ошибка отдельно
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 08-04-PLAN.md — Главное меню, навигация, возврат назад, фильтры по контракту
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 08-05-PLAN.md — Список, карточка события, пустые состояния по контракту
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 08-06-PLAN.md — «Мои настройки» на существующих данных, явный сброс
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
+- [ ] 08-07-PLAN.md — Локальная UX-приёмка: покрытие контракта тестами, просмотр эталонов владельцем (UX-02)
+
+**Wave 8** *(blocked on Wave 7 completion, RESTORE GATE Phase 6 и отдельных разрешениях на ship и выкат)*
+
+- [ ] 08-08-PLAN.md — Production-приёмка в Telegram (UX-03)
 
 ## Progress
 
@@ -290,4 +323,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
 | 7. Deduplication Transparency | 5/5 | In Progress | - |
-| 8. Telegram Bot UX | 0/TBD | Not started | - |
+| 8. Telegram Bot UX | 0/8 | Planned | - |
