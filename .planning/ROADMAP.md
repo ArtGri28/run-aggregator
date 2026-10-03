@@ -237,7 +237,7 @@ Plans:
   4. Процедура отмены слияния описана и проверена на тестовой базе
   5. По каждому из L1–L5 есть результат: воспроизведение и доказательства, затем исправление с тестом либо решение владельца; риск L1 не принимается без владельца
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed (локально; Phase 7 не закрыта)
 
 Plans:
 **Wave 1**
@@ -258,7 +258,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion и условиях Phase 6, D-03)*
 
-- [ ] 07-05-PLAN.md — `agg verify`: потенциальные автослияния; меняет пакет `agg` — только после задачи 6 плана 06-04 или разрешения владельца
+- [x] 07-05-PLAN.md — `agg verify`: потенциальные автослияния; меняет пакет `agg` — выполнен по разрешению владельца (2026-10-03), пакет на VPS устарел до следующего `ship.sh`
 
 ### Phase 8: Telegram Bot UX
 
@@ -289,5 +289,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
-| 7. Deduplication Transparency | 4/5 | In Progress | - |
+| 7. Deduplication Transparency | 5/5 | In Progress | - |
 | 8. Telegram Bot UX | 0/TBD | Not started | - |

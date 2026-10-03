@@ -2,6 +2,9 @@
 # Проверка IMAGE_TAG/IMAGE_PREV в deploy-apply.sh и rollback.sh при неудачном запуске
 # (LO-04). Скрипты берутся из deploy/vps, в копиях меняются только пути, проверка root
 # и владелец файлов; docker — заглушка: «up» падает, если в файле окружения тег bad*.
+# Раздел «Дедупликация» deploy-verify.sh (Phase 7): строки dedup_would_auto и
+# dedup_pass_last на заглушке docker (psql и логи); сам SQL dedup_would_auto
+# выполняет TestVerifyWouldAuto (internal/store) на тестовой базе.
 # Хост не меняется. Запуск на Mac или Linux: deploy/deploy-apply-test.sh -> DEPLOY APPLY OK.
 set -euo pipefail
 export LC_ALL=C
@@ -71,4 +74,37 @@ expect "отмена deploy good5" good2 good4
 [ "$(val POSTGRES_PASSWORD)" = x ] || { echo "FAIL прочие ключи изменились"; FAILS=$((FAILS + 1)); }
 left=$(find "$T/opt" -name '.env.*' | wc -l | tr -d ' ')
 [ "$left" = 0 ] || { echo "FAIL остались временные файлы: $left"; FAILS=$((FAILS + 1)); }
+
+# deploy-verify.sh: только чтение, запускается как есть; docker отвечает на запросы
+# раздела «Дедупликация» и отдаёт логи из $T/<сервис>.log.
+mkdir -p "$T/vbin"
+cat > "$T/vbin/docker" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  *psql*"'dedup_would_auto=pending:'"*"state = 'pending'"*"reasons->>'would_auto' = 'true'"*) echo dedup_would_auto=pending:2 ;;
+  *psql*"'dedup_candidates=pending:'"*) echo 'dedup_candidates=pending:4|confirmed:1|rejected:0|fresh:0' ;;
+  *psql*"'events_merged='"*) echo events_merged=1 ;;
+  *logs*worker) cat "$T/worker.log" 2>/dev/null ;;
+  *logs*bot) cat "$T/bot.log" 2>/dev/null ;;
+esac
+exit 0
+EOF
+chmod +x "$T/vbin/docker"
+verify() { # verify <описание> <ожидаемая строка>...
+  local d=$1 l; shift
+  PATH="$T/vbin:$PATH" bash deploy-verify.sh > "$T/vout" 2>&1 || true
+  for l in "$@"; do
+    grep -qxF "$l" "$T/vout" && echo "ok   verify $d: $l" || { echo "FAIL verify $d: нет «$l»"; FAILS=$((FAILS + 1)); }
+  done
+}
+started='{"time":"t","level":"INFO","msg":"started","dedup_auto_merge":false}'
+pass() { printf '{"time":"t","level":"INFO","msg":"dedup pass","pairs":9,"would_auto":%s,"would_auto_shown":%s,"would_auto_hidden":%s,"would_auto_decided":%s}\n' "$@"; }
+{ echo "$started"; pass 7 7 0 0; pass 3 2 1 0; } > "$T/worker.log"
+verify "последний проход" 'dedup_would_auto=pending:2' 'dedup_pass_last=would_auto:3|hidden:1|shown:2|decided:0' \
+  'dedup_candidates=pending:4|confirmed:1|rejected:0|fresh:0' 'events_merged=1' \
+  'dedup_auto_merge_worker=false' 'dedup_auto_merge_bot=unknown' 'CHECK dedup-summary: OK'
+echo "$started" > "$T/worker.log"
+verify "нет строки dedup pass" 'dedup_pass_last=unknown'
+{ echo "$started"; echo '{"time":"t","level":"INFO","msg":"dedup pass","pairs":9,"would_auto":3}'; } > "$T/worker.log"
+verify "строка без счётчиков would_auto_*" 'dedup_pass_last=unknown'
 [ "$FAILS" -eq 0 ] && echo "DEPLOY APPLY OK" || { echo "DEPLOY APPLY FAIL: $FAILS"; exit 1; }

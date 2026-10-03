@@ -4,7 +4,8 @@
 # $HOME/run-agg-phase4/. Секреты не печатаются: состояние берётся из compose ps
 # и запросов внутри контейнера БД (пароль для них не нужен).
 # Раздел «Дедупликация» (Phase 5): прогоны по источникам, заполненность fields,
-# очередь кандидатов, слияния и режим автослияния из строки started каждого сервиса.
+# очередь кандидатов, слияния и режим автослияния из строки started каждого сервиса;
+# потенциальные автослияния (Phase 7): dedup_would_auto, dedup_pass_last.
 set -u
 export LC_ALL=C
 
@@ -75,6 +76,17 @@ for s in bot worker; do
   v=$(docker compose -f "$F" logs --no-color "$s" 2>/dev/null | grep -F '"msg":"started"' | tail -1 | grep -oE '"dedup_auto_merge":(true|false)' | cut -d: -f2)
   echo "dedup_auto_merge_$s=${v:-unknown}"
 done
+# Потенциальные автослияния (Phase 7): pending-кандидаты с признаком would_auto и
+# счётчики последней строки «dedup pass» worker; нет строки или полей — unknown.
+q "SELECT 'dedup_would_auto=pending:' || count(*) FROM dedup_candidates WHERE state = 'pending' AND reasons->>'would_auto' = 'true'" || DD_OK=1
+l=$(docker compose -f "$F" logs --no-color worker 2>/dev/null | grep -F '"msg":"dedup pass"' | tail -1)
+v=""
+for k in would_auto would_auto_hidden would_auto_shown would_auto_decided; do
+  n=$(echo "$l" | grep -oE "\"$k\":[0-9]+" | cut -d: -f2)
+  [ -n "$n" ] || { v=""; break; }
+  v="${v:+$v|}${k#would_auto_}:$n"
+done
+echo "dedup_pass_last=${v:-unknown}"
 res dedup-summary $DD_OK
 
 sec "Логи bot (последние 15 строк)"
