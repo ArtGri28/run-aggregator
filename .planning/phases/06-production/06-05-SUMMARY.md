@@ -15,7 +15,8 @@ key-files:
     - deploy/backup-test.sh
     - .planning/phases/06-production/06-05-PLAN.md
 plan_head_before: fe6ff2a
-commits: 0
+commits: 1
+commit: 4ecd344
 ---
 
 # Phase 6 Plan 05: проверка восстановления — промежуточная сводка
@@ -118,4 +119,6 @@ commits: 0
 
 ## Состояние репозитория
 
-Коммитов по этому плану нет. Не закоммичены: `deploy/restore-check.sh`, `deploy/RUNBOOK.md`, `deploy/backup-test.sh`, `06-05-PLAN.md`, эта сводка. `deploy/vps`, `backup.sh`, `backup-lib.sh`, `ROADMAP.md`, `STATE.md` и статусы фаз не менялись. VPS, production, Telegram и внешняя сеть не использовались; production-ключи не использовались.
+Закоммичено владельцем: `4ecd344` «feat(06-05): add verified restore check and recovery runbook», родитель `fe6ff2a`. Коммит содержит ровно пять ожидаемых файлов: `06-05-PLAN.md`, эта сводка, `deploy/backup-test.sh`, `deploy/restore-check.sh`, `deploy/RUNBOOK.md`. После коммита рабочее дерево было чистым. Push не выполнялся: удалённый репозиторий не настроен. Эта запись о коммите внесена в сводку после него и в `4ecd344` не входит.
+
+`deploy/vps`, `backup.sh`, `backup-lib.sh`, `ROADMAP.md`, `STATE.md` и статусы фаз не менялись. VPS, production, Telegram и внешняя сеть не использовались; production-ключи не использовались.
