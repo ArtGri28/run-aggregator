@@ -16,7 +16,11 @@
 #   режимы host-apply.sh и однострочники.
 # Без аргумента Docker не нужен. С аргументом pg поднимается одноразовый PostgreSQL 17
 # (копия docker-compose.test.yml: проект backup-probe-test, порт 127.0.0.1:55433, данные в
-# tmpfs): замер дампов для BACKUP_MIN_BYTES (D-21), проверка counters_sql и допущение A4.
+# tmpfs): замер дампов для BACKUP_MIN_BYTES (D-21), проверка counters_sql и допущение A4;
+# затем раздел restore — настоящие pg_dump, age (одноразовый ключ из временного каталога) и
+# deploy/restore-check.sh: восстановление в отдельные контейнеры без сети, сверка данных и схемы,
+# отказы копии (RESTORE FAIL, код 1) и окружения (STOP, код 2), прерывание сигналом, отсутствие
+# строк данных в выводе.
 # Запуск на Mac или Linux (системный bash 3.2):  /bin/bash deploy/backup-test.sh [pg] -> BACKUP TESTS OK
 set -euo pipefail
 export LC_ALL=C
@@ -25,9 +29,11 @@ HERE=$PWD
 
 T=$(mktemp -d)
 PROBE_FILE=""
+RESTORE_CID=""
 API_PID=""
 cleanup() {
   if [ -n "$API_PID" ]; then kill "$API_PID" 2>/dev/null || true; fi
+  if [ -n "$RESTORE_CID" ]; then docker rm -f -v $RESTORE_CID >/dev/null 2>&1 || true; fi
   if [ -n "$PROBE_FILE" ]; then docker compose -f "$PROBE_FILE" down -v --remove-orphans >/dev/null 2>&1 || true; fi
   rm -rf "$T"
 }
@@ -1507,6 +1513,457 @@ t_pg() {
   fi
 }
 
+# ---- restore: настоящие age и PostgreSQL 17 (только с аргументом pg, после t_pg) ------------
+# Исходная БД — backup_probe_test раздела pg (3000 событий) плюс строки во всех таблицах схемы;
+# дамп занимает несколько блоков age (64 КиБ). Копия: pg_dump -Fc -> age с одноразовым ключом из
+# временного каталога (ключ владельца и backup-recipient не используются). Восстановление — только
+# в отдельные контейнеры без сети: aggregator-restore-check-<pid> (сам restore-check.sh) и
+# backup-probe-restore-<pid> (сверка данных и схемы тестом). pg_dump, age, pg_restore и PostgreSQL —
+# настоящие. docker для restore-check.sh идёт через обёртку: она пишет вызовы в журнал и передаёт
+# их настоящему docker; подменяет ответ только в трёх случаях STOP (Docker не запущен, контейнер
+# не стартовал, PostgreSQL не готов) — они помечены словом «заглушка» — и в случаях сигналов
+# (pg_isready отвечает «не готов» либо pg_restore задержан на 3 с, чтобы сигнал пришёл в нужный
+# момент; контейнер и восстановление настоящие). Сбои окружения при восстановлении: настоящие —
+# tmpfs контейнера ограничен 64 МБ (режим small, настоящая нехватка места) и контейнер убит перед
+# pg_restore (режим kill); на заглушке — текст «No space left on device» от pg_restore, код 126
+# у docker exec для pg_restore и для psql. Сигнал посылается только процессу скрипта:
+# Ctrl-C в терминале (сигнал всей группе процессов) здесь не воспроизводится.
+RQ_SEED="INSERT INTO users (tg_id, filters) VALUES (900000001, '{\"city\":\"kazan\"}'), (900000002, '{}') ON CONFLICT DO NOTHING;
+INSERT INTO heartbeats (component, beat_at) VALUES ('restore-seed', TIMESTAMPTZ '2026-01-05 03:00:00+00') ON CONFLICT DO NOTHING;
+WITH e AS (INSERT INTO events (title, title_norm, start_date, start_time, country_code, city, city_key, event_type)
+  VALUES ('Restore control', 'restore control', DATE '2027-03-14', TIME '09:30', 'RU', 'Kazan', 'kazan', 'road') RETURNING id)
+INSERT INTO event_distances (event_id, distance_m, label) SELECT id, 21097, 'half' FROM e;
+UPDATE events SET merged_into_id = (SELECT id FROM events WHERE title = 'Probe event 1'), is_listed = false WHERE title = 'Probe event 2';
+INSERT INTO sources (code) VALUES ('restore-src-a'), ('restore-src-b');
+INSERT INTO ingest_runs (source_id, status, finished_at, fetched, parsed, upserted, metrics)
+  SELECT id, 'ok', TIMESTAMPTZ '2026-01-05 02:00:00+00', 2400, 2400, 2400, '{\"empty_city\":0.25}' FROM sources WHERE code = 'restore-src-a';
+INSERT INTO ingest_runs (source_id, status, error, snapshot)
+  SELECT id, 'failed', 'restore control error', '{\"items\":[1,2]}' FROM sources WHERE code = 'restore-src-b';
+INSERT INTO source_events (source_id, external_id, url, payload, content_hash, event_id, match_state, last_run_id, fields)
+  SELECT r.source_id, 'ext-' || g, 'https://example.invalid/e/' || g,
+    jsonb_build_object('n', g, 'blob', md5(g::text) || md5('a' || g) || md5('b' || g) || md5('c' || g)),
+    md5('h' || g), e.id, 'auto', r.id, jsonb_build_object('title', e.title)
+  FROM generate_series(1, 2400) g JOIN events e ON e.title = 'Probe event ' || g
+    CROSS JOIN (SELECT id, source_id FROM ingest_runs WHERE status = 'ok') r;
+INSERT INTO dedup_candidates (source_event_id, event_id, score, reasons, state, decided_at, decided_by)
+  SELECT se.id, e.id, 0.875, '{\"title\":0.9}', v.st,
+    CASE WHEN v.st = 'pending' THEN NULL ELSE TIMESTAMPTZ '2026-01-05 04:00:00+00' END,
+    CASE WHEN v.st = 'confirmed' THEN 900000001 END
+  FROM (VALUES ('ext-10', 'Probe event 20', 'pending'), ('ext-11', 'Probe event 21', 'confirmed'), ('ext-12', 'Probe event 22', 'rejected')) v(ext, title, st)
+    JOIN source_events se ON se.external_id = v.ext JOIN events e ON e.title = v.title;
+INSERT INTO source_alerts (source_id, state, run_id) SELECT source_id, 'failed', id FROM ingest_runs WHERE status = 'failed'"
+RCNT_WANT='events_listed=3000 users=2 events_merged=1 dedup_candidates=pending:1|confirmed:1|rejected:1 source_alerts=1 heartbeats=1 migration='
+# Контрольные записи и значения одной строкой.
+RQ_CTL="SELECT (SELECT e.title || '|' || e.start_date || '|' || e.start_time || '|' || e.city_key || '|' || d.distance_m || '|' || d.label
+    FROM events e JOIN event_distances d ON d.event_id = e.id WHERE e.title_norm = 'restore control')
+  || ' ' || (SELECT filters->>'city' FROM users WHERE tg_id = 900000001)
+  || ' ' || (SELECT count(*) FROM users WHERE tg_id IN (900000001, 900000002))
+  || ' ' || (SELECT to_char(beat_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS') FROM heartbeats WHERE component = 'restore-seed')
+  || ' ' || (SELECT count(*) FROM events WHERE title LIKE 'Probe event %')
+  || ' ' || (SELECT count(*) FROM source_events se JOIN events e ON e.id = se.event_id
+      WHERE se.fields->>'title' = e.title AND se.content_hash = md5('h' || (se.payload->>'n'))
+        AND se.payload->>'blob' = md5(se.payload->>'n') || md5('a' || (se.payload->>'n')) || md5('b' || (se.payload->>'n')) || md5('c' || (se.payload->>'n')))
+  || ' ' || (SELECT m.title || '>' || t.title FROM events m JOIN events t ON t.id = m.merged_into_id)
+  || ' ' || (SELECT string_agg(c.state || ':' || c.score || ':' || coalesce(c.decided_by::text, '-'), ',' ORDER BY c.state) FROM dedup_candidates c)
+  || ' ' || (SELECT s.code || ':' || a.state || ':' || r.error FROM source_alerts a JOIN sources s ON s.id = a.source_id JOIN ingest_runs r ON r.id = a.run_id)
+  || ' ' || (SELECT metrics->>'empty_city' FROM ingest_runs WHERE status = 'ok')"
+RCTL_WANT='Restore control|2027-03-14|09:30:00|kazan|21097|half kazan 2 2026-01-05T03:00:00 3000 2400 Probe event 2>Probe event 1 confirmed:0.875:900000001,pending:0.875:-,rejected:0.875:- restore-src-b:failed:restore control error 0.25'
+# Свёртка содержимого: все строки всех таблиц схемы целиком и значения последовательностей.
+RTABLES="sources ingest_runs events source_events event_distances dedup_candidates users heartbeats source_alerts goose_db_version"
+RQ_DIG="SELECT ''"
+for RTB in $RTABLES; do
+  RQ_DIG="$RQ_DIG || '$RTB=' || (SELECT count(*) || ':' || coalesce(md5(string_agg(t::text, ',' ORDER BY t::text)), '-') FROM $RTB t) || ' '"
+done
+RQ_DIG="$RQ_DIG || 'seq=' || (SELECT md5(string_agg(sequencename || '=' || coalesce(last_value::text, '-'), ',' ORDER BY sequencename)) FROM pg_sequences)"
+# Список таблиц схемы public: набор RTABLES обязан совпадать с ним.
+RQ_TABLES="SELECT string_agg(tablename, ' ' ORDER BY tablename) FROM pg_tables WHERE schemaname = 'public'"
+RBLOCK=65536 # блок данных age
+RFLAGS='--no-owner --exit-on-error --single-transaction'
+# rq <SQL>: запрос к исходной БД; rdb <SQL>: запрос к БД контейнера сверки
+rq() { dc exec -T postgres psql -U aggregator -d backup_probe_test -v ON_ERROR_STOP=1 -Atc "$1"; }
+rdb() { docker exec -i "backup-probe-restore-$$" psql -U aggregator -d aggregator -v ON_ERROR_STOP=1 -Atc "$1"; }
+rls() { ls -A "$T/restore" | sort | tr '\n' ' '; }
+# rcap <файл> <счётчики>: подпись по контракту S6 для файла
+rcap() { printf 'aggregator-2026-01-05.dump.age sha256=%s size=%s counts=%s' "$(_sha256 "$1")" "$(wc -c < "$1" | tr -d ' ')" "$2"; }
+# rschema: схема БД без строк \restrict (случайный ключ pg_dump) — читает stdin
+rschema() { grep -v -e '^\\restrict' -e '^\\unrestrict' | shasum -a 256; }
+# rwrap: обёртки docker и sleep для restore-check.sh. Вызовы docker пишутся в $T/restore-docker.log
+# и уходят настоящему docker; режим в $T/rmode подменяет ответ (заглушка): noinfo — docker info,
+# norun — docker run, noready — pg_isready (и sleep без ожидания).
+rwrap() {
+  mkdir -p "$T/rbin"
+  : > "$T/restore-docker.log"
+  : > "$T/rmode"
+  cat > "$T/rbin/docker" <<WRAP
+#!/bin/bash
+echo "\$*" >> "$T/restore-docker.log"
+case "\$(cat "$T/rmode"):\$1" in
+  noinfo:info) exit 1 ;;
+  norun:run) echo "stub: no start" >&2; exit 125 ;;
+  noready:exec | wait:exec) case "\$*" in *pg_isready*) exit 2 ;; esac ;;
+  hold:exec) case "\$*" in *pg_restore*) /bin/sleep 3 ;; esac ;;
+  small:run) a=(); for x in "\$@"; do [ "\$x" = /var/lib/postgresql/data ] && x=\$x:size=64m; a+=("\$x"); done
+    exec "$(command -v docker)" "\${a[@]}" ;;
+  kill:exec) case "\$*" in *pg_restore*) for x in "\$@"; do case "\$x" in aggregator-restore-check-*) "$(command -v docker)" kill "\$x" > /dev/null 2>&1 ;; esac; done ;; esac ;;
+  nospace:exec) case "\$*" in *pg_restore*) cat > /dev/null
+    echo 'pg_restore: error: COPY failed for table "big": ERROR:  could not extend file "base/5/16385": No space left on device' >&2; exit 1 ;; esac ;;
+  noexec:exec) case "\$*" in *pg_restore*) echo "Error response from daemon: stub" >&2; exit 126 ;; esac ;;
+  nopsql:exec) case "\$*" in *psql*) exit 126 ;; esac ;;
+esac
+exec "$(command -v docker)" "\$@"
+WRAP
+  cat > "$T/rbin/sleep" <<WRAP
+#!/bin/bash
+if [ "\$(cat "$T/rmode")" = noready ]; then exit 0; fi
+exec /bin/sleep "\$@"
+WRAP
+  chmod +x "$T/rbin/docker" "$T/rbin/sleep"
+  # Запускатель: фоновый процесс наследует игнорирование SIGINT — оно снимается; при RPRE до
+  # запуска создаётся чужой контейнер с именем, которое возьмёт скрипт (pid после exec тот же).
+  cat > "$T/rlaunch.py" <<'LAUNCH'
+import os, signal, subprocess, sys
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+if os.environ.get("RPRE"):
+    subprocess.call([os.environ["RDOCKER"], "create", "--pull", "never", "--network", "none", "--name",
+                     "aggregator-restore-check-%d" % os.getpid(), os.environ["RPRE"]], stdout=subprocess.DEVNULL)
+os.execv(sys.argv[1], sys.argv[1:])
+LAUNCH
+}
+rlog() { grep -c -- "^$1" "$T/restore-docker.log" || true; }
+# rrun <аргументы restore-check.sh>: RR_RC, RR_OUT (stdout), RR_LAST; stderr — в $T/restore.err
+RC_SCRIPT=""
+RBASH=/bin/bash
+rrun() {
+  RFILES=$(rls)
+  RR_RC=0
+  RR_OUT=$(PATH="$T/rbin:$PATH" "$RBASH" "$RC_SCRIPT" "$@" 2> "$T/restore.err") || RR_RC=$?
+  RR_LAST=$(printf '%s\n' "$RR_OUT" | tail -1)
+}
+# rclean: контейнера проверки нет, новых файлов во временном каталоге нет
+rclean() { [ -z "$(docker ps -aq --filter name=aggregator-restore-check-)" ] && [ "$(rls)" = "$RFILES" ]; }
+# rquiet: в выводе нет содержимого ключа и пути к нему
+rquiet() { ! { printf '%s\n' "$RR_OUT"; cat "$T/restore.err"; } | grep -qF -e "$RSK" -e "$T/restore/key" -e "$T/restore/other"; }
+# rfail <причина> <описание>: код 1, последняя строка, нет RESTORE OK, чисто
+rfail() {
+  RWANT="RESTORE FAIL reason=$1"
+  need '[ "$RR_RC" = 1 ]'
+  need '[ "$RR_LAST" = "$RWANT" ]'
+  need '! printf "%s\n" "$RR_OUT" | grep -q "RESTORE OK"'
+  need rclean
+  need rquiet
+  report "restore-fail: $2 -> $RWANT"
+}
+# rstop <текст причины> <описание>: код 2, в stdout нет строк RESTORE, в stderr STOP с причиной, чисто
+rstop() {
+  RWANT=$1
+  need '[ "$RR_RC" = 2 ]'
+  need '! printf "%s\n" "$RR_OUT" | grep -q "RESTORE"'
+  need 'grep -Eq "^STOP: .*($RWANT)" "$T/restore.err"'
+  need rclean
+  need rquiet
+  report "restore-stop: $2 -> STOP, код 2"
+}
+# rsig <сигнал> <код> <режим обёртки> <образец вызова в журнале> <описание>: скрипт запускается в
+# фоне, после появления вызова получает сигнал; ожидаются код, отсутствие строк RESTORE, чистота
+rsig() {
+  local n0 pid i rc=0
+  RFILES=$(rls)
+  echo "$3" > "$T/rmode"
+  n0=$(rlog "$4")
+  PATH="$T/rbin:$PATH" python3 "$T/rlaunch.py" "$RBASH" "$RC_SCRIPT" "$f" "$key" "$cap" > "$T/rsig.out" 2> "$T/restore.err" &
+  pid=$!
+  for i in $(seq 1 150); do [ "$(rlog "$4")" -gt "$n0" ] && break; /bin/sleep 0.2; done
+  RSIG_HAD=$(docker ps -q --filter "name=aggregator-restore-check-$pid")
+  kill "-$1" "$pid"
+  wait "$pid" || rc=$?
+  : > "$T/rmode"
+  RR_RC=$rc; RR_OUT=$(cat "$T/rsig.out"); RSIG_NAME=$1; RSIG_WANT=$2
+  need '[ -n "$RSIG_HAD" ]'
+  need '[ "$RR_RC" = "$RSIG_WANT" ]'
+  need '! printf "%s\n" "$RR_OUT" | grep -q RESTORE'
+  need 'grep -qx "INTERRUPTED signal=$RSIG_NAME" "$T/restore.err"'
+  need rclean
+  need rquiet
+  report "restore-signal: $1 $5 -> код $2, строки RESTORE нет, контейнер удалён"
+}
+# rbook: deploy/RUNBOOK.md согласован с restore-check.sh — причины отказа, виды и этапы строки
+# detail, коды сигналов, флаги pg_restore, заголовок журнала
+rbook() {
+  local B=$HERE/RUNBOOK.md C=$HERE/restore-check.sh v
+  if [ ! -s "$B" ]; then bad "restore: нет deploy/RUNBOOK.md"; return; fi
+  for v in sha decrypt restore counters; do
+    need 'grep -qF "RESTORE FAIL reason=$v" "$B" && grep -v "^ *#" "$C" | grep -q "fail $v"'
+  done
+  for v in $(grep -v '^ *#' "$C" | grep -o 'kind=[a-z][a-z-]*' | sort -u); do need 'grep -qF "$v" "$B"'; done
+  need '[ "$(grep -v "^ *#" "$C" | grep -o "kind=[a-z][a-z-]*" | sort -u | wc -l | tr -d " ")" = 5 ]'
+  for v in age pg_restore counters; do need 'grep -qF "detail stage=$v exit=" "$B" && grep -v "^ *#" "$C" | grep -qF "detail stage=$v exit="'; done
+  for v in 130 143 129; do need 'grep -q "$v" "$B" && grep -v "^ *#" "$C" | grep -q "exit $v"'; done
+  need 'grep -qF "STOP:" "$B" && grep -qF "INTERRUPTED signal=" "$B"'
+  need 'grep -qF -- "$RFLAGS" "$B" && grep -v "^ *#" "$C" | grep -qF -- "$RFLAGS"'
+  need 'grep -qx "## Журнал проверок восстановления" "$B" && grep -qxF "| Дата | Файл копии | Результат | migration | Примечание |" "$B"'
+  if [ -z "$PB" ]; then PB=""; echo "restore: runbook ok"; ok "restore: RUNBOOK.md согласован с restore-check.sh"; else report "restore: RUNBOOK.md согласован с restore-check.sh"; fi
+}
+# Маркер содержит фразы, по которым restore-check.sh узнаёт сбой окружения: в строке данных они
+# не должны превращать отказ копии в STOP.
+RLEAK="RESTORE-LEAK-MARKER-7391 No space left on device out of memory server closed the connection"
+# rscratch <имя БД> <SQL> <файл.age>: одноразовая БД в контейнере пробы -> pg_dump -Fc -> age -> БД удалена
+rscratch() {
+  dc exec -T postgres createdb -U aggregator "$1" \
+    && dc exec -T postgres psql -U aggregator -d "$1" -q -v ON_ERROR_STOP=1 -c "$2" > /dev/null \
+    && dc exec -T postgres pg_dump -U aggregator -Fc "$1" | age -r "$rcp" -o "$3" \
+    && dc exec -T postgres dropdb -U aggregator "$1"
+}
+# Дамп около 23 МБ несжимаемых данных: в tmpfs на 64 МБ не помещается.
+RQ_BIG="CREATE TABLE big (v text);
+ALTER TABLE big ALTER COLUMN v SET STORAGE EXTERNAL;
+INSERT INTO big SELECT (SELECT string_agg(md5(g::text || ':' || i), '') FROM generate_series(1, 50) i) FROM generate_series(1, 25000) g"
+# База, дамп которой не восстанавливается: проверка строки aa_leak обращается к таблице zz_ref,
+# а её данные загружаются позже — pg_restore отказывает и цитирует строку в своём сообщении.
+RQ_LEAK="CREATE TABLE zz_ref (v text);
+CREATE FUNCTION probe_ok(text) RETURNS boolean LANGUAGE sql AS 'SELECT EXISTS (SELECT 1 FROM public.zz_ref WHERE v = \$1)';
+INSERT INTO zz_ref VALUES ('$RLEAK');
+CREATE TABLE aa_leak (secret text CHECK (probe_ok(secret)));
+INSERT INTO aa_leak VALUES ('$RLEAK')"
+t_restore() {
+  local R=$T/restore p key other rcp cnt dig dbs sch f plain size psize mig top cap n f1 i runs img by pre
+  for p in age age-keygen docker python3 shasum; do
+    if ! command -v "$p" >/dev/null 2>&1; then bad "restore: нет программы $p"; return; fi
+  done
+  if [ -z "$PROBE_FILE" ] || ! rq 'SELECT 1' >/dev/null 2>&1; then bad "restore: нет тестовой БД раздела pg"; return; fi
+  mkdir -p "$R"
+  rwrap
+  RC_SCRIPT=$HERE/restore-check.sh
+  RSK="AGE-SECRET""-KEY-"
+  key=$R/key.txt; other=$R/other.txt; plain=$R/plain.dump; f=$R/aggregator-2026-01-05.dump.age
+  if ! rq "$RQ_SEED" >/dev/null; then bad "restore: засев не выполнен"; return; fi
+  # Посторонний контейнер (создан, не запущен): раздел не должен его тронуть.
+  img=$(sed -n 's/^ *image: *//p' "$PROBE_FILE" | head -1)
+  by=backup-probe-bystander-$$
+  RESTORE_CID=$by
+  if ! docker create --pull never --network none --name "$by" "$img" > /dev/null 2>&1; then bad "restore: посторонний контейнер не создан"; return; fi
+  # Одноразовые ключи: key — получатель копии, other — посторонний.
+  if ! age-keygen -o "$key" 2>/dev/null || ! age-keygen -o "$other" 2>/dev/null; then bad "restore: age-keygen"; return; fi
+  rcp=$(age-keygen -y "$key")
+  need '[[ $rcp =~ ^age1[a-z0-9]{58}$ ]] && [ "$rcp" != "$(cat "$VPS/backup-recipient")" ]'
+
+  # Исходная БД: счётчики, контрольные записи, свёртка данных, схема, список баз
+  cnt=$(rq "$(counters_sql)"); dig=$(rq "$RQ_DIG"); dbs=$(rq "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database")
+  sch=$(dc exec -T postgres pg_dump -U aggregator -s --no-owner backup_probe_test | rschema)
+  mig=${cnt##* migration=}
+  top=$(ls "$HERE/../migrations"/*.sql | sed -E 's#.*/0*([0-9]+)_.*#\1#' | sort -n | tail -1)
+  need '[[ $cnt =~ $_cnt_re ]] && [ "$cnt" = "$RCNT_WANT$top" ]'
+  need '[ "$(rq "$RQ_CTL")" = "$RCTL_WANT" ]'
+  need '[ "$(rq "$RQ_TABLES")" = "$(printf "%s\n" $RTABLES | sort | tr "\n" " " | sed "s/ \$//")" ]'
+  need '! printf "%s\n" "$dig" | grep -q "=0:"'
+  report "restore: исходная БД, строки во всех $(printf '%s\n' $RTABLES | wc -l | tr -d ' ') таблицах: $cnt"
+
+  # Дамп и шифрование настоящими pg_dump и age
+  if ! dc exec -T postgres pg_dump -U aggregator -Fc backup_probe_test > "$plain" || ! age -r "$rcp" -o "$f" "$plain"; then
+    bad "restore: дамп или шифрование не выполнены"; return
+  fi
+  psize=$(wc -c < "$plain" | tr -d ' '); size=$(wc -c < "$f" | tr -d ' ')
+  need '[ "$(head -c 21 "$f")" = "age-encryption.org/v1" ] && [ "$size" -gt "$psize" ]'
+  need '[ "$psize" -gt $((3 * RBLOCK)) ]'
+  need 'grep -aq dedup_candidates "$plain" && ! grep -aq dedup_candidates "$f"'
+  need '[ "$(age -d -i "$key" "$f" | shasum -a 256)" = "$(shasum -a 256 < "$plain")" ]'
+  need '! age -d -i "$other" "$f" > /dev/null 2>&1'
+  report "restore: pg_dump -Fc ($psize байт, блоков age: $((psize / RBLOCK + 1))) -> age ($size байт); расшифровка побайтно равна дампу, чужой ключ не расшифровывает"
+
+  # Сверка данных: то же восстановление в свой контейнер без сети, запросы к восстановленной БД
+  RESTORE_CID="$by backup-probe-restore-$$"
+  n=1
+  if docker run -d --pull never --name "backup-probe-restore-$$" --network none --tmpfs /var/lib/postgresql/data -e POSTGRES_USER=aggregator \
+    -e POSTGRES_DB=aggregator -e POSTGRES_HOST_AUTH_METHOD=trust "$img" > /dev/null 2>&1; then
+    for i in $(seq 1 60); do
+      if docker exec "backup-probe-restore-$$" pg_isready -q -h 127.0.0.1 -U aggregator -d aggregator > /dev/null 2>&1; then n=0; break; fi
+      sleep 1
+    done
+  fi
+  need '[ "$n" = 0 ]'
+  need '[ "$(docker inspect -f "{{.HostConfig.NetworkMode}}" "backup-probe-restore-$$")" = none ]'
+  need 'age -d -i "$key" "$f" | docker exec -i "backup-probe-restore-$$" pg_restore -U aggregator -d aggregator $RFLAGS'
+  need '[ "$(rdb "$(counters_sql)")" = "$cnt" ]'
+  need '[ "$(rdb "$RQ_CTL")" = "$RCTL_WANT" ]'
+  need '[ "$(rdb "$RQ_DIG")" = "$dig" ]'
+  need '[ "$(rdb "SELECT max(version_id) FROM goose_db_version")" = "$top" ]'
+  need '[ "$(docker exec "backup-probe-restore-$$" pg_dump -U aggregator -s --no-owner aggregator | rschema)" = "$sch" ]'
+  docker rm -f -v "backup-probe-restore-$$" > /dev/null 2>&1 || true
+  RESTORE_CID=$by
+  report "restore: данные в отдельном PostgreSQL равны исходным (свёртка всех таблиц и последовательностей; схема pg_dump -s; контрольные записи; счётчики; migration=$top)"
+
+  # Сквозной путь через restore-check.sh; вторая строка SIZE WARN результата не меняет
+  f1=$FAILS
+  cap=$(rcap "$f" "$cnt")
+  RWANT="RESTORE OK counters=match migration=$top"
+  for i in 1 2; do
+    if [ "$i" = 2 ]; then cap="$cap"$'\n'"SIZE WARN bytes=$size"; fi
+    rrun "$f" "$key" "$cap"
+    need '[ "$RR_RC" = 0 ]'
+    need '[ "$RR_LAST" = "$RWANT" ]'
+    need 'printf "%s\n" "$RR_OUT" | grep -qx "file=aggregator-2026-01-05.dump.age sha256=ok size=$size"'
+    need 'printf "%s\n" "$RR_OUT" | grep -qxF "counts=$cnt"'
+    need rclean
+    need rquiet
+  done
+  runs=$(rlog 'run ')
+  need '[ "$runs" = 2 ] && [ "$(grep -c -- "^run .*--pull never .*--network none " "$T/restore-docker.log")" = 2 ]'
+  need 'grep -qF -- "$RFLAGS" "$HERE/restore-check.sh"'
+  report "restore: restore-check.sh -> $RWANT (подпись в одну и в две строки)"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: tracer ok migration=$top"; fi
+
+  # Пять отказов плана
+  f1=$FAILS
+  cap=$(rcap "$f" "$cnt")
+  { cat "$f"; printf x; } > "$R/plus.age"
+  rrun "$R/plus.age" "$key" "$cap"
+  rfail sha "к файлу дописан байт, подпись прежняя"
+  rrun "$f" "$other" "$cap"
+  need 'printf "%s\n" "$RR_OUT" | grep -qx "detail stage=age exit=1"'
+  need '[ ! -s "$T/restore.err" ]'
+  rfail decrypt "неправильный ключ"
+  # 50 МБ: pg_restore отказывает на первых байтах, age ещё пишет и завершается по закрытому каналу (код 141)
+  head -c 50000000 /dev/zero | tr '\0' j | age -r "$rcp" -o "$R/junk.age"
+  rrun "$R/junk.age" "$key" "$(rcap "$R/junk.age" "$cnt")"
+  need 'printf "%s\n" "$RR_OUT" | grep -Eqx "detail stage=pg_restore exit=1 age_exit=(0|141) kind=archive-format"'
+  need '[ ! -s "$T/restore.err" ]'
+  rfail restore "зашифрованы произвольные байты (не дамп, 50 МБ)"
+  rrun "$f" "$key" "$(rcap "$f" "${cnt% migration=*} migration=$((mig + 1))")"
+  need 'printf "%s\n" "$RR_OUT" | grep -q "^expected=.* migration=$((mig + 1))\$"'
+  need 'printf "%s\n" "$RR_OUT" | grep -qxF "actual=$cnt"'
+  rfail counters "в подписи другой номер миграции"
+  rrun "$f" "$key"
+  need '[ "$RR_RC" = 2 ] && ! printf "%s\n" "$RR_OUT" | grep -q "^RESTORE" && grep -q "^STOP: " "$T/restore.err"'
+  need rclean
+  rrun "$f" "$key" "$cap"$'\n'"посторонняя строка"
+  need '[ "$RR_RC" = 2 ] && ! printf "%s\n" "$RR_OUT" | grep -q "^RESTORE" && grep -q "^STOP: " "$T/restore.err"'
+  need rclean
+  need rquiet
+  report "restore-fail: два аргумента и подпись с посторонней строкой -> STOP, код 2, строки RESTORE нет"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: failures ok cases=5"; fi
+
+  # STOP: проверку нельзя выполнить — код 2, о копии ничего не утверждается
+  f1=$FAILS
+  # образа нет локально (настоящий docker): копия скрипта рядом с составом, где назван отсутствующий образ
+  mkdir -p "$T/rtree/deploy/vps"
+  cp "$HERE/restore-check.sh" "$T/rtree/deploy/"; cp "$VPS/backup-lib.sh" "$T/rtree/deploy/vps/"
+  printf 'services:\n  postgres:\n    image: backup-probe-absent:none\n' > "$T/rtree/docker-compose.yml"
+  RC_SCRIPT=$T/rtree/deploy/restore-check.sh
+  runs=$(rlog 'run ')
+  rrun "$f" "$key" "$cap"
+  RC_SCRIPT=$HERE/restore-check.sh
+  need '[ "$(rlog "run ")" = "$runs" ] && [ "$(tail -1 "$T/restore-docker.log")" = "image inspect backup-probe-absent:none" ]'
+  need '! docker image inspect backup-probe-absent:none > /dev/null 2>&1'
+  rstop "не найден локально" "образа нет локально, скачивание не начато"
+  echo noinfo > "$T/rmode"
+  rrun "$f" "$key" "$cap"
+  rstop "Docker не запущен" "docker info отказал (заглушка)"
+  echo norun > "$T/rmode"
+  rrun "$f" "$key" "$cap"
+  rstop "контейнер проверки не запустился" "docker run отказал (заглушка)"
+  echo noready > "$T/rmode"
+  runs=$(rlog 'run ')
+  rrun "$f" "$key" "$cap"
+  need '[ "$(rlog "run ")" = $((runs + 1)) ] && [ "$(rlog "exec .*pg_isready")" -ge 60 ] && [ "$(rlog "rm -f -v aggregator-restore-check-")" -ge 1 ]'
+  rstop "не стал готов" "PostgreSQL не готов за 60 попыток (заглушка pg_isready, контейнер настоящий)"
+  : > "$T/rmode"
+  # имя контейнера занято чужим контейнером: STOP, чужой контейнер остаётся
+  RFILES=$(rls)
+  n=$(rlog 'rm -f -v aggregator-restore-check-')
+  RR_RC=0
+  RR_OUT=$(RPRE=$img RDOCKER=$(command -v docker) PATH="$T/rbin:$PATH" python3 "$T/rlaunch.py" "$RBASH" "$RC_SCRIPT" "$f" "$key" "$cap" 2> "$T/restore.err") || RR_RC=$?
+  pre=$(docker ps -aq --filter name=aggregator-restore-check- --filter status=created)
+  RESTORE_CID="$by $pre"
+  need '[ "$(printf "%s\n" "$pre" | grep -c .)" = 1 ]'
+  need '[ "$(rlog "rm -f -v aggregator-restore-check-")" = "$n" ]'
+  docker rm -f -v $pre > /dev/null 2>&1 || true
+  RESTORE_CID=$by
+  rstop "занято" "имя контейнера занято чужим контейнером, он не удалён"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: stop ok cases=5"; fi
+
+  # Сообщение pg_restore со строкой данных в вывод не попадает
+  f1=$FAILS
+  if ! rscratch backup_probe_leak "$RQ_LEAK" "$R/leak.age" || ! rscratch backup_probe_other "CREATE TABLE other_only (v int)" "$R/other.age" \
+    || ! rscratch backup_probe_big "$RQ_BIG" "$R/big.age"; then
+    bad "restore: одноразовые базы для проверок не подготовлены"; return
+  fi
+  rrun "$R/leak.age" "$key" "$(rcap "$R/leak.age" "$cnt")"
+  need '! { printf "%s\n" "$RR_OUT"; cat "$T/restore.err"; } | grep -q "$RLEAK"'
+  need '[ ! -s "$T/restore.err" ]'
+  need 'printf "%s\n" "$RR_OUT" | grep -qx "detail stage=pg_restore exit=1 age_exit=0 kind=data table=aa_leak"'
+  rfail restore "pg_restore отказал на строке данных (в ней фразы сбоя окружения): отказ копии, строка-маркер в вывод не попала"
+  # чужой, но исправный дамп: восстановление проходит, запрос счётчиков — ошибка содержимого, не окружения
+  rrun "$R/other.age" "$key" "$(rcap "$R/other.age" "$cnt")"
+  need 'printf "%s\n" "$RR_OUT" | grep -qx "detail stage=counters exit=1"'
+  need '[ ! -s "$T/restore.err" ]'
+  rfail counters "исправный дамп другой базы: запрос счётчиков не выполнен"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: leak ok"; fi
+
+  # Сбой окружения во время восстановления и запроса счётчиков: STOP, не отказ копии
+  f1=$FAILS
+  echo small > "$T/rmode"
+  rrun "$R/big.age" "$key" "$(rcap "$R/big.age" "$cnt")"
+  rstop "остановился|перестал отвечать|не хватило места" "настоящая нехватка места: tmpfs 64 МБ, дамп $(($(wc -c < "$R/big.age") / 1000000)) МБ"
+  echo kill > "$T/rmode"
+  rrun "$f" "$key" "$cap"
+  rstop "остановился" "контейнер убит перед pg_restore (настоящий docker exec отказал)"
+  echo nospace > "$T/rmode"
+  rrun "$f" "$key" "$cap"
+  rstop "не хватило места" "pg_restore сообщил «No space left on device» (заглушка)"
+  echo noexec > "$T/rmode"
+  rrun "$f" "$key" "$cap"
+  rstop "docker exec pg_restore завершился с кодом 126" "docker exec для pg_restore вернул 126 (заглушка)"
+  echo nopsql > "$T/rmode"
+  rrun "$f" "$key" "$cap"
+  rstop "запрос счётчиков не выполнен" "docker exec для psql вернул 126 после успешного восстановления (заглушка)"
+  : > "$T/rmode"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: env ok cases=5"; fi
+
+  # Прерывание сигналом
+  f1=$FAILS
+  rsig INT 130 wait 'exec .*pg_isready' "при ожидании PostgreSQL"
+  rsig TERM 143 wait 'exec .*pg_isready' "при ожидании PostgreSQL"
+  rsig HUP 129 wait 'exec .*pg_isready' "при ожидании PostgreSQL"
+  rsig TERM 143 hold 'exec .*pg_restore' "во время pg_restore (восстановление затем проходит)"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: signal ok cases=4"; fi
+
+  # Повреждения копии
+  f1=$FAILS
+  python3 -c 'import sys; b = bytearray(open(sys.argv[1], "rb").read()); b[len(b) * 5 // 6] ^= 1; open(sys.argv[2], "wb").write(b)' "$f" "$R/flip.age"
+  rrun "$R/flip.age" "$key" "$cap"
+  rfail sha "изменён один бит в последней трети, подпись прежняя"
+  rrun "$R/flip.age" "$key" "$(rcap "$R/flip.age" "$cnt")"
+  rfail decrypt "изменён один бит в последней трети (первые блоки age уже ушли в pg_restore), подпись собрана для повреждённого файла"
+  head -c $((size / 2)) "$f" > "$R/cut.age"
+  rrun "$R/cut.age" "$key" "$cap"
+  rfail sha "файл обрезан наполовину, подпись прежняя"
+  rrun "$R/cut.age" "$key" "$(rcap "$R/cut.age" "$cnt")"
+  rfail decrypt "файл обрезан наполовину, подпись собрана для обрезанного файла"
+  head -c $((psize / 2)) "$plain" | age -r "$rcp" -o "$R/half.age"
+  rrun "$R/half.age" "$key" "$(rcap "$R/half.age" "$cnt")"
+  need 'printf "%s\n" "$RR_OUT" | grep -qx "detail stage=pg_restore exit=1 age_exit=0 kind=archive-format"'
+  rfail restore "зашифрован обрезанный дамп"
+  if [ "$FAILS" -eq "$f1" ]; then echo "restore: damage ok cases=3"; fi
+
+  rbook
+
+  # Исходная БД не подменена, временные ресурсы убраны
+  need '[ "$(rq "$(counters_sql)")" = "$cnt" ]'
+  need '[ "$(rq "$RQ_DIG")" = "$dig" ]'
+  need '[ "$(rq "SELECT string_agg(datname, chr(44) ORDER BY datname) FROM pg_database")" = "$dbs" ]'
+  need '[ "$(dc exec -T postgres pg_dump -U aggregator -s --no-owner backup_probe_test | rschema)" = "$sch" ]'
+  report "restore: исходная БД не изменилась (счётчики, свёртка, схема, список баз)"
+  need '[ "$(rlog "pull")" = 0 ] && [ "$(rlog "run ")" -gt 0 ] && [ "$(rlog "run ")" = "$(grep -c -- "^run .*--pull never .*--network none " "$T/restore-docker.log")" ]'
+  report "restore: docker pull не вызывался; каждый docker run — с --pull never и --network none ($(rlog 'run ') запусков)"
+  need '[ "$(docker inspect -f "{{.State.Status}}" "$by" 2> /dev/null)" = created ]'
+  docker rm -f -v "$by" > /dev/null 2>&1 || true
+  RESTORE_CID=""
+  report "restore: посторонний контейнер не тронут"
+  rm -rf "$R"
+  need '[ ! -e "$R" ]'
+  need '[ -z "$(docker ps -aq --filter name=aggregator-restore-check- --filter name=backup-probe-restore- --filter name=backup-probe-bystander-)" ]'
+  report "restore: ключи, дамп и контейнеры восстановления удалены"
+}
+
 SC_N=0
 # scn <имя>: конец сценария — провал печатается, успех молчит (итог раздела — ok-строка с числом)
 scn() { SC_N=$((SC_N + 1)); if [ -n "$PB" ]; then bad "$1$PB"; PB=""; fi; }
@@ -2140,6 +2597,6 @@ t_copy
 t_status
 t_apply
 t_pkg
-if [ "${1:-}" = pg ]; then t_pg; fi
+if [ "${1:-}" = pg ]; then t_pg; t_restore; fi
 
 if [ "$FAILS" -eq 0 ]; then echo "BACKUP TESTS OK"; else echo "BACKUP TESTS FAIL: $FAILS"; exit 1; fi
