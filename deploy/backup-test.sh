@@ -20,7 +20,10 @@
 # затем раздел restore — настоящие pg_dump, age (одноразовый ключ из временного каталога) и
 # deploy/restore-check.sh: восстановление в отдельные контейнеры без сети, сверка данных и схемы,
 # отказы копии (RESTORE FAIL, код 1) и окружения (STOP, код 2), прерывание сигналом, отсутствие
-# строк данных в выводе.
+# строк данных в выводе; затем раздел e2e — настоящий backup.sh (docker compose, pg_dump, age, curl
+# в локальную заглушку Bot API) и его копия с подписью в restore-check.sh.
+# Полный прогон с pg идёт 13–15 минут. На Mac не закрывать крышку: при закрытой крышке система
+# засыпает и caffeinate -i этому не мешает; прогон по частичному выводу успешным не считается.
 # Запуск на Mac или Linux (системный bash 3.2):  /bin/bash deploy/backup-test.sh [pg] -> BACKUP TESTS OK
 set -euo pipefail
 export LC_ALL=C
@@ -1964,6 +1967,86 @@ t_restore() {
   report "restore: ключи, дамп и контейнеры восстановления удалены"
 }
 
+# ---- e2e: backup.sh -> restore-check.sh (только с аргументом pg, после restore) --------------
+# Копия настоящего backup.sh (пути заменены, как в mk_env) делает копию базы aggregator в
+# контейнере пробы настоящими docker compose, psql, pg_dump и age с одноразовым ключом и
+# отправляет её настоящим curl в локальную заглушку Bot API. Подпись, которую получила заглушка,
+# и сам файл копии передаются restore-check.sh. Заглушки остаются только там, где на Mac нет
+# программы или нужен предсказуемый результат: timedatectl (часы синхронизированы), flock,
+# sleep, sync (fsync не проверяется), date (дата копии). Ключ владельца и backup-recipient
+# репозитория не используются; к Telegram и VPS обращений нет.
+eq() { dc exec -T postgres psql -U aggregator -d aggregator -v ON_ERROR_STOP=1 -Atc "$1"; }
+t_e2e() {
+  local key rcp cnt0 cnt1 dig0 dig1 hb f d cap sum size line mig top
+  if [ -z "$PROBE_FILE" ] || [ -z "$API_PORT" ]; then bad "e2e: нет контейнера пробы или заглушки Bot API"; return; fi
+  # База aggregator — то имя, с которым работает backup.sh; данные — как в разделе restore
+  if ! dc exec -T postgres createdb -U aggregator aggregator \
+    || ! (cd "$HERE/.." && DATABASE_URL='postgres://aggregator@127.0.0.1:55433/aggregator?sslmode=disable' \
+      go run ./cmd/aggregator migrate) > "$T/e2e-migrate.log" 2>&1 \
+    || ! eq "INSERT INTO events (title, title_norm, start_date, country_code, event_type)
+      SELECT 'Probe event ' || g, 'probe event ' || g, DATE '2027-01-01' + (g % 365), 'RU', 'road' FROM generate_series(1, 3000) g" > /dev/null \
+    || ! eq "$RQ_SEED" > /dev/null; then
+    bad "e2e: база aggregator в контейнере пробы не подготовлена"; return
+  fi
+  mk_env e2e
+  # docker и age — настоящие (в PATH копии их нет: Docker и Homebrew лежат вне /usr/bin)
+  printf '%s\n' '#!/bin/bash' "exec $(command -v docker) \"\$@\"" > "$E/bin/docker"
+  printf '%s\n' '#!/bin/bash' "exec $(command -v age) \"\$@\"" > "$E/bin/age"
+  cp "$PROBE_FILE" "$E/opt/docker-compose.yml"
+  key=$E/key.txt
+  if ! age-keygen -o "$key" 2> /dev/null; then bad "e2e: age-keygen"; return; fi
+  rcp=$(age-keygen -y "$key")
+  printf '%s\n' "$rcp" > "$E/lib/backup-recipient"
+  api_conf
+  api_mode ok
+  d=$(cat "$E/today")
+  f=$E/dir/aggregator-$d.dump.age
+  cnt0=$(eq "$(counters_sql)")
+  top=$(ls "$HERE/../migrations"/*.sql | sed -E 's#.*/0*([0-9]+)_.*#\1#' | sort -n | tail -1)
+
+  run_bk
+  size=$(wc -c < "$f" 2> /dev/null | tr -d ' ' || true)
+  sum=$(_sha256 "$f" 2> /dev/null || true)
+  cap=$(caption)
+  need '[ "$RC" = 0 ]'
+  need 'grep -qx "BACKUP OK file=aggregator-$d.dump.age size=$size" "$E/out"'
+  need 'grep -qx "COPY OK size=$size" "$E/out" && grep -q "^ROTATE OK " "$E/out"'
+  need '[ "$(head -c 21 "$f")" = "age-encryption.org/v1" ] && [ "$size" -gt $((3 * RBLOCK)) ]'
+  need 'sum_ok "$E/dir" "aggregator-$d.dump.age"'
+  need '[ "$(cat "$f.meta")" = "$cnt0" ] && [[ $cnt0 =~ $_cnt_re ]] && [[ $cnt0 == *" migration=$top" ]]'
+  need '[ -z "$(ls -A "$E/dir" | grep -v "^aggregator-$d\.dump\.age\(\.sha256\|\.meta\)\?\$")" ]'
+  need '[ "$(api_n "sendDocument token=match chat_id=$CHAT file=aggregator-$d.dump.age bytes=$size sha256=$sum reply=200")" = 1 ]'
+  need '[ "$cap" = "aggregator-$d.dump.age sha256=$sum size=$size counts=$cnt0" ]'
+  # отметки — настоящие строки heartbeats в исходной базе (после дампа, в копию не входят)
+  hb=$(eq "SELECT string_agg(component, ',' ORDER BY component) FROM heartbeats WHERE component IN ('backup', 'backup_copy') AND beat_at > now() - interval '10 minutes'")
+  need '[ "$hb" = "backup,backup_copy" ]'
+  cnt1=$(eq "$(counters_sql)")
+  need '[ "${cnt1/heartbeats=3/heartbeats=1}" = "$cnt0" ]'
+  need '! grep -rqa --exclude-dir=bin --exclude=key.txt -e "Restore control" -e "$RSK" "$E"'
+  need 'nosecret'
+  report "e2e: настоящий backup.sh: BACKUP OK, ROTATE OK, COPY OK, код 0; сумма, .meta, подпись и полученный заглушкой файл согласованы ($size байт)"
+
+  # Та же копия и подпись, которую получила заглушка, — в restore-check.sh
+  dig0=$(eq "$RQ_DIG")
+  RFILES=$(ls -A "$E" | sort | tr '\n' ' ')
+  RR_RC=0
+  RR_OUT=$(PATH="$T/rbin:$PATH" "$RBASH" "$HERE/restore-check.sh" "$f" "$key" "$cap" 2> "$T/restore.err") || RR_RC=$?
+  RR_LAST=$(printf '%s\n' "$RR_OUT" | tail -1)
+  need '[ "$RR_RC" = 0 ]'
+  need '[ "$RR_LAST" = "RESTORE OK counters=match migration=$top" ]'
+  need 'printf "%s\n" "$RR_OUT" | grep -qx "file=aggregator-$d.dump.age sha256=ok size=$size"'
+  need 'printf "%s\n" "$RR_OUT" | grep -qxF "counts=$cnt0"'
+  need '[ ! -s "$T/restore.err" ]'
+  need '[ -z "$(docker ps -aq --filter name=aggregator-restore-check-)" ] && [ "$(ls -A "$E" | sort | tr "\n" " ")" = "$RFILES" ]'
+  need '! { printf "%s\n" "$RR_OUT"; cat "$T/restore.err"; } | grep -qF -e "$RSK" -e "$key"'
+  dig1=$(eq "$RQ_DIG")
+  need '[ "$dig1" = "$dig0" ] && [ "$(eq "$(counters_sql)")" = "$cnt1" ]'
+  report "e2e: restore-check.sh на копии backup.sh -> RESTORE OK counters=match migration=$top; исходная база не изменилась"
+  rm -rf "$E"
+  need '[ ! -e "$E" ]'
+  report "e2e: каталог запуска, копия и одноразовый ключ удалены"
+}
+
 SC_N=0
 # scn <имя>: конец сценария — провал печатается, успех молчит (итог раздела — ok-строка с числом)
 scn() { SC_N=$((SC_N + 1)); if [ -n "$PB" ]; then bad "$1$PB"; PB=""; fi; }
@@ -2597,6 +2680,6 @@ t_copy
 t_status
 t_apply
 t_pkg
-if [ "${1:-}" = pg ]; then t_pg; t_restore; fi
+if [ "${1:-}" = pg ]; then t_pg; t_restore; E2E_F0=$FAILS; t_e2e; if [ "$FAILS" -eq "$E2E_F0" ]; then echo "e2e: backup.sh -> restore-check.sh ok"; fi; fi
 
 if [ "$FAILS" -eq 0 ]; then echo "BACKUP TESTS OK"; else echo "BACKUP TESTS FAIL: $FAILS"; exit 1; fi
