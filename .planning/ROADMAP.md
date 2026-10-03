@@ -274,7 +274,7 @@ Plans:
   3. Реализация соответствует контракту; устаревшие кнопки не ломают бот
   4. Владелец прошёл приёмку в Telegram по чек-листу сценариев
 
-**Plans**: 1/8 plans executed
+**Plans**: 2/8 plans executed
 
 Plans:
 **Wave 1**
@@ -283,7 +283,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md — Контракт экранов и сценариев S-xx и чек-листы приёмки; утверждение владельцем (UX-01)
+- [x] 08-02-PLAN.md — Контракт экранов и сценариев S-xx и чек-листы приёмки; утверждение владельцем (UX-01)
 
 **Wave 3** *(blocked on Wave 2 completion и утверждении контракта)*
 
@@ -323,4 +323,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
 | 7. Deduplication Transparency | 5/5 | In Progress | - |
-| 8. Telegram Bot UX | 1/8 | In Progress | - |
+| 8. Telegram Bot UX | 2/8 | In Progress | - |
