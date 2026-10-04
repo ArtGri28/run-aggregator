@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/go-telegram/bot/models"
 
@@ -21,8 +22,12 @@ const resetNotice = "Настройки сброшены"
 // settingsScreen — «Мои настройки»: сохранённые параметры поиска, только
 // существующие данные users.filters. Страна показывается всегда.
 func settingsScreen(f userFilters, cityName string) screen {
+	active := "🔎 Фильтры не заданы — показываются все будущие забеги"
+	if n := f.activeCount(); n > 0 {
+		active = fmt.Sprintf("🔎 Активно фильтров: %d из 5", n)
+	}
 	return screen{
-		text: "⚙️ <b>МОИ НАСТРОЙКИ</b>\n\nПоиск использует эти параметры:\n" + summaryLine(f, cityName, true),
+		text: "⚙️ <b>Мои настройки</b>\n\n" + summaryLine(f, cityName, true) + "\n\n" + active,
 		kb: keyboard(
 			btn("✏️ Изменить фильтры", back),
 			btn("🔄 Сбросить настройки", callback{Kind: cbResetAsk, Value: fromSettings}),

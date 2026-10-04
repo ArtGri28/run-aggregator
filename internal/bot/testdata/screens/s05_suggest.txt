@@ -2,7 +2,6 @@ method: sendMessage
 parse_mode: HTML
 ---
 В каталоге нет забегов в «Моск»
-
 Возможно, вы имели в виду:
 ---
 [Москва (1)] → f:c:moscow:v3

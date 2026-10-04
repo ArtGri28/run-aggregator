@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,10 +20,10 @@ import (
 )
 
 const (
-	pageSize     = 5
-	maxListTitle = 60   // рун в строке списка
-	maxURLLen    = 2048 // предел Telegram для URL-кнопки
-	goneNotice   = "Событие больше не доступно"
+	pageSize   = 8
+	maxListBtn = 64   // рун в кнопке события: клиент всё равно обрезает по ширине экрана
+	maxURLLen  = 2048 // предел Telegram для URL-кнопки
+	goneNotice = "Событие больше не доступно"
 )
 
 // onList показывает страницу списка (p:<стр>:v<N>). Версия фильтров
@@ -41,7 +42,11 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 	f := loadFilters(raw, today)
 	page, notice := c.Page, ""
 	if c.V != v {
-		page, notice = 1, "Фильтры изменились — показываю актуальную выдачу"
+		page = 1
+		// v = 0 — пользователя нет в users: менять ему было нечего.
+		if v != 0 {
+			notice = "Фильтры изменились — показываю актуальную выдачу"
+		}
 	}
 	flt := f.query(today)
 	total, err := b.Store.CountEvents(ctx, flt)
@@ -65,12 +70,28 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 			b.logger().Error("list", "err", err)
 			return errNotice
 		}
-		sc = listScreen(items, total, page, v, f.Country == allCountries, today.Year())
+		name, err := b.cityName(ctx, f)
+		if err != nil {
+			b.logger().Error("city name", "err", err)
+			return errNotice
+		}
+		sc = listScreen(items, total, page, v, f.Country == allCountries, today.Year(), activeLine(f, name))
 	}
 	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
 		b.logger().Warn("show list", "err", err)
 	}
 	return notice
+}
+
+// statusIcon — короткая пометка статуса в кнопке списка.
+func statusIcon(s event.Status) string {
+	switch s {
+	case event.StatusCancelled:
+		return "❌ "
+	case event.StatusPostponed:
+		return "⏸ "
+	}
+	return ""
 }
 
 // statusMark — пометка статуса в начале названия.
@@ -92,39 +113,39 @@ func cut(s string, n int) string {
 	return string([]rune(s)[:n-1]) + "…"
 }
 
-// listScreen — страница списка (D-11): пронумерованные строки, кнопки
-// карточек 1…5, навигация и возврат к поиску. year — текущий год (см.
-// listDate). flags — перед городом флаг страны
-// события (выдача «все страны»); область и район не показываются никогда.
-func listScreen(items []store.ListItem, total, page, v int, flags bool, year int) screen {
+// listScreen — страница списка: каждое событие — кнопка «дата · город ·
+// название», открывающая карточку; под ними навигация «← стр/всего →» и
+// возврат к поиску. В тексте — число найденных и заданные фильтры (filters,
+// готовый HTML; "" — не заданы). year — текущий год (см. listDate). flags —
+// перед городом флаг страны события (выдача «все страны»); область и район не
+// показываются никогда. Дистанции — в карточке: кнопка однострочная.
+func listScreen(items []store.ListItem, total, page, v int, flags bool, year int, filters string) screen {
 	pages := (total + pageSize - 1) / pageSize
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Найдено %d · страница %d/%d\n", total, page, pages)
-	var cards row
-	for i, it := range items {
-		city := it.City
-		if city == "" {
-			city = "—"
+	if filters == "" {
+		filters = "все будущие забеги"
+	}
+	rows := make([]row, 0, len(items)+2)
+	for _, it := range items {
+		parts := []string{listDate(it.StartDate, year)}
+		if it.City != "" {
+			city := it.City
+			if f := countryFlag(it.CountryCode); flags && f != "" {
+				city = f + " " + city
+			}
+			parts = append(parts, city)
 		}
-		if f := countryFlag(it.CountryCode); flags && f != "" {
-			city = f + " " + city
-		}
-		fmt.Fprintf(&sb, "\n%d. %s · %s · %s%s", i+1, listDate(it.StartDate, year), html.EscapeString(city),
-			statusMark(it.Status), html.EscapeString(cut(it.Title, maxListTitle)))
-		if km := kmList(it.Distances); km != "" {
-			sb.WriteString(" · " + km)
-		}
-		cards.add(strconv.Itoa(i+1), callback{Kind: cbCard, ID: it.ID, Page: page, V: v})
+		parts = append(parts, statusIcon(it.Status)+it.Title)
+		rows = append(rows, btn(cut(strings.Join(parts, " · "), maxListBtn), callback{Kind: cbCard, ID: it.ID, Page: page, V: v}))
 	}
 	var nav row
 	if page > 1 {
 		nav.add("←", callback{Kind: cbPage, Page: page - 1, V: v})
 	}
-	nav.add(fmt.Sprintf("стр. %d/%d", page, pages), callback{Kind: cbPage, Page: page, V: v})
+	nav.add(fmt.Sprintf("%d/%d", page, pages), callback{Kind: cbPage, Page: page, V: v})
 	if page < pages {
 		nav.add("→", callback{Kind: cbPage, Page: page + 1, V: v})
 	}
-	return screen{text: sb.String(), kb: keyboard(cards, nav, btn(backLabel, back))}
+	return screen{text: fmt.Sprintf("🔎 Найдено %d\n%s", total, filters), kb: keyboard(append(rows, nav, btn(backLabel, back))...)}
 }
 
 // listDate — дата в строке списка: «ДД.ММ», а для события не текущего года
@@ -224,7 +245,7 @@ const (
 func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style placeStyle) screen {
 	esc := func(s string, n int) string { return html.EscapeString(cut(s, n)) }
 	var sb strings.Builder
-	sb.WriteString("🏃 <b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n\n")
+	sb.WriteString(typeEmoji(e.Type) + " <b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n\n")
 	sb.WriteString("📅 " + ruDate(e.StartDate))
 	if e.EndDate != nil && !e.EndDate.Equal(e.StartDate) {
 		sb.WriteString(" – " + ruDate(*e.EndDate))
@@ -244,17 +265,27 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 	if style == placeWithCountry {
 		sb.WriteString("🌍 " + esc(countryName(e.CountryCode), 60) + "\n")
 	}
+	// Дистанции одной группой «3 · 10 · 21 км»; если у какой-то есть подпись —
+	// единица у каждой: «5 км (детский) · 10 км».
 	if len(e.Distances) > 0 {
+		labelled := slices.ContainsFunc(e.Distances, func(d event.Distance) bool { return d.Label != "" })
 		parts := make([]string, len(e.Distances))
 		for i, d := range e.Distances {
-			parts[i] = km(d.Meters) + " км"
+			parts[i] = km(d.Meters)
+			if labelled {
+				parts[i] += " км"
+			}
 			if d.Label != "" {
 				parts[i] += " (" + esc(d.Label, 40) + ")"
 			}
 		}
-		sb.WriteString("📏 Дистанции: " + strings.Join(parts, " · ") + "\n")
+		line := strings.Join(parts, " · ")
+		if !labelled {
+			line += " км"
+		}
+		sb.WriteString("📏 " + line + "\n")
 	}
-	sb.WriteString("🏷 " + typeLabel(string(e.Type)) + "\n")
+	sb.WriteString(typeEmoji(e.Type) + " " + typeLabel(string(e.Type)) + "\n")
 	if e.Description != "" {
 		sb.WriteString("\n" + esc(e.Description, 1000) + "\n")
 	}
@@ -266,7 +297,7 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 				names[i] = `<a href="` + html.EscapeString(s.URL) + `">` + names[i] + "</a>"
 			}
 		}
-		sb.WriteString("\nИсточники: " + strings.Join(names, ", "))
+		sb.WriteString("\n🔗 " + plural(len(srcs), "Источник", "Источники", "Источники") + ": " + strings.Join(names, ", "))
 	}
 	var reg row
 	if validURL(e.RegistrationURL) {

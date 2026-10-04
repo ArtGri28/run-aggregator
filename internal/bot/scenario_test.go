@@ -129,7 +129,7 @@ func TestS05CityText(t *testing.T) {
 	if f, v := filtersV(t, b); v != v0 || f.City != "" || f.Country != allCountries {
 		t.Errorf("ввод города при всех странах изменил фильтры: %+v v%d", f, v)
 	}
-	if c := press(t, b, api, "f:s"); !strings.Contains(c.Form["text"], "ПОИСК ЗАБЕГА") {
+	if c := press(t, b, api, "f:s"); !strings.Contains(c.Form["text"], "Поиск забега") {
 		t.Errorf("«Назад» открыл не поиск: %q", c.Form["text"])
 	}
 	if !t.Failed() {
@@ -140,11 +140,11 @@ func TestS05CityText(t *testing.T) {
 // TestS06Distance — S-06: дистанция.
 func TestS06Distance(t *testing.T) {
 	_, api, b := countryFixture(t)
-	menu := pressSnap(t, b, api, "f:b", "s06_menu")
-	press(t, b, api, "f:b:0")
-	pressSnap(t, b, api, "f:b:1", "s06_two")
-	pressSnap(t, b, api, "f:b:-", "s06_cleared")
-	press(t, b, api, "f:b:1")
+	menu := pressSnap(t, b, api, "f:n", "s06_menu")
+	press(t, b, api, "f:n:0")
+	pressSnap(t, b, api, "f:n:1", "s06_two")
+	pressSnap(t, b, api, "f:n:-", "s06_cleared")
+	press(t, b, api, "f:n:1")
 	pressSnap(t, b, api, menu.button(t, backLabel), "s06_summary")
 }
 
@@ -186,12 +186,12 @@ func TestS09List(t *testing.T) {
 	p1 := pressSnap(t, b, api, "p:1"+pv, "s09_page1")
 	p2 := pressSnap(t, b, api, p1.button(t, "→"), "s09_page2")
 	pressSnap(t, b, api, p2.button(t, "←"), "s09_page1")
-	pressSnap(t, b, api, p2.button(t, "стр. "), "s09_page2")
+	pressSnap(t, b, api, p2.button(t, "2/"), "s09_page2")
 
 	// Последняя страница: события следующего года — с годом.
 	last := pressSnap(t, b, api, "p:"+strconv.Itoa(maxPage)+pv, "s09_last")
-	if text := last.Form["text"]; !strings.Contains(text, ".2027 · ") || strings.Contains(p1.Form["text"], ".2026 · ") {
-		t.Errorf("год в дате: последняя страница\n%s\nпервая\n%s", text, p1.Form["text"])
+	if text := listText(t, last); !strings.Contains(text, ".2027 · ") || strings.Contains(listText(t, p1), ".2026 · ") {
+		t.Errorf("год в дате: последняя страница\n%s\nпервая\n%s", text, listText(t, p1))
 	}
 	pressSnap(t, b, api, last.button(t, backLabel), "s09_back")
 	if !t.Failed() {
@@ -203,14 +203,14 @@ func TestS09List(t *testing.T) {
 func TestS10Card(t *testing.T) {
 	api, b, pv := marathonecBot(t)
 	p2 := press(t, b, api, "p:2"+pv)
-	card := pressSnap(t, b, api, p2.button(t, "1"), "s10_card")
+	card := pressSnap(t, b, api, firstCard(t, p2), "s10_card")
 	pressSnap(t, b, api, card.button(t, backLabel), "s09_page2")
 
-	id := cardID(t, p2.button(t, "1"))
+	id := cardID(t, firstCard(t, p2))
 	storetest.SetStatus(t, id, event.StatusCancelled)
-	pressSnap(t, b, api, p2.button(t, "1"), "s10_cancelled")
+	pressSnap(t, b, api, firstCard(t, p2), "s10_cancelled")
 	storetest.HideEvent(t, id)
-	gone := pressSnap(t, b, api, p2.button(t, "1"), "s10_gone")
+	gone := pressSnap(t, b, api, firstCard(t, p2), "s10_gone")
 	pressSnap(t, b, api, gone.button(t, backLabel), "s10_list_after_gone")
 }
 

@@ -118,14 +118,14 @@ func TestCountryMenu(t *testing.T) {
 // не сбрасываются, город другой страны — сбрасывается.
 func TestCountrySelect(t *testing.T) {
 	s, api, b := countryFixture(t)
-	setUserFilters(t, s, `{"date":"nm","dist":[1],"city":"moscow"}`)
+	setUserFilters(t, s, `{"date":"nm","dist2":[0],"city":"moscow"}`)
 
 	c := press(t, b, api, "f:k:BY")
 	if !strings.Contains(c.Form["text"], "🌍 Страна: 🇧🇾 Беларусь") || buttonText(t, c, "f:k") != "🌍 Страна" {
 		t.Errorf("сводка после выбора BY:\n%s", c.Form["text"])
 	}
 	f, _ := filtersV(t, b)
-	if f.Country != "BY" || f.City != "" || f.Date != "nm" || !reflect.DeepEqual(f.Dist, []int{1}) {
+	if f.Country != "BY" || f.City != "" || f.Date != "nm" || !reflect.DeepEqual(f.Dist, []int{0}) {
 		t.Errorf("фильтры после BY: %+v", f)
 	}
 	if n := showCount(t, c); n != 2 {
@@ -134,7 +134,7 @@ func TestCountrySelect(t *testing.T) {
 	if got := menuKeys(t, press(t, b, api, "f:c"), "f:c:"); !reflect.DeepEqual(got, []string{"lyuban", "minsk"}) {
 		t.Errorf("города BY: %v", got)
 	}
-	if got := menuKeys(t, press(t, b, api, "f:t"), "f:t:"); !reflect.DeepEqual(got, []string{"obstacle", "road"}) {
+	if got := menuKeys(t, press(t, b, api, "f:t"), "f:t:"); !reflect.DeepEqual(got, []string{"road", "obstacle"}) {
 		t.Errorf("типы BY: %v", got)
 	}
 
@@ -166,7 +166,7 @@ func TestCountryAllMode(t *testing.T) {
 	setUserFilters(t, s, `{"country":"*"}`)
 
 	c := press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "🌍 Страна: 🌍 Все страны") || buttonText(t, c, "f:k") != "🌍 Страна" || showCount(t, c) != 4 {
+	if !strings.Contains(c.Form["text"], "🌍 Страна: Все страны") || buttonText(t, c, "f:k") != "🌍 Страна" || showCount(t, c) != 4 {
 		t.Errorf("сводка:\n%s", c.Form["text"])
 	}
 
@@ -195,8 +195,9 @@ func TestCountryAllMode(t *testing.T) {
 
 	// Список: события обеих стран, у каждого флаг; одинаковый city_key — оба.
 	_, v := filtersV(t, b)
-	text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]
-	rows := listRows(text)
+	lc := press(t, b, api, "p:1:v"+strconv.Itoa(v))
+	text := listText(t, lc)
+	rows := listRows(t, lc)
 	if len(rows) != 4 {
 		t.Fatalf("список: %d строк\n%s", len(rows), text)
 	}
@@ -212,7 +213,7 @@ func TestCountryAllMode(t *testing.T) {
 	// Конкретная страна — компактный формат без флагов.
 	setUserFilters(t, s, `{"country":"BY"}`)
 	_, v = filtersV(t, b)
-	if text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]; strings.Contains(text, "🇧🇾") || strings.Contains(text, "🇷🇺") {
+	if text := listText(t, press(t, b, api, "p:1:v"+strconv.Itoa(v))); strings.Contains(text, "🇧🇾") || strings.Contains(text, "🇷🇺") {
 		t.Errorf("флаги в списке одной страны:\n%s", text)
 	}
 }
@@ -256,18 +257,19 @@ func TestSingleCountryUX(t *testing.T) {
 		strings.Contains(c.Form["text"], "Страна") {
 		t.Errorf("сводка:\n%s", c.Form["text"])
 	}
-	if got := datas(t, c); !reflect.DeepEqual(got, []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "s:r:f", "m"}) {
+	if got := datas(t, c); !reflect.DeepEqual(got, []string{"f:c", "f:d", "f:n", "f:t", "p:1:v1", "s:r:f", "m"}) {
 		t.Errorf("кнопки сводки: %v", got)
 	}
 	if buttonText(t, press(t, b, api, "f:c"), "f:c:-") != "Все города" {
 		t.Error("в меню города нет «Все города»")
 	}
 	_, v := filtersV(t, b)
-	text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]
-	if strings.Contains(text, "🇷🇺") || len(listRows(text)) != 2 {
+	lc := press(t, b, api, "p:1:v"+strconv.Itoa(v))
+	text := listText(t, lc)
+	if strings.Contains(text, "🇷🇺") || len(listRows(t, lc)) != 2 {
 		t.Errorf("список:\n%s", text)
 	}
-	items, _ := s.ListEvents(context.Background(), event.Filter{From: fixtureToday}, 5, 0)
+	items, _ := s.ListEvents(context.Background(), event.Filter{From: fixtureToday}, pageSize, 0)
 	card := press(t, b, api, "e:"+strconv.FormatInt(items[0].ID, 10)+":1:v"+strconv.Itoa(v)).Form["text"]
 	if strings.Contains(card, "🌍") || !strings.Contains(card, "\n📍 Москва\n") {
 		t.Errorf("карточка:\n%s", card)
@@ -275,7 +277,7 @@ func TestSingleCountryUX(t *testing.T) {
 	// Приветствие прежнее.
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
-	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "Найди свой следующий старт!") {
+	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "Собрали беговые старты") {
 		t.Errorf("приветствие: %+v", s)
 	}
 
@@ -302,7 +304,7 @@ func TestStartGreetingMultiCountry(t *testing.T) {
 	_, api, b := countryFixture(t)
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	s := api.of("sendMessage")
-	if len(s) != 1 || strings.Contains(s[0].Form["text"], "в России") || !strings.Contains(s[0].Form["text"], "КАТАЛОГ ЗАБЕГОВ") {
+	if len(s) != 1 || strings.Contains(s[0].Form["text"], "в России") || !strings.Contains(s[0].Form["text"], "Где старт?") {
 		t.Errorf("приветствие: %+v", s)
 	}
 }
@@ -358,7 +360,7 @@ func TestCountryAllListFormat(t *testing.T) {
 	s, api, b := countryFixture(t)
 	setUserFilters(t, s, `{"country":"*"}`)
 	_, v := filtersV(t, b)
-	text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]
+	text := listText(t, press(t, b, api, "p:1:v"+strconv.Itoa(v)))
 	for _, want := range []string{"🇧🇾 Минск", "🇧🇾 Любань", "🇷🇺 Москва", "🇷🇺 Любань"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("нет %q:\n%s", want, text)
@@ -395,7 +397,7 @@ func TestCountryOnlyBYDefaultRU(t *testing.T) {
 		t.Fatalf("фильтры: %+v", f)
 	}
 	_, v := filtersV(t, b)
-	if rows := listRows(press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]); len(rows) != 1 || !strings.Contains(rows[0], "Минск") {
+	if rows := listRows(t, press(t, b, api, "p:1:v"+strconv.Itoa(v))); len(rows) != 1 || !strings.Contains(rows[0], "Минск") {
 		t.Fatalf("выдача BY: %v", rows)
 	}
 	// Страна выбрана явно: кнопка остаётся и когда Беларусь единственная.

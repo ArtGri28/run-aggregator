@@ -3,9 +3,8 @@ parse_mode: HTML
 ---
 Выберите тип забега
 ---
-[Шоссе] → f:t:road:v2
-[Трейл] → f:t:trail:v2
-[Любой] → f:t:-:v2
+[✓ 🛣 Шоссе] → f:t:road:v2 | [🏔 Трейл] → f:t:trail:v2
+[🏃 Любой] → f:t:-:v2
 [⬅️ Назад] → f:s:v2
 method: answerCallbackQuery
 text: 

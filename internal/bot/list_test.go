@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,33 +29,53 @@ func seeded(t *testing.T, scripts ...script) (*store.Store, *fakeAPI, *Bot) {
 	return s, api, newTestBot(t, api, s)
 }
 
-var listRowRE = regexp.MustCompile(`^\d\. `)
-
-// listRows — строки событий списка.
-func listRows(text string) []string {
+// listRows — подписи кнопок событий списка (кнопки карточек e:).
+func listRows(t *testing.T, c call) []string {
+	t.Helper()
 	var out []string
-	for _, l := range strings.Split(text, "\n") {
-		if listRowRE.MatchString(l) {
-			out = append(out, l)
+	for _, bt := range c.buttons(t) {
+		if strings.HasPrefix(bt.CallbackData, "e:") {
+			out = append(out, bt.Text)
 		}
 	}
 	return out
 }
 
-// wantRows проверяет, что строки страницы — последовательные элементы выдачи,
-// а кнопки карточек ведут на те же события.
+// listText — текст списка вместе с подписями кнопок событий: всё, что видит
+// пользователь на экране списка.
+func listText(t *testing.T, c call) string {
+	t.Helper()
+	return c.Form["text"] + "\n" + strings.Join(listRows(t, c), "\n")
+}
+
+// firstCard — callback первой кнопки события в списке.
+func firstCard(t *testing.T, c call) string {
+	t.Helper()
+	for _, bt := range c.buttons(t) {
+		if strings.HasPrefix(bt.CallbackData, "e:") {
+			return noV(bt.CallbackData)
+		}
+	}
+	return ""
+}
+
+// wantRows проверяет, что кнопки страницы — последовательные элементы выдачи
+// и ведут на карточки тех же событий.
 func wantRows(t *testing.T, c call, items []store.ListItem, page int) {
 	t.Helper()
-	rows := listRows(c.Form["text"])
+	rows := listRows(t, c)
 	if len(rows) != len(items) {
-		t.Fatalf("rows = %d, want %d:\n%s", len(rows), len(items), c.Form["text"])
+		t.Fatalf("rows = %d, want %d: %v", len(rows), len(items), rows)
 	}
 	for i, it := range items {
-		prefix := fmt.Sprintf("%d. %s · %s · ", i+1, listDate(it.StartDate, fixtureToday.Year()), html.EscapeString(it.City))
-		if !strings.HasPrefix(rows[i], prefix) || !strings.Contains(rows[i], html.EscapeString(it.Title)) {
+		prefix := listDate(it.StartDate, fixtureToday.Year()) + " · "
+		if it.City != "" {
+			prefix += it.City + " · "
+		}
+		if !strings.HasPrefix(rows[i], prefix) || !strings.Contains(rows[i], strings.TrimSuffix(cut(it.Title, 20), "…")) {
 			t.Fatalf("row %d = %q, want %q… %s", i, rows[i], prefix, it.Title)
 		}
-		if got, want := c.button(t, strconv.Itoa(i+1)), fmt.Sprintf("e:%d:%d:v1", it.ID, page); got != want {
+		if got, want := c.button(t, rows[i]), fmt.Sprintf("e:%d:%d:v1", it.ID, page); got != want {
 			t.Fatalf("card button %d = %q, want %q", i+1, got, want)
 		}
 	}
@@ -74,10 +93,10 @@ func allItems(t *testing.T, s *store.Store, f event.Filter) []store.ListItem {
 func TestListPaging(t *testing.T) {
 	s, api, b := seeded(t)
 	all := allItems(t, s, event.Filter{From: fixtureToday})
-	pages := (len(all) + 4) / 5
+	pages := (len(all) + pageSize - 1) / pageSize
 
 	p1 := press(t, b, api, "p:1:v1")
-	wantRows(t, p1, all[:5], 1)
+	wantRows(t, p1, all[:pageSize], 1)
 	if p1.button(t, "←") != "" {
 		t.Fatalf("page 1 has ← button: %v", datas(t, p1))
 	}
@@ -87,20 +106,20 @@ func TestListPaging(t *testing.T) {
 	}
 
 	p2 := press(t, b, api, next)
-	wantRows(t, p2, all[5:10], 2)
+	wantRows(t, p2, all[pageSize:2*pageSize], 2)
 	prev := p2.button(t, "←")
 	if prev != "p:1:v1" {
 		t.Fatalf("← = %q, want p:1:v1", prev)
 	}
-	wantRows(t, press(t, b, api, prev), all[:5], 1)
+	wantRows(t, press(t, b, api, prev), all[:pageSize], 1)
 
 	last := press(t, b, api, "p:"+strconv.Itoa(pages)+":v1")
-	wantRows(t, last, all[(pages-1)*5:], pages)
+	wantRows(t, last, all[(pages-1)*pageSize:], pages)
 	if last.button(t, "→") != "" {
 		t.Fatalf("last page has → button: %v", datas(t, last))
 	}
-	if !strings.Contains(last.Form["text"], fmt.Sprintf("страница %d/%d", pages, pages)) {
-		t.Fatalf("last page header: %q", last.Form["text"])
+	if last.button(t, fmt.Sprintf("%d/%d", pages, pages)) == "" {
+		t.Fatalf("last page: нет кнопки %d/%d: %v", pages, pages, last.buttons(t))
 	}
 	if _, v := filtersV(t, b); v != 1 {
 		t.Fatalf("filters_v = %d after paging, want 1", v)
@@ -114,27 +133,27 @@ func TestListStaleAndClamp(t *testing.T) {
 		t.Fatalf("after f:c:moscow: %+v v=%d, want moscow v=2", f, v)
 	}
 	msk := allItems(t, s, event.Filter{From: fixtureToday, CityKey: "moscow"})
-	pages := (len(msk) + 4) / 5
+	pages := (len(msk) + pageSize - 1) / pageSize
 
 	stale := press(t, b, api, "p:2:v1")
 	if got := api.of("answerCallbackQuery")[0].Form["text"]; got != "Фильтры изменились — показываю актуальную выдачу" {
 		t.Fatalf("stale notice = %q", got)
 	}
-	if !strings.Contains(stale.Form["text"], fmt.Sprintf("Найдено %d · страница 1/%d", len(msk), pages)) {
-		t.Fatalf("stale page header: %q", stale.Form["text"])
+	if !strings.HasPrefix(stale.Form["text"], fmt.Sprintf("🔎 Найдено %d\n", len(msk))) || stale.button(t, fmt.Sprintf("1/%d", pages)) == "" {
+		t.Fatalf("stale page: text %q buttons %v", stale.Form["text"], stale.buttons(t))
 	}
-	for i, r := range listRows(stale.Form["text"]) {
-		if !strings.Contains(r, msk[i].Title) {
+	for i, r := range listRows(t, stale) {
+		if !strings.Contains(r, strings.TrimSuffix(cut(msk[i].Title, 20), "…")) {
 			t.Fatalf("stale page row %d = %q, want %q", i, r, msk[i].Title)
 		}
 	}
 
 	clamped := press(t, b, api, "p:999:v2")
-	if !strings.Contains(clamped.Form["text"], fmt.Sprintf("страница %d/%d", pages, pages)) {
-		t.Fatalf("clamped page header: %q", clamped.Form["text"])
+	if clamped.button(t, fmt.Sprintf("%d/%d", pages, pages)) == "" {
+		t.Fatalf("clamped page: нет кнопки %d/%d: %v", pages, pages, clamped.buttons(t))
 	}
-	wantN := len(msk) - (pages-1)*5
-	if n := len(listRows(clamped.Form["text"])); n != wantN {
+	wantN := len(msk) - (pages-1)*pageSize
+	if n := len(listRows(t, clamped)); n != wantN {
 		t.Fatalf("clamped rows = %d, want %d", n, wantN)
 	}
 }
@@ -172,7 +191,7 @@ func TestCard(t *testing.T) {
 		html.EscapeString(withReg.City),
 		typeLabels[withReg.Type],
 		" км",
-		"Источники: ",
+		"🔗 Источник: ",
 		`<a href="` + html.EscapeString(srcs[0].URL) + `">Марафонец</a>`,
 	}
 	for _, part := range wantParts {
@@ -200,7 +219,7 @@ func TestCard(t *testing.T) {
 	if hasURLButton(t, card) || card.button(t, backLabel) != "p:1:v1" {
 		t.Fatalf("card without registration: buttons %+v", card.buttons(t))
 	}
-	if !strings.Contains(text, "Источники: ") {
+	if !strings.Contains(text, "🔗 Источник: ") {
 		t.Fatalf("card without registration lacks sources:\n%s", text)
 	}
 	for _, bad := range []string{"Старт в", "\n\n\n", "<b></b>"} {
@@ -225,7 +244,7 @@ func TestHiddenAndMerged(t *testing.T) {
 		t.Fatalf("CountEvents = %d, %v; want %d", n, err, len(before)-2)
 	}
 	page := press(t, b, api, "p:1:v1")
-	wantRows(t, page, allItems(t, s, f)[:5], 1)
+	wantRows(t, page, allItems(t, s, f)[:pageSize], 1)
 	for _, id := range []int64{hidden, merged} {
 		if strings.Contains(strings.Join(datas(t, page), " "), fmt.Sprintf("e:%d:", id)) {
 			t.Fatalf("list still has a button for event %d", id)
@@ -235,7 +254,7 @@ func TestHiddenAndMerged(t *testing.T) {
 		t.Fatalf("%s: text %q buttons %v", btnHidden, gone.Form["text"], datas(t, gone))
 	}
 	// Слитое событие открывает карточку того, в которое слито (D-16).
-	if card := press(t, b, api, btnMerged); !strings.HasPrefix(card.Form["text"], "🏃 <b>"+html.EscapeString(before[2].Title)+"</b>") ||
+	if card := press(t, b, api, btnMerged); !strings.Contains(card.Form["text"], "<b>"+html.EscapeString(before[2].Title)+"</b>") ||
 		card.button(t, backLabel) != "p:1:v1" {
 		t.Fatalf("%s: text %q buttons %v", btnMerged, card.Form["text"], datas(t, card))
 	}
@@ -254,14 +273,14 @@ func TestMergedCardOpensRoot(t *testing.T) {
 	storetest.MergeEvent(t, x, y)
 	storetest.MergeEvent(t, y, root)
 
-	want := "🏃 <b>" + html.EscapeString(items[2].Title) + "</b>"
+	want := "<b>" + html.EscapeString(items[2].Title) + "</b>"
 	for _, c := range []struct{ data, list string }{
 		{fmt.Sprintf("e:%d:2:v1", x), "p:2:v1"},
 		{fmt.Sprintf("e:%d:1:v1", y), "p:1:v1"},
 	} {
 		card := press(t, b, api, c.data)
 		text := card.Form["text"]
-		if !strings.HasPrefix(text, want) || !strings.Contains(text, "Источники: ") || card.button(t, backLabel) != c.list {
+		if !strings.Contains(strings.SplitN(text, "\n", 2)[0], want) || !strings.Contains(text, "🔗 Источник") || card.button(t, backLabel) != c.list {
 			t.Fatalf("%s: text %q buttons %v; want root card and %s", c.data, text, datas(t, card), c.list)
 		}
 	}
@@ -304,20 +323,20 @@ func TestStatusMarks(t *testing.T) {
 		t.Fatalf("CountEvents = %d, %v; want %d (не скрыты)", n, err, total)
 	}
 
-	rows := listRows(press(t, b, api, "p:1:v1").Form["text"])
-	if !strings.Contains(rows[0], " · [ОТМЕНЁН] "+html.EscapeString(items[0].Title)) {
-		t.Fatalf("row 1 = %q, want [ОТМЕНЁН] before title", rows[0])
+	rows := listRows(t, press(t, b, api, "p:1:v1"))
+	if !strings.Contains(rows[0], " · ❌ "+string([]rune(items[0].Title)[:8])) {
+		t.Fatalf("row 1 = %q, want ❌ before title", rows[0])
 	}
-	if !strings.Contains(rows[1], " · [ПЕРЕНЕСЁН] "+html.EscapeString(items[1].Title)) {
-		t.Fatalf("row 2 = %q, want [ПЕРЕНЕСЁН] before title", rows[1])
+	if !strings.Contains(rows[1], " · ⏸ "+string([]rune(items[1].Title)[:8])) {
+		t.Fatalf("row 2 = %q, want ⏸ before title", rows[1])
 	}
-	if strings.Contains(rows[2], "[") {
+	if strings.ContainsAny(rows[2], "❌⏸") {
 		t.Fatalf("row 3 = %q, want no mark", rows[2])
 	}
 
 	for i, mark := range []string{"[ОТМЕНЁН]", "[ПЕРЕНЕСЁН]"} {
 		text := press(t, b, api, fmt.Sprintf("e:%d:1:v1", items[i].ID)).Form["text"]
-		if !strings.HasPrefix(strings.TrimPrefix(text, "🏃 <b>"), mark) {
+		if _, title, _ := strings.Cut(text, "<b>"); !strings.HasPrefix(title, mark) {
 			t.Fatalf("card %d starts with %q, want %s", i, text[:20], mark)
 		}
 	}
@@ -383,11 +402,10 @@ func TestValidURL(t *testing.T) {
 
 func TestLongTexts(t *testing.T) {
 	long := strings.Repeat("Я", 300)
-	sc := listScreen([]store.ListItem{{ID: 1, Title: long, StartDate: fixtureToday, City: "Тула"}}, 1, 1, 1, false, 2026)
-	row := listRows(sc.text)[0]
-	title := strings.TrimPrefix(row, "1. 29.09 · Тула · ")
-	if utf8.RuneCountInString(title) != maxListTitle || !strings.HasSuffix(title, "…") {
-		t.Fatalf("list title = %d runes %q, want %d ending with …", utf8.RuneCountInString(title), title, maxListTitle)
+	sc := listScreen([]store.ListItem{{ID: 1, Title: long, StartDate: fixtureToday, City: "Тула"}}, 1, 1, 1, false, 2026, "")
+	label := sc.kb.InlineKeyboard[0][0].Text
+	if utf8.RuneCountInString(label) != maxListBtn || !strings.HasPrefix(label, "29.09 · Тула · Я") || !strings.HasSuffix(label, "…") {
+		t.Fatalf("list button = %d runes %q, want %d ending with …", utf8.RuneCountInString(label), label, maxListBtn)
 	}
 
 	card := cardScreen(event.Event{Title: long, StartDate: fixtureToday, City: strings.Repeat("Г", 300), Address: long,
@@ -403,7 +421,7 @@ func TestListScreenShape(t *testing.T) {
 		{ID: 11, Title: "Раз", StartDate: fixtureToday, City: "Тула", Distances: []int{5000, 21097}},
 		{ID: 12, Title: "Два", StartDate: fixtureToday, Status: event.StatusCancelled},
 	}
-	sc := listScreen(items, 12, 2, 4, false, 2026)
+	sc := listScreen(items, 12, 2, 4, false, 2026, "")
 	var got []string
 	for _, r := range sc.kb.InlineKeyboard {
 		for _, bt := range r {
@@ -411,13 +429,15 @@ func TestListScreenShape(t *testing.T) {
 		}
 	}
 	// f:s — без версии (v0): её проставляет stamp при показе экрана.
-	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "⬅️ Назад=f:s:v0"}
+	want := []string{"29.09 · Тула · Раз=e:11:2:v4", "29.09 · ❌ Два=e:12:2:v4", "←=p:1:v4", "2/2=p:2:v4", "⬅️ Назад=f:s:v0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buttons = %v, want %v", got, want)
 	}
-	rows := listRows(sc.text)
-	if rows[0] != "1. 29.09 · Тула · Раз · 5/21,1 км" || rows[1] != "2. 29.09 · — · [ОТМЕНЁН] Два" {
-		t.Fatalf("rows = %q", rows)
+	if sc.text != "🔎 Найдено 12\nвсе будущие забеги" {
+		t.Fatalf("text = %q", sc.text)
+	}
+	if sc := listScreen(items, 12, 1, 4, false, 2026, "Трейл · Тула"); sc.text != "🔎 Найдено 12\nТрейл · Тула" {
+		t.Fatalf("text with filters = %q", sc.text)
 	}
 }
 

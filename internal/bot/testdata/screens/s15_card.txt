@@ -1,12 +1,12 @@
 method: editMessageText
 parse_mode: HTML
 ---
-🏃 <b>Московский забег</b>
+🛣 <b>Московский забег</b>
 
 📅 10 октября 2026
 📍 Москва
-📏 Дистанции: 10 км
-🏷 Шоссе
+📏 10 км
+🛣 Шоссе
 ---
 [⬅️ Назад] → p:1:v2
 method: answerCallbackQuery

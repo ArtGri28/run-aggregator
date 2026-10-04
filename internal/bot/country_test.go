@@ -46,6 +46,7 @@ func showCount(t *testing.T, c call) int {
 	t.Helper()
 	for _, bt := range c.buttons(t) {
 		if n, ok := strings.CutPrefix(bt.Text, "🔎 Показать "); ok {
+			n, _, _ = strings.Cut(n, " ") // «224 забега»
 			v, err := strconv.Atoi(n)
 			if err != nil {
 				t.Fatalf("кнопка %q: %v", bt.Text, err)
@@ -99,12 +100,12 @@ func TestDefaultCountryIsolation(t *testing.T) {
 		{"старый город moscow", `{"city":"moscow"}`, 1, []string{"lyuban", "moscow"}, []string{"road", "trail"}, []string{moscow}},
 		{"старый город lyuban — только RU", `{"city":"lyuban"}`, 1, []string{"lyuban", "moscow"}, []string{"road", "trail"}, []string{ruLyu}},
 		{"мусорная страна = Россия", `{"country":"XYZ","city":"lyuban"}`, 1, []string{"lyuban", "moscow"}, []string{"road", "trail"}, []string{ruLyu}},
-		{"BY", `{"country":"BY"}`, 2, []string{"lyuban", "minsk"}, []string{"obstacle", "road"}, []string{byLyu, minsk}},
-		{"BY и lyuban", `{"country":"BY","city":"lyuban"}`, 1, []string{"lyuban", "minsk"}, []string{"obstacle", "road"}, []string{byLyu}},
+		{"BY", `{"country":"BY"}`, 2, []string{"lyuban", "minsk"}, []string{"road", "obstacle"}, []string{byLyu, minsk}},
+		{"BY и lyuban", `{"country":"BY","city":"lyuban"}`, 1, []string{"lyuban", "minsk"}, []string{"road", "obstacle"}, []string{byLyu}},
 		// Все страны: город недоступен (меню города заменяется выбором страны),
 		// город из фильтра не используется.
-		{"все страны", `{"country":"*"}`, 4, []string{}, []string{"obstacle", "road", "trail"}, []string{moscow, ruLyu, byLyu, minsk}},
-		{"все страны и lyuban — город не фильтр", `{"country":"*","city":"lyuban"}`, 4, []string{}, []string{"obstacle", "road", "trail"}, []string{moscow, ruLyu, byLyu, minsk}},
+		{"все страны", `{"country":"*"}`, 4, []string{}, []string{"road", "trail", "obstacle"}, []string{moscow, ruLyu, byLyu, minsk}},
+		{"все страны и lyuban — город не фильтр", `{"country":"*","city":"lyuban"}`, 4, []string{}, []string{"road", "trail", "obstacle"}, []string{moscow, ruLyu, byLyu, minsk}},
 		{"страна без событий", `{"country":"PL"}`, 0, []string{}, []string{}, nil},
 	}
 	for _, tc := range cases {
@@ -120,8 +121,9 @@ func TestDefaultCountryIsolation(t *testing.T) {
 				t.Errorf("меню типа: %v, want %v", got, tc.types)
 			}
 			_, v := filtersV(t, b)
-			text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]
-			rows := listRows(text)
+			lc := press(t, b, api, "p:1:v"+strconv.Itoa(v))
+			text := listText(t, lc)
+			rows := listRows(t, lc)
 			if tc.titles == nil {
 				if len(rows) != 0 {
 					t.Errorf("список: %v, want пусто", rows)
@@ -180,7 +182,7 @@ func TestCityTextByCountry(t *testing.T) {
 	if f, _ := filtersV(t, b); f.City != "lyuban" || f.Country != "" || showCount(t, c) != 1 {
 		t.Errorf("Любань (RU): %+v, Показать %d", f, showCount(t, c))
 	}
-	if text := press(t, b, api, "p:1:v"+strconv.Itoa(func() int { _, v := filtersV(t, b); return v }())).Form["text"]; !strings.Contains(text, "Любанский трейл РФ") || strings.Contains(text, "BY") {
+	if text := listText(t, press(t, b, api, "p:1:v"+strconv.Itoa(func() int { _, v := filtersV(t, b); return v }()))); !strings.Contains(text, "Любанский трейл РФ") || strings.Contains(text, "BY") {
 		t.Errorf("список после «Любань» (RU):\n%s", text)
 	}
 
@@ -192,7 +194,7 @@ func TestCityTextByCountry(t *testing.T) {
 	}
 	say("Любань")
 	_, v := filtersV(t, b)
-	if text := press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]; !strings.Contains(text, "Любанский трейл BY") || strings.Contains(text, "РФ") {
+	if text := listText(t, press(t, b, api, "p:1:v"+strconv.Itoa(v))); !strings.Contains(text, "Любанский трейл BY") || strings.Contains(text, "РФ") {
 		t.Errorf("список после «Любань» (BY):\n%s", text)
 	}
 
@@ -335,7 +337,7 @@ func TestNoAreaInTelegram(t *testing.T) {
 	if want := []string{"Колбовичи (1)", "Минск (1)"}; !reflect.DeepEqual(labels, want) {
 		t.Errorf("меню города: %v, want %v", labels, want)
 	}
-	if row := listRows(press(t, b, api, "p:1:v"+strconv.Itoa(v)).Form["text"]); len(row) != 2 || !strings.Contains(row[0], "Колбовичи") {
+	if row := listRows(t, press(t, b, api, "p:1:v"+strconv.Itoa(v))); len(row) != 2 || !strings.Contains(row[0], "Колбовичи") {
 		t.Errorf("список: %v", row)
 	}
 	card := press(t, b, api, "e:"+strconv.FormatInt(items[0].ID, 10)+":1:v"+strconv.Itoa(v)).Form["text"]

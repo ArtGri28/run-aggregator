@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"html"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -211,7 +210,7 @@ func seedMarathonec(t *testing.T, s *store.Store) int {
 	return res.Created
 }
 
-var listLineRE = regexp.MustCompile(`^\d\. \d{2}\.\d{2} · .+ · .+`)
+var listLineRE = regexp.MustCompile(`^\d{2}\.\d{2} · .+`)
 
 func TestTracerSearch(t *testing.T) {
 	s := storetest.Open(t)
@@ -251,7 +250,7 @@ func TestTracerSearch(t *testing.T) {
 			t.Fatalf("summary text %q lacks %q", edits[0].Form["text"], part)
 		}
 	}
-	if got := edits[0].button(t, "🔎 Показать "+strconv.Itoa(want)); got != "p:1:v1" {
+	if got := edits[0].button(t, "🔎 Показать "+strconv.Itoa(want)+" "); got != "p:1:v1" {
 		t.Fatalf("summary: «Показать %d» callback = %q, want p:1:v1", want, got)
 	}
 	if n := len(api.of("answerCallbackQuery")); n != 1 {
@@ -266,29 +265,23 @@ func TestTracerSearch(t *testing.T) {
 	if len(edits) != 1 || edits[0].Form["message_id"] != "7" {
 		t.Fatalf("p:1:v1: editMessageText = %+v, want one for message 7", edits)
 	}
-	pages := (want + 4) / 5
-	lines := strings.Split(edits[0].Form["text"], "\n")
-	if head := "Найдено " + strconv.Itoa(want) + " · страница 1/" + strconv.Itoa(pages); lines[0] != head {
-		t.Fatalf("list header = %q, want %q", lines[0], head)
+	pages := (want + pageSize - 1) / pageSize
+	if text := edits[0].Form["text"]; text != "🔎 Найдено "+strconv.Itoa(want)+"\nвсе будущие забеги" || edits[0].button(t, "1/"+strconv.Itoa(pages)) != "p:1:v1" {
+		t.Fatalf("list: text %q buttons %+v", text, edits[0].buttons(t))
 	}
-	items, err := s.ListEvents(ctx, event.Filter{From: time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)}, 5, 0)
-	if err != nil || len(items) != 5 {
-		t.Fatalf("ListEvents = %d, %v; want 5", len(items), err)
+	items, err := s.ListEvents(ctx, event.Filter{From: time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)}, pageSize, 0)
+	if err != nil || len(items) != pageSize {
+		t.Fatalf("ListEvents = %d, %v; want %d", len(items), err, pageSize)
 	}
-	var rows []string
-	for _, l := range lines[1:] {
-		if l != "" {
-			rows = append(rows, l)
-		}
-	}
-	if len(rows) != 5 {
-		t.Fatalf("list rows = %d (%q), want 5", len(rows), rows)
+	rows := listRows(t, edits[0])
+	if len(rows) != pageSize {
+		t.Fatalf("list rows = %d (%q), want %d", len(rows), rows, pageSize)
 	}
 	for i, l := range rows {
 		if !listLineRE.MatchString(l) {
 			t.Fatalf("row %d = %q, want ДД.ММ · Город · Название", i, l)
 		}
-		if !strings.HasPrefix(l, strconv.Itoa(i+1)+". "+items[i].StartDate.Format("02.01")+" · ") || !strings.Contains(l, " · "+html.EscapeString(items[i].Title)) {
+		if !strings.HasPrefix(l, items[i].StartDate.Format("02.01")+" · ") || edits[0].button(t, l) != "e:"+strconv.FormatInt(items[i].ID, 10)+":1:v1" {
 			t.Fatalf("row %d = %q, want event %d (%s)", i, l, items[i].ID, items[i].Title)
 		}
 	}
@@ -330,12 +323,12 @@ func TestLoadFilters(t *testing.T) {
 	if got := loadFilters([]byte(`not json`), today); !reflect.DeepEqual(got, userFilters{}) {
 		t.Fatalf("loadFilters(garbage) = %+v, want zero", got)
 	}
-	got := loadFilters([]byte(`{"date":"x","city":"Moscow","dist":[1,9],"type":"ultra","extra":1}`), today)
+	got := loadFilters([]byte(`{"date":"x","city":"Moscow","dist2":[1,9],"type":"ultra","extra":1}`), today)
 	if want := (userFilters{Dist: []int{1}}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("loadFilters(invalid values) = %+v, want %+v", got, want)
 	}
-	valid := `{"date":"m202611","city":"nizhniy-novgorod","dist":[4,2,2],"type":"trail"}`
-	if got, want := loadFilters([]byte(valid), today), (userFilters{Date: "m202611", City: "nizhniy-novgorod", Dist: []int{2, 4}, Type: "trail"}); !reflect.DeepEqual(got, want) {
+	valid := `{"date":"m202611","city":"nizhniy-novgorod","dist2":[3,2,2],"type":"trail"}`
+	if got, want := loadFilters([]byte(valid), today), (userFilters{Date: "m202611", City: "nizhniy-novgorod", Dist: []int{2, 3}, Type: "trail"}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("loadFilters(valid) = %+v, want %+v", got, want)
 	}
 	// Прошедший месяц сбрасывается (LO-05); текущий, будущий и пресеты — нет.

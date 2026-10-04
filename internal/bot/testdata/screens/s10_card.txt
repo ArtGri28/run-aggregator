@@ -1,13 +1,14 @@
 method: editMessageText
 parse_mode: HTML
 ---
-🏃 <b>Осенний кросс «Быстрый пёс»</b>
+🏔 <b>Трейл «Шарташ Карасики»</b>
 
 📅 3 октября 2026
-📍 Москва
-📏 Дистанции: 2 км
-🏷 Трейл
+📍 Екатеринбург
+📏 7 · 21 км
+🏔 Трейл
 
-Источники: <a href="https://marathonec.ru/kross-bystry-pes-osen/">Марафонец</a>
+🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
 ---
+[🔗 Регистрация] → url:https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026
 [⬅️ Назад] → p:2:v1

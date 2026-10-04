@@ -13,7 +13,7 @@ func TestS12Settings(t *testing.T) {
 
 	// По умолчанию: все пять строк, страна показана всегда.
 	def := pressSnap(t, b, api, "s:o", "s12_default")
-	setUserFilters(t, s, `{"country":"*","date":"30","dist":[1,2],"type":"trail"}`)
+	setUserFilters(t, s, `{"country":"*","date":"30","dist2":[1,2],"type":"trail"}`)
 	pressSnap(t, b, api, "s:o", "s12_all_countries")
 	setUserFilters(t, s, `{"city":"moscow","date":"m202610","type":"road"}`)
 	set := pressSnap(t, b, api, "s:o", "s12_filtered")
@@ -30,7 +30,7 @@ func TestS12Settings(t *testing.T) {
 // TestS13Reset — S-13: сброс только после подтверждения.
 func TestS13Reset(t *testing.T) {
 	s, api, b := countryFixture(t)
-	setUserFilters(t, s, `{"city":"moscow","date":"30","dist":[1],"type":"road"}`)
+	setUserFilters(t, s, `{"city":"moscow","date":"30","dist2":[1],"type":"road"}`)
 	_, v := filtersV(t, b)
 
 	// Из настроек: вопрос, отмена — без изменений.

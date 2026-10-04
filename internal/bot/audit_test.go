@@ -56,9 +56,9 @@ func TestAuditFilterScreens(t *testing.T) {
 	pressSnap(t, b, api, "f:c", "city_menu")
 	pressSnap(t, b, api, "f:t", "type_menu")
 	pressSnap(t, b, api, "f:k", "country_menu")
-	setUserFilters(t, s, `{"date":"30","city":"moscow","dist":[1],"type":"road"}`)
+	setUserFilters(t, s, `{"date":"30","city":"moscow","dist2":[1],"type":"road"}`)
 	pressSnap(t, b, api, "f:s", "summary_filtered")
-	pressSnap(t, b, api, "f:b", "bucket_menu")
+	pressSnap(t, b, api, "f:n", "bucket_menu")
 
 	setUserFilters(t, s, `{}`)
 	textSnap(t, b, api, "Москва", "city_text_found")
@@ -79,7 +79,7 @@ func TestAuditListAndCard(t *testing.T) {
 	list := pressSnap(t, b, api, "p:1"+pv, "list_page1")
 	pressSnap(t, b, api, "p:"+strconv.Itoa(maxPage)+pv, "list_last_page")
 
-	card := list.button(t, "1")
+	card := firstCard(t, list)
 	if card == "" {
 		t.Fatalf("нет кнопки карточки: %v", datas(t, list))
 	}

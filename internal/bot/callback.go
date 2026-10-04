@@ -16,7 +16,8 @@ import (
 //	f:s:v<N>                      сводка (N — версия фильтров пользователя)
 //	f:d[:a|30|cm|nm|mYYYYMM]:v<N> дата: подменю / значение
 //	f:c[:-|<city_key>]:v<N>       город
-//	f:b[:-|0..4]:v<N>             корзина дистанции
+//	f:n[:-|0..3]:v<N>             корзина дистанции
+//	f:b[:-]:v<N>                  то же в сообщениях до смены корзин: только открыть и снять
 //	f:t[:-|<тип>]:v<N>            тип
 //	f:k[:-|*|<ISO>]:v<N>          страна: подменю / по умолчанию / все страны / код
 //	f:x:<d|c|b|t|k>:v<N>          снять один фильтр
@@ -82,8 +83,10 @@ var (
 
 const maxCityKeyBytes = 60 // 64 − len("f:c:")
 
-var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "c": cbCity, "b": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
-var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbCity: "c", cbBucket: "b", cbType: "t", cbCountry: "k", cbReset: "x"}
+// Корзины дистанций сменились: новые кнопки — f:n. Номер корзины в f:b из
+// старого сообщения значил бы другой диапазон, поэтому такая кнопка устарела.
+var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "c": cbCity, "b": cbBucket, "n": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
+var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbCity: "c", cbBucket: "n", cbType: "t", cbCountry: "k", cbReset: "x"}
 
 var dKinds = map[string]cbKind{"m": cbDupeAsk, "y": cbDupeYes, "n": cbDupeNo, "x": cbDupeRej, "s": cbDupeSkip}
 var dLetters = map[cbKind]string{cbDupeAsk: "m", cbDupeYes: "y", cbDupeNo: "n", cbDupeRej: "x", cbDupeSkip: "s"}
@@ -183,7 +186,7 @@ func parseCallback(data string) (callback, error) {
 			return callback{}, errCallback // «сбросить всё» — только через подтверждение (s:y)
 		}
 		if len(p) == 3 {
-			if !validValue(k, p[2]) {
+			if !validValue(k, p[2]) || (p[1] == "b" && p[2] != "-") {
 				return callback{}, errCallback
 			}
 			c.Value = p[2]

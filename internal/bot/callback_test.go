@@ -12,7 +12,7 @@ func TestCallbackRoundTrip(t *testing.T) {
 	for _, s := range []string{
 		"f:s:v1", "f:d:v1", "f:d:a:v1", "f:d:30:v2", "f:d:cm:v3", "f:d:nm:v4", "f:d:m202611:v5",
 		"f:c:v1", "f:c:-:v1", "f:c:nizhniy-novgorod:v12",
-		"f:b:v1", "f:b:-:v1", "f:b:0:v1", "f:b:4:v2147483647",
+		"f:n:v1", "f:n:-:v1", "f:n:0:v1", "f:n:3:v2147483647",
 		"f:t:v1", "f:t:-:v1", "f:t:trail:v1",
 		"f:k:v1", "f:k:-:v1", "f:k:*:v1", "f:k:BY:v1", "f:k:RU:v1", "f:k:PL:v1",
 		"f:x:d:v1", "f:x:t:v1", "f:x:k:v1", "f:s:v0", "m",
@@ -37,7 +37,7 @@ func TestCallbackRoundTrip(t *testing.T) {
 func TestCallbackLegacy(t *testing.T) {
 	for _, s := range []string{
 		"f:s", "f:d", "f:d:a", "f:d:30", "f:d:m202611", "f:c", "f:c:-", "f:c:nizhniy-novgorod",
-		"f:b", "f:b:-", "f:b:4", "f:t:trail", "f:k", "f:k:*", "f:k:BY", "f:x:d",
+		"f:n", "f:n:-", "f:n:3", "f:t:trail", "f:k", "f:k:*", "f:k:BY", "f:x:d",
 	} {
 		c, err := parseCallback(s)
 		if err != nil || !c.Legacy || c.V != 0 {
@@ -46,6 +46,19 @@ func TestCallbackLegacy(t *testing.T) {
 		}
 		if got, err := c.encode(); err != nil || got != s+":v0" {
 			t.Errorf("encode(parse(%q)) = %q, %v; want %s:v0", s, got, err, s)
+		}
+	}
+	// Корзины дистанций сменились: f:b из старого сообщения открывает меню и
+	// снимает выбор (кодируется уже как f:n), а номер прежней корзины не
+	// принимается — он значил бы другой диапазон.
+	for in, want := range map[string]string{"f:b": "f:n:v0", "f:b:-": "f:n:-:v0", "f:b:v3": "f:n:v3", "f:b:-:v3": "f:n:-:v3"} {
+		c, err := parseCallback(in)
+		if err != nil || c.Kind != cbBucket {
+			t.Errorf("parseCallback(%q) = %+v, %v; want cbBucket", in, c, err)
+			continue
+		}
+		if got, _ := c.encode(); got != want {
+			t.Errorf("encode(parse(%q)) = %q, want %q", in, got, want)
 		}
 	}
 	// Версия — только последнее поле вида v<N>.
@@ -58,7 +71,7 @@ func TestCallbackReject(t *testing.T) {
 	for _, s := range []string{
 		"", "x", "f:", "f:q", "f:s:1", "f:d:31", "f:d:m202613", "f:d:m199912",
 		"f:c:Moscow", "f:c:a--b", "f:c:" + strings.Repeat("a", 61),
-		"f:b:5", "f:b:01", "f:t:ultra", "f:x:z",
+		"f:b:5", "f:b:01", "f:b:0", "f:b:4", "f:b:0:v1", "f:b:4:v1", "f:n:4", "f:n:4:v1", "f:n:01", "f:t:ultra", "f:x:z",
 		// страна: только "-", "*" и два заглавных латинских символа
 		"f:k:", "f:k:by", "f:k:By", "f:k:B", "f:k:BYY", "f:k:XYZ", "f:k:B1", "f:k:ВУ", "f:k:**", "f:k:*:1", "f:k:BY:1", "f:k: BY", "f:x:K", "f:x:kk",
 		"p:0:v1", "p:01:v1", "p:1", "p:1:1", "p:1:v01", "p:1:v-1", "p:+1:v1", "p:10001:v1",
@@ -108,12 +121,12 @@ func TestCallbackLength(t *testing.T) {
 	}
 
 	// Все кнопки экранов на крайних значениях укладываются в 64 байта.
-	f := userFilters{City: key60, Dist: []int{0, 1, 2, 3, 4}, Type: "obstacle"}
+	f := userFilters{City: key60, Dist: []int{0, 1, 2, 3}, Type: "obstacle"}
 	items := []store.ListItem{{ID: math.MaxInt64, Title: "t"}}
 	for name, sc := range map[string]screen{
 		"summary": summaryScreen(f, "Город", math.MaxInt32, math.MaxInt32, true),
-		"list":    listScreen(items, 50000, 10000, math.MaxInt32, true, 2026),
-		"list1":   listScreen(items, 1, 1, 1, false, 2026),
+		"list":    listScreen(items, 50000, 10000, math.MaxInt32, true, 2026, ""),
+		"list1":   listScreen(items, 1, 1, 1, false, 2026, ""),
 		"empty":   emptyScreen(f, false),
 	} {
 		if sc.kb == nil || len(sc.kb.InlineKeyboard) == 0 {

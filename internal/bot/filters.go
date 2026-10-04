@@ -32,23 +32,26 @@ const defaultCountry = "RU"
 type userFilters struct {
 	Date string `json:"date,omitempty"` // "" и "a" — все будущие
 	City string `json:"city,omitempty"` // city_key страны фильтра
-	Dist []int  `json:"dist,omitempty"` // индексы buckets
+	// Dist — индексы buckets. Ключ dist2: под прежним ключом dist лежали
+	// индексы прежних корзин с другими границами, они не читаются.
+	Dist []int  `json:"dist2,omitempty"`
 	Type string `json:"type,omitempty"`
 	// Country: "" — страна по умолчанию, "*" — все страны, иначе ISO
 	// alpha-2. Старые фильтры без поля читаются как "".
 	Country string `json:"country,omitempty"`
 }
 
-// buckets — корзины дистанций (D-08): сплошные полуинтервалы (lo, hi] в метрах.
+// buckets — корзины дистанций: сплошные полуинтервалы (lo, hi] в метрах.
+// Границы стоят за классическими дистанциями: 10 км — в первой корзине,
+// полумарафон (21,1) — во второй, марафон (42,2) — в третьей.
 var buckets = [...]struct {
-	label  string
-	lo, hi int
+	emoji, label string
+	lo, hi       int
 }{
-	{"до 5 км", 0, 5500},
-	{"5–15 км", 5500, 15000},
-	{"15–30 км, полумарафон", 15000, 30000},
-	{"30–43 км, марафон", 30000, 43000},
-	{"ультра > 43 км", 43000, 2147483647},
+	{"🟢", "до 10 км", 0, 10000},
+	{"🔵", "10–21 км", 10000, 21100},
+	{"🟣", "21–42 км", 21100, 42200},
+	{"🏔", "42+ км", 42200, 2147483647},
 }
 
 var typeLabels = map[event.Type]string{
@@ -56,9 +59,29 @@ var typeLabels = map[event.Type]string{
 	event.TypeTrail:    "Трейл",
 	event.TypeCross:    "Кросс",
 	event.TypeTrack:    "Стадион",
-	event.TypeObstacle: "С препятствиями",
+	event.TypeObstacle: "OCR · с препятствиями",
 	event.TypeOther:    "Другое",
 }
+
+var typeEmojis = map[event.Type]string{
+	event.TypeRoad:     "🛣",
+	event.TypeTrail:    "🏔",
+	event.TypeCross:    "🌲",
+	event.TypeTrack:    "🏟",
+	event.TypeObstacle: "🧗",
+}
+
+// typeEmoji — значок типа; у «Другого» и неизвестного типа — бегун.
+func typeEmoji(t event.Type) string {
+	if e, ok := typeEmojis[t]; ok {
+		return e
+	}
+	return "🏃"
+}
+
+// menuTypes — типы в меню, в этом порядке. «Другое» в меню не выводится:
+// такие события остаются в выдаче при «Любом» типе.
+var menuTypes = [...]event.Type{event.TypeRoad, event.TypeTrail, event.TypeCross, event.TypeObstacle, event.TypeTrack}
 
 var monthNames = [...]string{"январь", "февраль", "март", "апрель", "май", "июнь",
 	"июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"}
@@ -350,9 +373,60 @@ func summaryLine(f userFilters, cityName string, showCountry bool) string {
 		"🏃 Тип: " + upperFirst(typeLabel(f.Type)),
 	}
 	if showCountry {
-		lines = append([]string{"🌍 Страна: " + countryLabel(f.effectiveCountry())}, lines...)
+		country := countryLabel(f.effectiveCountry())
+		if f.Country == allCountries {
+			country = countryName(allCountries) // без второго глобуса подряд
+		}
+		lines = append([]string{"🌍 Страна: " + country}, lines...)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// activeCount — число фильтров, отличающихся от значений по умолчанию, из
+// пяти: страна (не Россия), город, даты, дистанции, тип.
+func (f userFilters) activeCount() int {
+	n := 0
+	for _, on := range []bool{f.Country != "", f.City != "", f.Date != "" && f.Date != "a", len(f.Dist) > 0, f.Type != ""} {
+		if on {
+			n++
+		}
+	}
+	return n
+}
+
+// activeLine — заданные фильтры одной строкой для шапки списка; "" — фильтры
+// не заданы.
+func activeLine(f userFilters, cityName string) string {
+	var parts []string
+	if f.Country != "" {
+		parts = append(parts, countryName(f.effectiveCountry()))
+	}
+	if f.City != "" {
+		parts = append(parts, html.EscapeString(cityName))
+	}
+	if f.Date != "" && f.Date != "a" {
+		parts = append(parts, upperFirst(dateLabel(f.Date)))
+	}
+	if len(f.Dist) > 0 {
+		parts = append(parts, distLabel(f.Dist))
+	}
+	if f.Type != "" {
+		parts = append(parts, typeLabel(f.Type))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// plural — форма слова по числу: one — 1 забег, few — 2 забега, many — 5 забегов.
+func plural(n int, one, few, many string) string {
+	switch {
+	case n%100 >= 11 && n%100 <= 14:
+		return many
+	case n%10 == 1:
+		return one
+	case n%10 >= 2 && n%10 <= 4:
+		return few
+	}
+	return many
 }
 
 // btn — ряд из одной кнопки.
@@ -381,11 +455,11 @@ func summaryScreen(f userFilters, cityName string, v, n int, showCountry bool) s
 		rows = append(rows, btn("🌍 Страна", callback{Kind: cbCountry}))
 	}
 	rows = append(rows, r1, r2,
-		btn("🔎 Показать "+strconv.Itoa(n), callback{Kind: cbPage, Page: 1, V: v}),
+		btn(fmt.Sprintf("🔎 Показать %d %s", n, plural(n, "забег", "забега", "забегов")), callback{Kind: cbPage, Page: 1, V: v}),
 		btn("🔄 Сбросить", callback{Kind: cbResetAsk, Value: fromSearch}),
 		btn(backLabel, callback{Kind: cbMenu}))
 	return screen{
-		text: "🔎 <b>ПОИСК ЗАБЕГА</b>\n\n" + summaryLine(f, cityName, showCountry),
+		text: "🔎 <b>Поиск забега</b>\n\n" + summaryLine(f, cityName, showCountry),
 		kb:   keyboard(rows...),
 	}
 }
@@ -421,35 +495,42 @@ func emptyScreen(f userFilters, pickCountry bool) screen {
 	return screen{text: text, kb: keyboard(rows...)}
 }
 
-// dateMenu — пресеты и 12 месяцев.
-func dateMenu(today time.Time) screen {
-	var r1, r2 row
-	r1.add("30 дней", callback{Kind: cbDate, Value: "30"})
-	r1.add("Этот месяц", callback{Kind: cbDate, Value: "cm"})
-	r2.add("Следующий месяц", callback{Kind: cbDate, Value: "nm"})
-	r2.add("Все будущие", callback{Kind: cbDate, Value: "a"})
-	rows := []row{r1, r2}
+// check — подпись кнопки с отметкой «✓» у выбранного значения.
+func check(on bool, label string) string {
+	if on {
+		return "✓ " + label
+	}
+	return label
+}
+
+// dateMenu — «этот» и «следующий» месяц, за ними десять следующих месяцев
+// (первые два уже в верхнем ряду), внизу «все будущие». Пресет «30 дней» в
+// меню не выводится, но в сохранённых фильтрах и старых кнопках действует.
+func dateMenu(f userFilters, today time.Time) screen {
+	var top row
+	top.add(check(f.Date == "cm", "📅 Этот месяц"), callback{Kind: cbDate, Value: "cm"})
+	top.add(check(f.Date == "nm", "🗓 Следующий месяц"), callback{Kind: cbDate, Value: "nm"})
+	rows := []row{top}
 	var mr row
-	for i, o := range monthOptions(today) {
-		mr.add(o.Label, callback{Kind: cbDate, Value: o.Value})
-		if i%3 == 2 {
+	for i, o := range monthOptions(today)[2:] {
+		mr.add(check(f.Date == o.Value, upperFirst(o.Label)), callback{Kind: cbDate, Value: o.Value})
+		if i%2 == 1 {
 			rows, mr = append(rows, mr), nil
 		}
 	}
-	return screen{text: "Выберите даты", kb: keyboard(append(rows, btn(backLabel, back))...)}
+	rows = append(rows, mr,
+		btn(check(f.Date == "", "🔮 Все будущие"), callback{Kind: cbDate, Value: "a"}),
+		btn(backLabel, back))
+	return screen{text: "Выберите даты", kb: keyboard(rows...)}
 }
 
 // bucketMenu — корзины дистанций; выбранные отмечены «✓».
 func bucketMenu(f userFilters) screen {
 	var rows []row
 	for i, bk := range buckets {
-		label := bk.label
-		if slices.Contains(f.Dist, i) {
-			label = "✓ " + label
-		}
-		rows = append(rows, btn(label, callback{Kind: cbBucket, Value: strconv.Itoa(i)}))
+		rows = append(rows, btn(check(slices.Contains(f.Dist, i), bk.emoji+" "+bk.label), callback{Kind: cbBucket, Value: strconv.Itoa(i)}))
 	}
-	rows = append(rows, btn("Любая", callback{Kind: cbBucket, Value: "-"}), btn(backLabel, back))
+	rows = append(rows, btn(check(len(f.Dist) == 0, "🏃 Любая"), callback{Kind: cbBucket, Value: "-"}), btn(backLabel, back))
 	return screen{text: "Выберите дистанции (можно несколько)", kb: keyboard(rows...)}
 }
 
@@ -473,11 +554,19 @@ func (b *Bot) typeMenu(ctx context.Context, f userFilters) (screen, error) {
 	if err != nil {
 		return screen{}, err
 	}
+	// По две кнопки в ряд, в порядке menuTypes; только встречающиеся типы.
 	var rows []row
-	for _, t := range types {
-		rows = append(rows, btn(typeLabel(string(t)), callback{Kind: cbType, Value: string(t)}))
+	var r row
+	for _, t := range menuTypes {
+		if !slices.Contains(types, t) {
+			continue
+		}
+		r.add(check(f.Type == string(t), typeEmoji(t)+" "+typeLabel(string(t))), callback{Kind: cbType, Value: string(t)})
+		if len(r) == 2 {
+			rows, r = append(rows, r), nil
+		}
 	}
-	rows = append(rows, btn("Любой", callback{Kind: cbType, Value: "-"}), btn(backLabel, back))
+	rows = append(rows, r, btn(check(f.Type == "", "🏃 Любой"), callback{Kind: cbType, Value: "-"}), btn(backLabel, back))
 	return screen{text: "Выберите тип забега", kb: keyboard(rows...)}, nil
 }
 
@@ -666,7 +755,8 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 
 // mainMenu — главное меню: вход в поиск и в настройки.
 func mainMenu() screen {
-	return screen{text: "🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>\n\nНайди свой следующий старт!",
+	return screen{text: "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\n" +
+		"Собрали беговые старты из разных календарей в одном месте. Выбери город, даты и дистанцию — покажу, куда можно заявиться.",
 		kb: keyboard(btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}))}
 }
 
@@ -728,7 +818,7 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 	case mut != nil || c.Kind == cbSummary:
 		sc, err = b.summary(ctx, f, v)
 	case c.Kind == cbDate:
-		sc = dateMenu(b.today())
+		sc = dateMenu(f, b.today())
 	case c.Kind == cbCity:
 		sc, err = b.cityMenu(ctx, f)
 	case c.Kind == cbType:
@@ -822,7 +912,7 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		rows = append(rows, btn(fmt.Sprintf("%s (%d)", c.Name, c.N), callback{Kind: cbCity, Value: c.Key}))
 	}
 	if len(rows) > 0 {
-		reply += "\n\nВозможно, вы имели в виду:"
+		reply += "\nВозможно, вы имели в виду:"
 	}
 	rows = append(rows, btn("📍 Выбрать из списка", callback{Kind: cbCity}), btn(backLabel, back))
 	say(screen{text: reply, kb: keyboard(rows...)})
