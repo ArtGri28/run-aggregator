@@ -32,7 +32,7 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 	if c.Kind != cbPage {
 		return staleNotice
 	}
-	raw, v, err := b.Store.Filters(ctx, q.From.ID)
+	raw, v, _, err := b.cbState(ctx, q.From.ID, c)
 	if err != nil {
 		b.logger().Error("filters", "err", err)
 		return errNotice
@@ -67,7 +67,7 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 		}
 		sc = listScreen(items, total, page, v, f.Country == allCountries)
 	}
-	if err := b.show(ctx, q, sc); err != nil {
+	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
 		b.logger().Warn("show list", "err", err)
 	}
 	return notice
@@ -134,6 +134,13 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	if c.Kind != cbCard {
 		return staleNotice
 	}
+	// Кнопки карточки — с текущей версией фильтров: карточка из старого
+	// сообщения открывается, а «назад» ведёт в актуальную выдачу.
+	raw, v, _, err := b.cbState(ctx, q.From.ID, c)
+	if err != nil {
+		b.logger().Error("filters", "err", err)
+		return errNotice
+	}
 	root, err := b.Store.RootEventID(ctx, c.ID)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		b.logger().Error("root event", "err", err)
@@ -146,43 +153,30 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	var sc screen
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		sc = goneScreen(c.Page, c.V)
+		sc = goneScreen(c.Page, v)
 	case err != nil:
 		b.logger().Error("get event", "err", err)
 		return errNotice
 	// Слитый корень — страховка от гонки со слиянием между запросами.
 	case !e.IsListed || e.MergedIntoID != nil:
-		sc = goneScreen(c.Page, c.V)
+		sc = goneScreen(c.Page, v)
 	default:
 		srcs, err := b.Store.EventSources(ctx, e.ID)
 		if err != nil {
 			b.logger().Error("event sources", "err", err)
 			return errNotice
 		}
-		style, err := b.cardPlaceStyle(ctx, q.From.ID)
-		if err != nil {
-			b.logger().Error("card place", "err", err)
-			return errNotice
+		// Место: «📍 город», а при «всех странах» ещё и «🌍 страна».
+		style := placePlain
+		if loadFilters(raw, b.today()).Country == allCountries {
+			style = placeWithCountry
 		}
-		sc = cardScreen(e, srcs, c.Page, c.V, style)
+		sc = cardScreen(e, srcs, c.Page, v, style)
 	}
 	if err := b.show(ctx, q, sc); err != nil {
 		b.logger().Warn("show card", "err", err)
 	}
 	return ""
-}
-
-// cardPlaceStyle — как показать место в карточке: «📍 город», а при «всех
-// странах» ещё и «🌍 страна».
-func (b *Bot) cardPlaceStyle(ctx context.Context, tgID int64) (placeStyle, error) {
-	raw, _, err := b.Store.Filters(ctx, tgID)
-	if err != nil {
-		return placePlain, err
-	}
-	if loadFilters(raw, b.today()).Country == allCountries {
-		return placeWithCountry, nil
-	}
-	return placePlain, nil
 }
 
 func goneScreen(page, v int) screen {

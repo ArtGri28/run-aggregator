@@ -2,11 +2,8 @@ package bot
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
-
-	"github.com/jackc/pgx/v5"
 
 	"aggregator/internal/event"
 	"aggregator/internal/store/storetest"
@@ -133,54 +130,5 @@ func TestAuditStaleCallback(t *testing.T) {
 			t.Fatalf("%s: ждали только один answerCallbackQuery, вызовы %+v", data, api.calls)
 		}
 		matchSnapshot(t, "stale_callback", renderCall(t, a[0]))
-	}
-}
-
-// userRow — строка users целиком (все колонки) для сравнения до/после.
-func userRow(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, os.Getenv("TEST_DATABASE_URL"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close(ctx)
-	var row string
-	if err := conn.QueryRow(ctx, `SELECT to_jsonb(u)::text FROM users u WHERE tg_id = 42`).Scan(&row); err != nil {
-		t.Fatal(err)
-	}
-	return row
-}
-
-// TestAuditUsersTouch фиксирует поведение исходной реализации (08-AUDIT.md,
-// проблемы D-08 и D-10): устаревшая кнопка страницы обновляет last_seen_at,
-// старая кнопка фильтра меняет фильтры и их версию; неизвестный callback
-// users не трогает.
-func TestAuditUsersTouch(t *testing.T) {
-	s, api, b := countryFixture(t)
-	_, v := filtersV(t, b)
-
-	before := userRow(t)
-	api.reset()
-	b.api.ProcessUpdate(context.Background(), cbUpdate(42, 7, "zzz"))
-	if userRow(t) != before {
-		t.Error("неизвестный callback изменил users")
-	}
-
-	before = userRow(t)
-	press(t, b, api, "p:1:v"+strconv.Itoa(v+5))
-	if userRow(t) == before {
-		t.Error("ожидали: устаревшая страница обновляет last_seen_at (поведение b165c10)")
-	}
-	if _, v2 := filtersV(t, b); v2 != v {
-		t.Errorf("устаревшая страница изменила filters_v: %d → %d", v, v2)
-	}
-
-	setUserFilters(t, s, `{"type":"road"}`)
-	f1, v1 := filtersV(t, b)
-	press(t, b, api, "f:b:1") // кнопка из сообщения до смены фильтров
-	f2, v2 := filtersV(t, b)
-	if v2 != v1+1 || len(f2.Dist) == len(f1.Dist) {
-		t.Errorf("ожидали: старая кнопка f:b меняет фильтры (поведение b165c10): v %d → %d, dist %v → %v", v1, v2, f1.Dist, f2.Dist)
 	}
 }

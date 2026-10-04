@@ -328,7 +328,7 @@ func TestNoAreaInTelegram(t *testing.T) {
 	menu := press(t, b, api, "f:c")
 	var labels []string
 	for _, bt := range menu.buttons(t) {
-		if strings.HasPrefix(bt.CallbackData, "f:c:") && bt.CallbackData != "f:c:-" {
+		if d := noV(bt.CallbackData); strings.HasPrefix(d, "f:c:") && d != "f:c:-" {
 			labels = append(labels, bt.Text)
 		}
 	}

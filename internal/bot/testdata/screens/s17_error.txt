@@ -1,0 +1,3 @@
+method: answerCallbackQuery
+text: Что-то пошло не так, попробуйте ещё раз
+show_alert: 

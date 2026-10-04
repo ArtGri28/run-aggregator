@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"slices"
@@ -583,17 +584,73 @@ func (b *Bot) update(ctx context.Context, tgID int64, fn func(userFilters) userF
 	return loadFilters(raw, today), v, err
 }
 
+// updateAt — изменение фильтров кнопкой c: применяется только при версии
+// кнопки, равной текущей. Кнопка без версии или с другой версией —
+// store.ErrStaleFilters, в базу не пишется ничего.
+func (b *Bot) updateAt(ctx context.Context, tgID int64, c callback, fn func(userFilters) userFilters) (userFilters, int, error) {
+	if c.Legacy {
+		return userFilters{}, 0, store.ErrStaleFilters
+	}
+	today := b.today()
+	raw, v, err := b.Store.UpdateFiltersAt(ctx, tgID, c.V, func(cur []byte) ([]byte, error) {
+		return json.Marshal(fn(loadFilters(cur, today)))
+	})
+	return loadFilters(raw, today), v, err
+}
+
+// cbState — фильтры и версия для кнопки навигации. Актуальная кнопка
+// (версия совпала) отмечает активность пользователя; устаревшая — без
+// версии, с другой версией или от пользователя, которого нет в users, —
+// читает без единой записи: stale = true, для отсутствующего пользователя
+// фильтры по умолчанию и версия 0.
+func (b *Bot) cbState(ctx context.Context, tgID int64, c callback) (raw []byte, v int, stale bool, err error) {
+	raw, v, ok, err := b.Store.PeekFilters(ctx, tgID)
+	if err != nil || !ok || c.Legacy || c.V != v {
+		return raw, v, true, err
+	}
+	raw, v, err = b.Store.Filters(ctx, tgID)
+	return raw, v, false, err
+}
+
+// stamp проставляет версию фильтров v во все кнопки f: экрана: экраны
+// строят их без версии. Кнопка, не влезающая с версией в 64 байта,
+// пропускается, как в row.add.
+func stamp(sc screen, v int) screen {
+	if sc.kb == nil {
+		return sc
+	}
+	var rows []row
+	for _, r := range sc.kb.InlineKeyboard {
+		var out row
+		for _, bt := range r {
+			if c, err := parseCallback(bt.CallbackData); err == nil && strings.HasPrefix(bt.CallbackData, "f:") {
+				c.V, c.Legacy = v, false
+				data, err := c.encode()
+				if err != nil {
+					continue
+				}
+				bt.CallbackData = data
+			}
+			out = append(out, bt)
+		}
+		rows = append(rows, out)
+	}
+	sc.kb = keyboard(rows...)
+	return sc
+}
+
 // onStart: /start создаёт пользователя, но фильтры не сбрасывает (D-17).
 func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	if u.Message == nil || u.Message.From == nil {
 		return
 	}
-	if _, _, err := b.Store.Filters(ctx, u.Message.From.ID); err != nil {
+	_, v, err := b.Store.Filters(ctx, u.Message.From.ID)
+	if err != nil {
 		b.logger().Error("start", "err", err)
 		return
 	}
 	sc := screen{text: "🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>\n\nНайди свой следующий старт!", kb: keyboard(btn("🔎 Найти забег", back))}
-	if err := b.send(ctx, u.Message.Chat.ID, sc); err != nil {
+	if err := b.send(ctx, u.Message.Chat.ID, stamp(sc, v)); err != nil {
 		b.logger().Warn("send start", "err", err)
 	}
 }
@@ -613,10 +670,13 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 	)
 	mut := mutation(c)
 	if mut != nil {
-		f, v, err = b.update(ctx, q.From.ID, mut)
+		f, v, err = b.updateAt(ctx, q.From.ID, c, mut)
+		if errors.Is(err, store.ErrStaleFilters) {
+			return staleNotice
+		}
 	} else {
 		var raw []byte
-		raw, v, err = b.Store.Filters(ctx, q.From.ID)
+		raw, v, _, err = b.cbState(ctx, q.From.ID, c)
 		f = loadFilters(raw, b.today())
 	}
 	if err != nil {
@@ -651,7 +711,7 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 		b.logger().Error("filter screen", "err", err)
 		return errNotice
 	}
-	if err := b.show(ctx, q, sc); err != nil {
+	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
 		b.logger().Warn("show filters", "err", err)
 	}
 	return notice
@@ -666,8 +726,9 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	if m == nil || m.From == nil {
 		return
 	}
+	v := 0 // версия фильтров для кнопок ответа; известна после чтения фильтров
 	say := func(sc screen) {
-		if err := b.send(ctx, m.Chat.ID, sc); err != nil {
+		if err := b.send(ctx, m.Chat.ID, stamp(sc, v)); err != nil {
 			b.logger().Warn("send text reply", "err", err)
 		}
 	}
@@ -684,7 +745,7 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	today := b.today()
 	// Город ищется в стране фильтров пользователя: одинаковый ключ в двух
 	// странах — разные города.
-	raw, _, err := b.Store.Filters(ctx, m.From.ID)
+	raw, v, err := b.Store.Filters(ctx, m.From.ID)
 	if err != nil {
 		b.logger().Error("city text", "err", err)
 		say(screen{text: errNotice, plain: true})
@@ -704,7 +765,8 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	}
 	b.logger().Info("city text", "found", n > 0)
 	if n > 0 {
-		f, v, err := b.update(ctx, m.From.ID, func(f userFilters) userFilters { return f.setCity(key) })
+		var f userFilters
+		f, v, err = b.update(ctx, m.From.ID, func(f userFilters) userFilters { return f.setCity(key) })
 		var sc screen
 		if err == nil {
 			sc, err = b.summary(ctx, f, v)

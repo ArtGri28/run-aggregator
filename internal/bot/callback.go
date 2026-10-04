@@ -13,18 +13,22 @@ import (
 
 // Кодек callback_data — контракт для всех экранов; предел Telegram — 64 байта.
 //
-//	f:s                      сводка
-//	f:d[:a|30|cm|nm|mYYYYMM] дата: подменю / значение
-//	f:c[:-|<city_key>]       город
-//	f:b[:-|0..4]             корзина дистанции
-//	f:t[:-|<тип>]            тип
-//	f:k[:-|*|<ISO>]          страна: подменю / по умолчанию / все страны / код
-//	f:x[:d|c|b|t|k]          сбросить всё / один фильтр
-//	p:<стр>:v<N>             страница списка (N — версия фильтров)
+//	f:s:v<N>                      сводка (N — версия фильтров пользователя)
+//	f:d[:a|30|cm|nm|mYYYYMM]:v<N> дата: подменю / значение
+//	f:c[:-|<city_key>]:v<N>       город
+//	f:b[:-|0..4]:v<N>             корзина дистанции
+//	f:t[:-|<тип>]:v<N>            тип
+//	f:k[:-|*|<ISO>]:v<N>          страна: подменю / по умолчанию / все страны / код
+//	f:x[:d|c|b|t|k]:v<N>          сбросить всё / один фильтр
+//	p:<стр>:v<N>             страница списка
 //	e:<id>:<стр>:v<N>        карточка
 //	r:<a|y|n>:<runID>        админ: принятие прогона
 //	d:o                      админ: очередь дублей с начала
 //	d:<m|y|n|x|s>:<cid>      админ: слить (подтверждение) / да / отмена / разные / пропустить
+//
+// Версия — всегда последнее поле. f: без версии — формат до Phase 8 (кнопки
+// старых сообщений): разбирается с Legacy и считается устаревшим; encode его
+// не создаёт. N = 0 — пользователя нет в users.
 const maxCallbackBytes = 64
 
 type cbKind int
@@ -51,13 +55,14 @@ const (
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
-// значение; для f:x — вид сброса ("" — все фильтры).
+// значение; для f:x — вид сброса ("" — все фильтры). Legacy — f: без версии.
 type callback struct {
-	Kind  cbKind
-	Value string
-	Page  int
-	ID    int64
-	V     int
+	Kind   cbKind
+	Value  string
+	Page   int
+	ID     int64
+	V      int
+	Legacy bool
 }
 
 var (
@@ -140,7 +145,7 @@ func version(s string) (int, error) {
 	if !strings.HasPrefix(s, "v") {
 		return 0, errCallback
 	}
-	n, err := num(s[1:], 1, math.MaxInt32)
+	n, err := num(s[1:], 0, math.MaxInt32)
 	return int(n), err
 }
 
@@ -151,6 +156,10 @@ func parseCallback(data string) (callback, error) {
 	p := strings.Split(data, ":")
 	switch p[0] {
 	case "f":
+		c := callback{Legacy: true}
+		if v, err := version(p[len(p)-1]); err == nil && len(p) > 2 {
+			c.V, c.Legacy, p = v, false, p[:len(p)-1]
+		}
 		if len(p) < 2 || len(p) > 3 {
 			return callback{}, errCallback
 		}
@@ -158,7 +167,7 @@ func parseCallback(data string) (callback, error) {
 		if !ok {
 			return callback{}, errCallback
 		}
-		c := callback{Kind: k}
+		c.Kind = k
 		if len(p) == 3 {
 			if !validValue(k, p[2]) {
 				return callback{}, errCallback
@@ -228,6 +237,7 @@ func (c callback) encode() (string, error) {
 		if c.Value != "" {
 			s += ":" + c.Value
 		}
+		s += ":v" + strconv.Itoa(c.V)
 	case cbPage:
 		s = fmt.Sprintf("p:%d:v%d", c.Page, c.V)
 	case cbCard:

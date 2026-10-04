@@ -1,0 +1,9 @@
+method: editMessageText
+parse_mode: HTML
+---
+Событие больше не доступно
+---
+[⬅️ К списку] → p:1:v2
+method: answerCallbackQuery
+text: 
+show_alert: 

@@ -52,7 +52,7 @@ func TestSearchScreenStructure(t *testing.T) {
 	if !strings.HasPrefix(c.Form["text"], "🔎 <b>ПОИСК ЗАБЕГА</b>\n\n🌍 Страна: 🇷🇺 Россия\n📍 Город:") {
 		t.Errorf("текст:\n%s", c.Form["text"])
 	}
-	if first := c.buttons(t)[0]; first.Text != "🌍 Страна" || first.CallbackData != "f:k" {
+	if first := c.buttons(t)[0]; first.Text != "🌍 Страна" || noV(first.CallbackData) != "f:k" {
 		t.Errorf("первая кнопка %+v", first)
 	}
 }

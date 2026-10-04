@@ -142,7 +142,7 @@ func (c call) button(t *testing.T, textPrefix string) string {
 	t.Helper()
 	for _, b := range c.buttons(t) {
 		if strings.HasPrefix(b.Text, textPrefix) {
-			return b.CallbackData
+			return noV(b.CallbackData)
 		}
 	}
 	return ""

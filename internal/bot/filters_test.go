@@ -150,10 +150,35 @@ func textUpdate(userID int64, text string) *models.Update {
 	return u
 }
 
-// press нажимает кнопку и возвращает единственную правку сообщения;
-// на каждый callback — ровно один ответ.
+// fresh делает нажатие «актуальным»: пользователь 42 есть в users (как
+// после /start), а кнопке f: без версии дописана текущая версия фильтров.
+// Устаревшие кнопки и кнопки без пользователя проверяет stale_test.go.
+func fresh(t *testing.T, b *Bot, data string) string {
+	t.Helper()
+	_, v, err := b.Store.Filters(context.Background(), 42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, err := parseCallback(data); err == nil && c.Legacy {
+		return data + ":v" + strconv.Itoa(v)
+	}
+	return data
+}
+
+// noV убирает версию из кнопки f: — для сравнения состава кнопок в тестах,
+// где версия не предмет проверки (её проверяют снимки и stale_test.go).
+func noV(data string) string {
+	if c, err := parseCallback(data); err == nil && strings.HasPrefix(data, "f:") && !c.Legacy {
+		return data[:strings.LastIndex(data, ":")]
+	}
+	return data
+}
+
+// press нажимает актуальную кнопку (см. fresh) и возвращает единственную
+// правку сообщения; на каждый callback — ровно один ответ.
 func press(t *testing.T, b *Bot, api *fakeAPI, data string) call {
 	t.Helper()
+	data = fresh(t, b, data)
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), cbUpdate(42, 7, data))
 	if n := len(api.of("answerCallbackQuery")); n != 1 {
@@ -171,7 +196,7 @@ func datas(t *testing.T, c call) []string {
 	t.Helper()
 	var out []string
 	for _, bt := range c.buttons(t) {
-		out = append(out, bt.CallbackData)
+		out = append(out, noV(bt.CallbackData))
 	}
 	return out
 }
@@ -208,7 +233,7 @@ func TestFilterFlow(t *testing.T) {
 
 	// Город: топ по данным, «Все города».
 	c = press(t, b, api, "f:c")
-	if bt := c.buttons(t)[0]; bt.Text != "Москва (9)" || bt.CallbackData != "f:c:moscow" {
+	if bt := c.buttons(t)[0]; bt.Text != "Москва (9)" || noV(bt.CallbackData) != "f:c:moscow" {
 		t.Fatalf("f:c: первая кнопка %+v, want «Москва (9)» f:c:moscow", bt)
 	}
 	if c.button(t, "Все города") != "f:c:-" {

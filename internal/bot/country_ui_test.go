@@ -23,7 +23,7 @@ func setUserFilters(t *testing.T, s *store.Store, raw string) {
 func buttonText(t *testing.T, c call, data string) string {
 	t.Helper()
 	for _, bt := range c.buttons(t) {
-		if bt.CallbackData == data {
+		if noV(bt.CallbackData) == data {
 			return bt.Text
 		}
 	}
@@ -62,7 +62,7 @@ func TestCountryButtonDefaultRU(t *testing.T) {
 	if got := buttonText(t, c, "f:k"); got != "🌍 Страна" {
 		t.Errorf("кнопка страны = %q", got)
 	}
-	if first := c.buttons(t)[0]; first.CallbackData != "f:k" {
+	if first := c.buttons(t)[0]; noV(first.CallbackData) != "f:k" {
 		t.Errorf("кнопка страны не первая: %q", first.Text)
 	}
 	if n := showCount(t, c); n != 2 {

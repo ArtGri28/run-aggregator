@@ -115,3 +115,73 @@ func TestUsersColumns(t *testing.T) {
 		t.Fatalf("users columns = %v, want %v", got, want)
 	}
 }
+
+// userRow — строка users целиком (все колонки) для сравнения до/после.
+func userRow(t *testing.T, tgID int64) string {
+	t.Helper()
+	return scalar[string](t, `SELECT COALESCE((SELECT to_jsonb(u)::text FROM users u WHERE tg_id = $1), '')`, tgID)
+}
+
+// TestUpdateFiltersAt — Phase 8, контракт (раздел 5): изменение применяется
+// только при совпавшей версии; иначе ErrStaleFilters и ни одной записи.
+func TestUpdateFiltersAt(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// Нет пользователя: не создаётся ни чтением, ни устаревшим изменением.
+	raw, v, ok, err := s.PeekFilters(ctx, 42)
+	if err != nil || ok || v != 0 || string(raw) != "{}" {
+		t.Fatalf("PeekFilters (нет пользователя) = %s, %d, %v, %v", raw, v, ok, err)
+	}
+	if _, _, err := s.UpdateFiltersAt(ctx, 42, 1, withKey("type", "road", 0)); !errors.Is(err, ErrStaleFilters) {
+		t.Fatalf("UpdateFiltersAt (нет пользователя) = %v, want ErrStaleFilters", err)
+	}
+	if row := userRow(t, 42); row != "" {
+		t.Fatalf("пользователь создан: %s", row)
+	}
+
+	if _, _, err := s.Filters(ctx, 42); err != nil {
+		t.Fatal(err)
+	}
+	before := userRow(t, 42)
+
+	// Чтение без записи и чужая версия: строка не меняется вовсе.
+	if _, v, ok, err = s.PeekFilters(ctx, 42); err != nil || !ok || v != 1 {
+		t.Fatalf("PeekFilters = %d, %v, %v; want 1, true", v, ok, err)
+	}
+	if _, _, err := s.UpdateFiltersAt(ctx, 42, 7, withKey("type", "road", 0)); !errors.Is(err, ErrStaleFilters) {
+		t.Fatalf("UpdateFiltersAt (чужая версия) = %v, want ErrStaleFilters", err)
+	}
+	if row := userRow(t, 42); row != before {
+		t.Fatalf("устаревшее изменение записало в users:\n%s\n%s", before, row)
+	}
+
+	// Совпавшая версия: применяется, версия растёт.
+	raw, v, err = s.UpdateFiltersAt(ctx, 42, 1, withKey("type", "road", 0))
+	if err != nil || v != 2 || string(raw) != `{"type": "road"}` {
+		t.Fatalf("UpdateFiltersAt (актуальная) = %s, %d, %v", raw, v, err)
+	}
+
+	// Два изменения с одной версией: применяется ровно одно.
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, errs[i] = s.UpdateFiltersAt(ctx, 42, 2, withKey("k"+string(rune('a'+i)), "x", 50*time.Millisecond))
+		}()
+	}
+	wg.Wait()
+	stale := 0
+	for _, e := range errs {
+		if errors.Is(e, ErrStaleFilters) {
+			stale++
+		} else if e != nil {
+			t.Fatal(e)
+		}
+	}
+	if _, v, _, _ = s.PeekFilters(ctx, 42); stale != 1 || v != 3 {
+		t.Fatalf("гонка: устаревших %d (want 1), версия %d (want 3)", stale, v)
+	}
+}

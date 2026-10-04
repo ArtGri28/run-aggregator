@@ -410,7 +410,8 @@ func TestListScreenShape(t *testing.T) {
 			got = append(got, bt.Text+"="+bt.CallbackData)
 		}
 	}
-	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "⬅️ К фильтрам=f:s"}
+	// f:s — без версии (v0): её проставляет stamp при показе экрана.
+	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "⬅️ К фильтрам=f:s:v0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buttons = %v, want %v", got, want)
 	}

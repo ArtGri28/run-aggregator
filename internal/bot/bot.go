@@ -198,10 +198,12 @@ func isPrivate(u *models.Update) bool {
 }
 
 // cb оборачивает обработчик callback: разбор data (ошибка — «кнопка
-// устарела» без вызова fn) и ровно один ответ в defer — в том числе при
-// панике fn. fn возвращает текст уведомления ("" — без уведомления) и
-// получает ctx с коротким пределом ожидания 429 (callbackRetryWait, LO-03),
-// чтобы ответ ушёл вовремя; сам ответ — с исходным ctx.
+// устарела» без вызова fn) и ровно один ответ в defer. fn возвращает текст
+// уведомления ("" — без уведомления) и получает ctx с коротким пределом
+// ожидания 429 (callbackRetryWait, LO-03), чтобы ответ ушёл вовремя; сам
+// ответ — с исходным ctx. Устаревшая кнопка и внутренняя ошибка (errNotice
+// от fn либо паника fn) различаются и в ответе, и в логе; в лог идёт только
+// вид кнопки, при панике — ещё стек, без данных апдейта.
 func (b *Bot) cb(fn func(ctx context.Context, q *models.CallbackQuery, c callback) string) tgbot.HandlerFunc {
 	return func(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		q := u.CallbackQuery
@@ -209,13 +211,21 @@ func (b *Bot) cb(fn func(ctx context.Context, q *models.CallbackQuery, c callbac
 			return
 		}
 		notice := staleNotice
-		defer func() { b.answer(ctx, q, notice) }()
+		defer func() {
+			if p := recover(); p != nil {
+				notice = errNotice
+				b.logger().Error("callback internal error", "prefix", cbPrefix(q.Data), "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
+			} else if notice == errNotice {
+				b.logger().Error("callback internal error", "prefix", cbPrefix(q.Data))
+			} else if notice == staleNotice {
+				b.logger().Info("callback stale", "prefix", cbPrefix(q.Data))
+			}
+			b.answer(ctx, q, notice)
+		}()
 		c, err := parseCallback(q.Data)
 		if err != nil {
-			b.logger().Info("callback rejected", "prefix", cbPrefix(q.Data))
 			return
 		}
-		notice = "" // при панике fn ответ уйдёт без текста
 		notice = fn(context.WithValue(ctx, retryWaitKey{}, callbackRetryWait), q, c)
 	}
 }
@@ -232,7 +242,7 @@ func cbPrefix(data string) string {
 func (b *Bot) onDefault(ctx context.Context, api *tgbot.Bot, u *models.Update) {
 	switch {
 	case u.CallbackQuery != nil:
-		b.logger().Info("callback unknown", "prefix", cbPrefix(u.CallbackQuery.Data))
+		b.logger().Info("callback stale", "prefix", cbPrefix(u.CallbackQuery.Data))
 		b.answer(ctx, u.CallbackQuery, staleNotice)
 	case u.Message != nil && u.Message.Text != "":
 		b.onText(ctx, api, u)
