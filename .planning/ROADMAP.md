@@ -313,7 +313,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 completion, RESTORE GATE Phase 6 и отдельных разрешениях на ship и выкат)*
 
-- [ ] 08-08-PLAN.md — Production-приёмка в Telegram (UX-03) — выкат выполнен 2026-10-04 (образ `fbdca0f5eecb`, `DEPLOY VERIFY OK`), приёмка не пройдена; вторая редакция интерфейса (контракт, раздел 13; `2052184`) принята локально, не выкачена
+- [x] 08-08-PLAN.md — Production-приёмка в Telegram (UX-03) — выкат 2026-10-04: образ `fbdca0f5eecb`, затем `11d6d4bd8ee0` со второй редакцией интерфейса (контракт, раздел 13); `DEPLOY VERIFY OK`; приёмка пройдена владельцем 2026-10-04
 
 ## Progress
 
@@ -329,4 +329,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | In Progress | - |
-| 8. Telegram Bot UX | 8/9 | In Progress | - |
+| 8. Telegram Bot UX | 9/9 | In Progress | - |
