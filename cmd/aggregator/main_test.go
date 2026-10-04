@@ -50,10 +50,14 @@ func TestNewSources(t *testing.T) {
 	for _, s := range newSources(nil) {
 		codes[s.Code()] = s.Policy()
 	}
-	for _, c := range []string{"marathonec", "probeg", "heroleague"} {
+	for _, c := range []string{"marathonec", "probeg", "heroleague", "tristyle"} {
 		if _, ok := codes[c]; !ok {
 			t.Fatalf("источник %s не зарегистрирован", c)
 		}
+	}
+	// klbamatar и runin исключены из активного сбора решением владельца.
+	if len(codes) != 4 {
+		t.Fatalf("зарегистрировано источников: %d, want 4", len(codes))
 	}
 	if p := codes["probeg"]; p.CountryFallback != normalize.NoFallback {
 		t.Fatalf("probeg: Policy = %+v, want NoFallback (D-01)", p)

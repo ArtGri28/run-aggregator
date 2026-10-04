@@ -27,6 +27,7 @@ import (
 	"aggregator/internal/ingest/sources/heroleague"
 	"aggregator/internal/ingest/sources/marathonec"
 	"aggregator/internal/ingest/sources/probeg"
+	"aggregator/internal/ingest/sources/tristyle"
 	"aggregator/internal/store"
 )
 
@@ -154,8 +155,10 @@ func openStore(ctx context.Context) (*store.Store, error) {
 
 // newSources — единственное место регистрации источников: пакет ingest их
 // не импортирует. f — сетевой загрузчик (боту не нужен: nil).
+// Адаптеры klbamatar и runin (internal/ingest/sources) написаны, но не
+// зарегистрированы: на 2026-10-04 они дают только дубли ПроБЕГа.
 func newSources(f *ingest.Fetcher) []ingest.Source {
-	return []ingest.Source{marathonec.New(f), probeg.New(f), heroleague.New(f)}
+	return []ingest.Source{marathonec.New(f), probeg.New(f), heroleague.New(f), tristyle.New(f)}
 }
 
 // newRunner собирает Runner из настроек наблюдения и дедупликации. Worker и

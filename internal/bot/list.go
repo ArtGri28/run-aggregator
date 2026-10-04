@@ -239,7 +239,7 @@ var monthsGen = [...]string{"января", "февраля", "марта", "а�
 	"июля", "августа", "сентября", "октября", "ноября", "декабря"}
 
 // sourceNames — подпись источника по коду; неизвестный код показывается как есть.
-var sourceNames = map[string]string{"marathonec": "Марафонец", "probeg": "ПроБЕГ", "heroleague": "Лига Героев"}
+var sourceNames = map[string]string{"marathonec": "Марафонец", "probeg": "ПроБЕГ", "heroleague": "Лига Героев", "tristyle": "Tristyle.Клуб", "klbamatar": "КЛБ «Аматар»", "runin": "RunIn"}
 
 func sourceName(code string) string {
 	if n, ok := sourceNames[code]; ok {
