@@ -74,7 +74,7 @@ func TestSimilarCities(t *testing.T) {
 
 	from := mustDateFixed("2026-10-01")
 	keys := func(prefix string) []string {
-		got, err := s.SimilarCities(ctx, "", prefix, from, 5)
+		got, err := s.SimilarCities(ctx, "", prefix, "", from, 5)
 		if err != nil {
 			t.Fatalf("SimilarCities(%q): %v", prefix, err)
 		}
@@ -101,9 +101,54 @@ func TestSimilarCities(t *testing.T) {
 			t.Errorf("SimilarCities(%q) = %v, want %v", tc.prefix, got, tc.want)
 		}
 	}
-	got, _ := s.SimilarCities(ctx, "", "nizh", from, 5)
+	got, _ := s.SimilarCities(ctx, "", "nizh", "", from, 5)
 	if want := (CityCount{Key: "nizhniy-novgorod", Name: "Нижний Новгород", N: 2}); len(got) != 1 || got[0] != want {
 		t.Fatalf("SimilarCities(nizh) = %+v, want [%+v]", got, want)
+	}
+}
+
+// TestSimilarCitiesByName — Phase 8, контракт (раздел 7, P8): подсказки ещё и
+// по началу названия без учёта регистра; ключ-синоним не мешает.
+func TestSimilarCitiesByName(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	listEvent(t, s, "2026-10-01", "Москва", "moscow", event.TypeRoad, 5000) // ключ-синоним: префикс mosk не совпадает
+	listEvent(t, s, "2026-10-02", "Москва", "moscow", event.TypeRoad, 5000)
+	listEvent(t, s, "2026-10-03", "Московский", "moskovskiy", event.TypeRoad, 5000)
+	listEvent(t, s, "2026-10-04", "Подмосковье", "podmoskove", event.TypeRoad, 5000)
+	listEvent(t, s, "2026-09-01", "Мосальск", "mosalsk", event.TypeRoad, 5000) // в прошлом
+	from := mustDateFixed("2026-10-01")
+
+	for _, tc := range []struct {
+		prefix, name string
+		want         []string
+	}{
+		{"mosk", "", []string{"moskovskiy"}},               // только ключ — как раньше
+		{"mosk", "Моск", []string{"moscow", "moskovskiy"}}, // оба правила, без повторов, по числу событий
+		{"mosk", "мОСК", []string{"moscow", "moskovskiy"}}, // регистр не важен
+		{"", "Моск", []string{"moscow", "moskovskiy"}},     // ключ не разобран — работает название
+		{"", "М", []string{}},                              // короче двух символов
+		{"m", "М", []string{}},                             //
+		{"", "%", []string{}},                              //
+		{"", "Мо%", []string{}},                            // % и _ — обычные символы
+		{"", "Мо_", []string{}},                            //
+		{"", "Мос", []string{"moscow", "moskovskiy"}},      // событие в прошлом не подсказывается
+		{"", "осков", []string{}},                          // только начало названия
+	} {
+		got, err := s.SimilarCities(ctx, "", tc.prefix, tc.name, from, 5)
+		if err != nil {
+			t.Fatalf("SimilarCities(%q, %q): %v", tc.prefix, tc.name, err)
+		}
+		keys := []string{}
+		for _, c := range got {
+			keys = append(keys, c.Key)
+		}
+		if !reflect.DeepEqual(keys, tc.want) {
+			t.Errorf("SimilarCities(%q, %q) = %v, want %v", tc.prefix, tc.name, keys, tc.want)
+		}
+	}
+	if got, _ := s.SimilarCities(ctx, "", "", "Моск", from, 1); len(got) != 1 || got[0] != (CityCount{Key: "moscow", Name: "Москва", N: 2}) {
+		t.Errorf("limit 1 = %+v", got)
 	}
 }
 
@@ -209,7 +254,7 @@ func TestCitiesByCountry(t *testing.T) {
 			{"RU", "lyu", []string{"lyuban"}}, {"", "mi", []string{"minsk"}}, {"", "mo", []string{"moscow"}},
 			{"BY", "mo", []string{}}, {"", "lyu", []string{"lyuban"}},
 		} {
-			got, err := s.SimilarCities(ctx, tc.country, tc.prefix, from, 5)
+			got, err := s.SimilarCities(ctx, tc.country, tc.prefix, "", from, 5)
 			if err != nil || !reflect.DeepEqual(keys(got), tc.want) {
 				t.Errorf("SimilarCities(%q, %q) = %v, %v; want %v", tc.country, tc.prefix, keys(got), err, tc.want)
 			}

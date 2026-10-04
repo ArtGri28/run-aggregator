@@ -190,8 +190,6 @@ func (userFilters) reset() userFilters { return userFilters{} }
 func mutation(c callback) func(userFilters) userFilters {
 	v := c.Value
 	switch {
-	case c.Kind == cbReset && v == "":
-		return userFilters.reset
 	case c.Kind == cbReset:
 		return func(f userFilters) userFilters { return f.unset(v[0]) }
 	case v == "":
@@ -366,6 +364,10 @@ func btn(text string, c callback) row {
 
 var back = callback{Kind: cbSummary}
 
+// backLabel — единая подпись кнопки возврата: одна на экран, последней
+// строкой, ведёт к родителю по дереву навигации.
+const backLabel = "⬅️ Назад"
+
 // summaryScreen — экран поиска (D-10): значения фильтров в тексте, в кнопках
 // только названия; «Показать N»; showCountry добавляет страну над остальными.
 func summaryScreen(f userFilters, cityName string, v, n int, showCountry bool) screen {
@@ -380,7 +382,8 @@ func summaryScreen(f userFilters, cityName string, v, n int, showCountry bool) s
 	}
 	rows = append(rows, r1, r2,
 		btn("🔎 Показать "+strconv.Itoa(n), callback{Kind: cbPage, Page: 1, V: v}),
-		btn("🔄 Сбросить", callback{Kind: cbReset}))
+		btn("🔄 Сбросить", callback{Kind: cbResetAsk, Value: fromSearch}),
+		btn(backLabel, callback{Kind: cbMenu}))
 	return screen{
 		text: "🔎 <b>ПОИСК ЗАБЕГА</b>\n\n" + summaryLine(f, cityName, showCountry),
 		kb:   keyboard(rows...),
@@ -414,7 +417,7 @@ func emptyScreen(f userFilters, pickCountry bool) screen {
 	if pickCountry {
 		rows = append(rows, btn("🌍 Выбрать страну", callback{Kind: cbCountry}))
 	}
-	rows = append(rows, btn("⬅️ К фильтрам", back))
+	rows = append(rows, btn(backLabel, back))
 	return screen{text: text, kb: keyboard(rows...)}
 }
 
@@ -433,7 +436,7 @@ func dateMenu(today time.Time) screen {
 			rows, mr = append(rows, mr), nil
 		}
 	}
-	return screen{text: "Выберите даты", kb: keyboard(append(rows, btn("⬅️ Назад", back))...)}
+	return screen{text: "Выберите даты", kb: keyboard(append(rows, btn(backLabel, back))...)}
 }
 
 // bucketMenu — корзины дистанций; выбранные отмечены «✓».
@@ -446,7 +449,7 @@ func bucketMenu(f userFilters) screen {
 		}
 		rows = append(rows, btn(label, callback{Kind: cbBucket, Value: strconv.Itoa(i)}))
 	}
-	rows = append(rows, btn("Любая", callback{Kind: cbBucket, Value: "-"}), btn("Готово", back))
+	rows = append(rows, btn("Любая", callback{Kind: cbBucket, Value: "-"}), btn(backLabel, back))
 	return screen{text: "Выберите дистанции (можно несколько)", kb: keyboard(rows...)}
 }
 
@@ -460,7 +463,7 @@ func (b *Bot) cityMenu(ctx context.Context, f userFilters) (screen, error) {
 	for _, c := range cities {
 		rows = append(rows, btn(fmt.Sprintf("%s (%d)", c.Name, c.N), callback{Kind: cbCity, Value: c.Key}))
 	}
-	rows = append(rows, btn("Все города", callback{Kind: cbCity, Value: "-"}), btn("⬅️ Назад", back))
+	rows = append(rows, btn("Все города", callback{Kind: cbCity, Value: "-"}), btn(backLabel, back))
 	return screen{text: "Выберите город или напишите его название сообщением", kb: keyboard(rows...)}, nil
 }
 
@@ -474,7 +477,7 @@ func (b *Bot) typeMenu(ctx context.Context, f userFilters) (screen, error) {
 	for _, t := range types {
 		rows = append(rows, btn(typeLabel(string(t)), callback{Kind: cbType, Value: string(t)}))
 	}
-	rows = append(rows, btn("Любой", callback{Kind: cbType, Value: "-"}), btn("⬅️ Назад", back))
+	rows = append(rows, btn("Любой", callback{Kind: cbType, Value: "-"}), btn(backLabel, back))
 	return screen{text: "Выберите тип забега", kb: keyboard(rows...)}, nil
 }
 
@@ -504,6 +507,19 @@ func (b *Bot) showCountry(ctx context.Context, f userFilters) (bool, error) {
 	return b.countryAvailable(ctx, f)
 }
 
+// cityName — написание выбранного города из каталога; города нет среди
+// будущих событий — его ключ.
+func (b *Bot) cityName(ctx context.Context, f userFilters) (string, error) {
+	if f.City == "" {
+		return "", nil
+	}
+	nm, cnt, err := b.Store.CityName(ctx, f.countryCode(), f.City, b.today())
+	if err != nil || cnt == 0 {
+		return f.City, err
+	}
+	return nm, nil
+}
+
 // summary строит сводку: число событий и написание выбранного города.
 func (b *Bot) summary(ctx context.Context, f userFilters, v int) (screen, error) {
 	today := b.today()
@@ -511,15 +527,9 @@ func (b *Bot) summary(ctx context.Context, f userFilters, v int) (screen, error)
 	if err != nil {
 		return screen{}, err
 	}
-	name := f.City
-	if f.City != "" {
-		nm, cnt, err := b.Store.CityName(ctx, f.countryCode(), f.City, today)
-		if err != nil {
-			return screen{}, err
-		}
-		if cnt > 0 {
-			name = nm
-		}
+	name, err := b.cityName(ctx, f)
+	if err != nil {
+		return screen{}, err
 	}
 	show, err := b.showCountry(ctx, f)
 	if err != nil {
@@ -570,7 +580,7 @@ func (b *Bot) countryMenu(ctx context.Context, f userFilters) (screen, error) {
 	for _, c := range cs {
 		rows = append(rows, btn(label(c.Code, c.N), callback{Kind: cbCountry, Value: c.Code}))
 	}
-	rows = append(rows, btn(label(allCountries, total), callback{Kind: cbCountry, Value: allCountries}), btn("⬅️ Назад", back))
+	rows = append(rows, btn(label(allCountries, total), callback{Kind: cbCountry, Value: allCountries}), btn(backLabel, back))
 	return screen{text: "🌍 Страна", kb: keyboard(rows...)}, nil
 }
 
@@ -612,7 +622,7 @@ func (b *Bot) cbState(ctx context.Context, tgID int64, c callback) (raw []byte, 
 	return raw, v, false, err
 }
 
-// stamp проставляет версию фильтров v во все кнопки f: экрана: экраны
+// stamp проставляет версию фильтров v во все кнопки f: и s: экрана: экраны
 // строят их без версии. Кнопка, не влезающая с версией в 64 байта,
 // пропускается, как в row.add.
 func stamp(sc screen, v int) screen {
@@ -623,7 +633,7 @@ func stamp(sc screen, v int) screen {
 	for _, r := range sc.kb.InlineKeyboard {
 		var out row
 		for _, bt := range r {
-			if c, err := parseCallback(bt.CallbackData); err == nil && strings.HasPrefix(bt.CallbackData, "f:") {
+			if c, err := parseCallback(bt.CallbackData); err == nil && (strings.HasPrefix(bt.CallbackData, "f:") || strings.HasPrefix(bt.CallbackData, "s:")) {
 				c.V, c.Legacy = v, false
 				data, err := c.encode()
 				if err != nil {
@@ -649,10 +659,29 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		b.logger().Error("start", "err", err)
 		return
 	}
-	sc := screen{text: "🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>\n\nНайди свой следующий старт!", kb: keyboard(btn("🔎 Найти забег", back))}
-	if err := b.send(ctx, u.Message.Chat.ID, stamp(sc, v)); err != nil {
+	if err := b.send(ctx, u.Message.Chat.ID, stamp(mainMenu(), v)); err != nil {
 		b.logger().Warn("send start", "err", err)
 	}
+}
+
+// mainMenu — главное меню: вход в поиск и в настройки.
+func mainMenu() screen {
+	return screen{text: "🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>\n\nНайди свой следующий старт!",
+		kb: keyboard(btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}))}
+}
+
+// onMenu — «назад» в главное меню правкой сообщения. Экран от фильтров не
+// зависит: версия для его кнопок читается без записи.
+func (b *Bot) onMenu(ctx context.Context, q *models.CallbackQuery, _ callback) string {
+	_, v, _, err := b.Store.PeekFilters(ctx, q.From.ID)
+	if err != nil {
+		b.logger().Error("menu", "err", err)
+		return errNotice
+	}
+	if err := b.show(ctx, q, stamp(mainMenu(), v)); err != nil {
+		b.logger().Warn("show menu", "err", err)
+	}
+	return ""
 }
 
 const (
@@ -779,16 +808,20 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		say(sc)
 		return
 	}
-	similar, err := b.Store.SimilarCities(ctx, country, key, today, 5)
+	similar, err := b.Store.SimilarCities(ctx, country, key, text, today, 5)
 	if err != nil {
 		b.logger().Error("similar cities", "err", err)
 		say(screen{text: errNotice, plain: true})
 		return
 	}
+	reply := "В каталоге нет забегов в «" + html.EscapeString(text) + "»"
 	var rows []row
 	for _, c := range similar {
 		rows = append(rows, btn(fmt.Sprintf("%s (%d)", c.Name, c.N), callback{Kind: cbCity, Value: c.Key}))
 	}
-	rows = append(rows, btn("⬅️ Назад", back))
-	say(screen{text: "В каталоге нет забегов в «" + html.EscapeString(text) + "»", kb: keyboard(rows...)})
+	if len(rows) > 0 {
+		reply += "\n\nВозможно, вы имели в виду:"
+	}
+	rows = append(rows, btn("📍 Выбрать из списка", callback{Kind: cbCity}), btn(backLabel, back))
+	say(screen{text: reply, kb: keyboard(rows...)})
 }

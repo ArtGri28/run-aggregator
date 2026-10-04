@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+🏃 <b>[ОТМЕНЁН] Осенний кросс «Быстрый пёс»</b>
+
+📅 3 октября 2026
+📍 Москва
+📏 Дистанции: 2 км
+🏷 Трейл
+
+Источники: <a href="https://marathonec.ru/kross-bystry-pes-osen/">Марафонец</a>
+---
+[⬅️ Назад] → p:2:v1

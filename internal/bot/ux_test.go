@@ -20,7 +20,7 @@ func TestStartScreen(t *testing.T) {
 	if len(s) != 1 || s[0].Form["text"] != "🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>\n\nНайди свой следующий старт!" {
 		t.Fatalf("приветствие: %+v", s)
 	}
-	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:s"}) || s[0].button(t, "🔎 Найти забег") != "f:s" {
+	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:s", "s:o"}) || s[0].button(t, "🔎 Найти забег") != "f:s" {
 		t.Errorf("кнопки: %v", got)
 	}
 }
@@ -41,7 +41,7 @@ func TestSearchScreenStructure(t *testing.T) {
 	for _, bt := range c.buttons(t) {
 		texts = append(texts, bt.Text)
 	}
-	if want := []string{"📍 Город", "📅 Дата", "📏 Дистанция", "🏃 Тип", "🔎 Показать 1", "🔄 Сбросить"}; !reflect.DeepEqual(texts, want) {
+	if want := []string{"📍 Город", "📅 Дата", "📏 Дистанция", "🏃 Тип", "🔎 Показать 1", "🔄 Сбросить", "⬅️ Назад"}; !reflect.DeepEqual(texts, want) {
 		t.Errorf("кнопки %q, want %q", texts, want)
 	}
 
@@ -66,7 +66,7 @@ func TestSubmenuBack(t *testing.T) {
 			t.Errorf("%s: нет возврата f:s: %v", data, datas(t, c))
 		}
 		for _, bt := range c.buttons(t) {
-			if bt.CallbackData == "f:s" && !strings.Contains(bt.Text, "Назад") && bt.Text != "Готово" {
+			if noV(bt.CallbackData) == "f:s" && bt.Text != backLabel {
 				t.Errorf("%s: кнопка возврата %q", data, bt.Text)
 			}
 		}
@@ -90,7 +90,7 @@ func TestEmptyScreenHints(t *testing.T) {
 	_, v := filtersV(t, b)
 	c := press(t, b, api, "p:1:v"+strconv.Itoa(v))
 	if c.Form["text"] != "Ничего не нашлось\n\nПопробуйте снять ограничение:" ||
-		!reflect.DeepEqual(datas(t, c), []string{"f:x:d", "f:k", "f:s"}) || c.button(t, "⬅️ К фильтрам") != "f:s" {
+		!reflect.DeepEqual(datas(t, c), []string{"f:x:d", "f:k", "f:s"}) || c.button(t, backLabel) != "f:s" {
 		t.Errorf("с фильтром: %q %v", c.Form["text"], datas(t, c))
 	}
 	if em := emptyScreen(userFilters{}, false); em.text != "Ничего не нашлось" || len(em.kb.InlineKeyboard) != 1 {
@@ -120,7 +120,7 @@ func TestCardStructure(t *testing.T) {
 			btns = append(btns, b.Text)
 		}
 	}
-	if !reflect.DeepEqual(btns, []string{"🔗 Регистрация", "⬅️ К списку"}) {
+	if !reflect.DeepEqual(btns, []string{"🔗 Регистрация", backLabel}) {
 		t.Errorf("кнопки %q", btns)
 	}
 	// Режим «Все страны»: страна строкой после города.

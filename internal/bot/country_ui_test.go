@@ -256,7 +256,7 @@ func TestSingleCountryUX(t *testing.T) {
 		strings.Contains(c.Form["text"], "Страна") {
 		t.Errorf("сводка:\n%s", c.Form["text"])
 	}
-	if got := datas(t, c); !reflect.DeepEqual(got, []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "f:x"}) {
+	if got := datas(t, c); !reflect.DeepEqual(got, []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "s:r:f", "m"}) {
 		t.Errorf("кнопки сводки: %v", got)
 	}
 	if buttonText(t, press(t, b, api, "f:c"), "f:c:-") != "Все города" {

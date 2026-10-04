@@ -97,6 +97,7 @@ func TestS14StaleFilter(t *testing.T) {
 		"f:t:road" + old, "f:c:moscow" + old, "f:b:1" + old, "f:k:BY" + old, "f:d:a" + old, "f:x:d" + old, "f:x" + old, // чужая версия
 		"f:t:road", "f:b:1", "f:d:a", "f:x", "f:x:d", // формат до Phase 8, без версии
 		"f:t:road:v0", "f:t:road:v99",
+		"s:y:o" + old, "s:y:f" + old, "s:y:o:v0", "s:y:f:v99", // устаревшее «Да, сбросить»
 	} {
 		a := onlyToast(t, data, raw(b, api, 42, data))
 		matchSnapshot(t, "s14_stale", renderCall(t, a))
@@ -128,12 +129,14 @@ func TestS15StaleNavigation(t *testing.T) {
 	press(t, b, api, "f:t:road") // версия 2; кнопки v1 и без версии — старые
 	before := dbState(t)
 	for _, c := range []struct{ data, snap string }{
-		{"f:s", "s15_summary"},       // формат до Phase 8
-		{"f:s:v1", "s15_summary"},    // чужая версия
-		{"f:t", "s15_type_menu"},     // открыть подменю
-		{"p:2:v1", "s15_list"},       // 1-я страница и уведомление
-		{"e:1:1:v1", "s15_card"},     // карточка, «назад» с текущей версией
-		{"e:99999:1:v1", "s15_gone"}, // события нет
+		{"f:s", "s15_summary"},        // формат до Phase 8
+		{"f:s:v1", "s15_summary"},     // чужая версия
+		{"f:t", "s15_type_menu"},      // открыть подменю
+		{"p:2:v1", "s15_list"},        // 1-я страница и уведомление
+		{"e:1:1:v1", "s15_card"},      // карточка, «назад» с текущей версией
+		{"e:99999:1:v1", "s15_gone"},  // события нет
+		{"s:o:v1", "s15_settings"},    // мои настройки
+		{"s:r:o:v1", "s15_reset_ask"}, // вопрос о сбросе — ещё не изменение
 	} {
 		matchSnapshot(t, c.snap, edited(t, c.data, raw(b, api, 42, c.data)))
 		if after := dbState(t); after != before {
@@ -143,10 +146,10 @@ func TestS15StaleNavigation(t *testing.T) {
 
 	// Пользователя нет в users: экран по умолчанию, строка не создаётся;
 	// изменение — «устарела».
-	for _, c := range []struct{ data, snap string }{{"f:s", "s15_no_user"}, {"f:s:v1", "s15_no_user"}, {"p:1:v1", "s15_no_user_list"}} {
+	for _, c := range []struct{ data, snap string }{{"f:s", "s15_no_user"}, {"f:s:v1", "s15_no_user"}, {"p:1:v1", "s15_no_user_list"}, {"s:o:v1", "s15_no_user_settings"}} {
 		matchSnapshot(t, c.snap, edited(t, c.data, raw(b, api, 77, c.data)))
 	}
-	for _, data := range []string{"f:d:30:v0", "f:d:30", "f:d:30:v1"} {
+	for _, data := range []string{"f:d:30:v0", "f:d:30", "f:d:30:v1", "s:y:o:v0", "s:y:f:v1"} {
 		matchSnapshot(t, "s14_stale", renderCall(t, onlyToast(t, data, raw(b, api, 77, data))))
 	}
 	if after := dbState(t); after != before {
@@ -167,7 +170,7 @@ func TestS16Unknown(t *testing.T) {
 	before := dbState(t)
 	for _, data := range []string{
 		"zzz", "", "f:", "f:z", "f:z:v1", "f:s:1", "f:d:31:v1", "p:0:v1", "p:1", "e:0:1:v1", "e:1:1",
-		"q:1", "s:o:v1", "m", strings.Repeat("f", 65), "f:c:" + strings.Repeat("a", 61) + ":v1", "\xff\xfe", "f:s:v1:v2",
+		"q:1", "s:o", "s:x:v1", "s:y:z:v1", "f:x", "f:x:v1", "m:v1", "mm", strings.Repeat("f", 65), "f:c:" + strings.Repeat("a", 61) + ":v1", "\xff\xfe", "f:s:v1:v2",
 	} {
 		a := onlyToast(t, data, raw(b, api, 42, data))
 		matchSnapshot(t, "s16_unknown", renderCall(t, a))
@@ -217,9 +220,9 @@ func TestS17InternalError(t *testing.T) {
 	}
 }
 
-var fButtonRE = regexp.MustCompile(`→ (f:[^ |\n]*)`)
+var fButtonRE = regexp.MustCompile(`→ ([fs]:[^ |\n]*)`)
 
-// TestSnapshotsVersioned: в каждом эталоне экрана все кнопки f: несут версию
+// TestSnapshotsVersioned: в каждом эталоне экрана все кнопки f: и s: несут версию
 // (контракт, раздел 3) — экран, показанный без stamp, сюда не пройдёт.
 func TestSnapshotsVersioned(t *testing.T) {
 	files, err := os.ReadDir(screensDir)
@@ -234,7 +237,7 @@ func TestSnapshotsVersioned(t *testing.T) {
 		noUser := strings.HasPrefix(f.Name(), "s15_no_user")
 		for _, m := range fButtonRE.FindAllStringSubmatch(string(body), -1) {
 			c, err := parseCallback(m[1])
-			if err != nil || c.Legacy || (c.V == 0) != noUser {
+			if err != nil || c.Legacy || (c.V == 0) != noUser || !versionRE.MatchString(m[1]) {
 				t.Errorf("%s: кнопка %q — версия %d, legacy %v, %v", f.Name(), m[1], c.V, c.Legacy, err)
 			}
 		}

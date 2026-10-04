@@ -65,7 +65,7 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 			b.logger().Error("list", "err", err)
 			return errNotice
 		}
-		sc = listScreen(items, total, page, v, f.Country == allCountries)
+		sc = listScreen(items, total, page, v, f.Country == allCountries, today.Year())
 	}
 	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
 		b.logger().Warn("show list", "err", err)
@@ -93,9 +93,10 @@ func cut(s string, n int) string {
 }
 
 // listScreen — страница списка (D-11): пронумерованные строки, кнопки
-// карточек 1…5, навигация и «Фильтры». flags — перед городом флаг страны
+// карточек 1…5, навигация и возврат к поиску. year — текущий год (см.
+// listDate). flags — перед городом флаг страны
 // события (выдача «все страны»); область и район не показываются никогда.
-func listScreen(items []store.ListItem, total, page, v int, flags bool) screen {
+func listScreen(items []store.ListItem, total, page, v int, flags bool, year int) screen {
 	pages := (total + pageSize - 1) / pageSize
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Найдено %d · страница %d/%d\n", total, page, pages)
@@ -108,7 +109,7 @@ func listScreen(items []store.ListItem, total, page, v int, flags bool) screen {
 		if f := countryFlag(it.CountryCode); flags && f != "" {
 			city = f + " " + city
 		}
-		fmt.Fprintf(&sb, "\n%d. %s · %s · %s%s", i+1, it.StartDate.Format("02.01"), html.EscapeString(city),
+		fmt.Fprintf(&sb, "\n%d. %s · %s · %s%s", i+1, listDate(it.StartDate, year), html.EscapeString(city),
 			statusMark(it.Status), html.EscapeString(cut(it.Title, maxListTitle)))
 		if km := kmList(it.Distances); km != "" {
 			sb.WriteString(" · " + km)
@@ -123,7 +124,16 @@ func listScreen(items []store.ListItem, total, page, v int, flags bool) screen {
 	if page < pages {
 		nav.add("→", callback{Kind: cbPage, Page: page + 1, V: v})
 	}
-	return screen{text: sb.String(), kb: keyboard(cards, nav, btn("⬅️ К фильтрам", back))}
+	return screen{text: sb.String(), kb: keyboard(cards, nav, btn(backLabel, back))}
+}
+
+// listDate — дата в строке списка: «ДД.ММ», а для события не текущего года
+// year — «ДД.ММ.ГГГГ», чтобы забег следующего года не выглядел прошедшим.
+func listDate(d time.Time, year int) string {
+	if d.Year() != year {
+		return d.Format("02.01.2006")
+	}
+	return d.Format("02.01")
 }
 
 // onCard показывает карточку события (e:<id>:<стр>:v<N>). Слитое событие
@@ -180,7 +190,7 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 }
 
 func goneScreen(page, v int) screen {
-	return screen{text: goneNotice, kb: keyboard(btn("⬅️ К списку", callback{Kind: cbPage, Page: page, V: v}))}
+	return screen{text: goneNotice, kb: keyboard(btn(backLabel, callback{Kind: cbPage, Page: page, V: v}))}
 }
 
 // monthsGen — месяцы в родительном падеже.
@@ -263,7 +273,7 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 		reg = row{{Text: "🔗 Регистрация", URL: e.RegistrationURL}}
 	}
 	return screen{text: strings.TrimRight(sb.String(), "\n"),
-		kb: keyboard(reg, btn("⬅️ К списку", callback{Kind: cbPage, Page: page, V: v}))}
+		kb: keyboard(reg, btn(backLabel, callback{Kind: cbPage, Page: page, V: v}))}
 }
 
 // validURL — ссылка, которую можно показать: http/https с хостом, без

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -159,17 +160,24 @@ func fresh(t *testing.T, b *Bot, data string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c, err := parseCallback(data); err == nil && c.Legacy {
+	if versioned(data) && !versionRE.MatchString(data) {
 		return data + ":v" + strconv.Itoa(v)
 	}
 	return data
 }
 
-// noV убирает версию из кнопки f: — для сравнения состава кнопок в тестах,
-// где версия не предмет проверки (её проверяют снимки и stale_test.go).
+var versionRE = regexp.MustCompile(`:v[0-9]+$`)
+
+// versioned — кнопки, которым версию проставляет stamp: f: и s:.
+func versioned(data string) bool {
+	return strings.HasPrefix(data, "f:") || strings.HasPrefix(data, "s:")
+}
+
+// noV убирает версию из кнопки f: или s: — для сравнения состава кнопок в
+// тестах, где версия не предмет проверки (её проверяют снимки и stale_test.go).
 func noV(data string) string {
-	if c, err := parseCallback(data); err == nil && strings.HasPrefix(data, "f:") && !c.Legacy {
-		return data[:strings.LastIndex(data, ":")]
+	if versioned(data) {
+		return versionRE.ReplaceAllString(data, "")
 	}
 	return data
 }
@@ -227,7 +235,7 @@ func TestFilterFlow(t *testing.T) {
 
 	// Сводка: шесть кнопок D-10.
 	c := press(t, b, api, "f:s")
-	if got, want := datas(t, c), []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "f:x"}; !reflect.DeepEqual(got, want) {
+	if got, want := datas(t, c), []string{"f:c", "f:d", "f:b", "f:t", "p:1:v1", "s:r:f", "m"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("f:s: кнопки %v, want %v", got, want)
 	}
 
@@ -354,7 +362,7 @@ func TestCityText(t *testing.T) {
 	if len(sends) != 1 || !strings.Contains(sends[0].Form["text"], "В каталоге нет забегов в «Новгород»") {
 		t.Fatalf("«Новгород»: sendMessage = %+v", sends)
 	}
-	if got, want := datas(t, sends[0]), []string{"f:c:nizhniy-novgorod", "f:c:velikiy-novgorod", "f:s"}; !reflect.DeepEqual(got, want) {
+	if got, want := datas(t, sends[0]), []string{"f:c:nizhniy-novgorod", "f:c:velikiy-novgorod", "f:c", "f:s"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("«Новгород»: кнопки %v, want %v", got, want)
 	}
 
@@ -422,9 +430,16 @@ func TestResetFilters(t *testing.T) {
 	press(t, b, api, "f:d:30")
 	_, before := filtersV(t, b)
 
-	c := press(t, b, api, "f:x")
+	// «Сбросить» в сводке — только через подтверждение.
+	if ask := press(t, b, api, "s:r:f"); ask.button(t, "✅ Да, сбросить") != "s:y:f" {
+		t.Fatalf("подтверждение сброса: %v", datas(t, ask))
+	}
+	if _, v := filtersV(t, b); v != before {
+		t.Fatalf("вопрос о сбросе изменил версию: %d → %d", before, v)
+	}
+	c := press(t, b, api, "s:y:f")
 	if !strings.Contains(c.Form["text"], "📍 Город: Все города\n📅 Дата: Все будущие\n📏 Дистанция: Любая\n🏃 Тип: Любой") {
-		t.Fatalf("f:x: текст %q", c.Form["text"])
+		t.Fatalf("сброс: текст %q", c.Form["text"])
 	}
 	raw, v, err := s.Filters(context.Background(), 42)
 	if err != nil || string(raw) != "{}" || v != before+1 {

@@ -236,7 +236,7 @@ func TestEditFallbackToSend(t *testing.T) {
 func urlScreen() screen {
 	kb := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{
 		{{Text: "Регистрация", URL: "https://example.test/reg"}},
-		{{Text: "⬅️ К списку", CallbackData: "p:1:v1"}},
+		{{Text: backLabel, CallbackData: "p:1:v1"}},
 	}}
 	return screen{text: "карточка", kb: kb}
 }
@@ -266,7 +266,7 @@ func TestURLButtonFallback(t *testing.T) {
 			t.Fatalf("send: %v", err)
 		}
 		sends := api.of("sendMessage")
-		if len(sends) != 2 || !hasURLButton(t, sends[0]) || hasURLButton(t, sends[1]) || sends[1].button(t, "⬅️ К списку") != "p:1:v1" {
+		if len(sends) != 2 || !hasURLButton(t, sends[0]) || hasURLButton(t, sends[1]) || sends[1].button(t, backLabel) != "p:1:v1" {
 			t.Fatalf("sendMessage = %+v, want URL button dropped on the second call, callback kept", sends)
 		}
 	})
@@ -294,7 +294,7 @@ func TestURLButtonFallback(t *testing.T) {
 			t.Fatalf("show: %v", err)
 		}
 		edits := api.of("editMessageText")
-		if len(edits) != 2 || hasURLButton(t, edits[1]) || edits[1].button(t, "⬅️ К списку") != "p:1:v1" || len(api.of("sendMessage")) != 0 {
+		if len(edits) != 2 || hasURLButton(t, edits[1]) || edits[1].button(t, backLabel) != "p:1:v1" || len(api.of("sendMessage")) != 0 {
 			t.Fatalf("calls = %+v, want two edits, URL button dropped in the second", api.calls)
 		}
 	})

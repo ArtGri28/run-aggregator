@@ -19,7 +19,10 @@ import (
 //	f:b[:-|0..4]:v<N>             корзина дистанции
 //	f:t[:-|<тип>]:v<N>            тип
 //	f:k[:-|*|<ISO>]:v<N>          страна: подменю / по умолчанию / все страны / код
-//	f:x[:d|c|b|t|k]:v<N>          сбросить всё / один фильтр
+//	f:x:<d|c|b|t|k>:v<N>          снять один фильтр
+//	s:o:v<N>                      мои настройки
+//	s:<r|y>:<o|f>:v<N>            сброс настроек: спросить / подтвердить; o — из настроек, f — из поиска
+//	m                        главное меню (от фильтров не зависит — без версии)
 //	p:<стр>:v<N>             страница списка
 //	e:<id>:<стр>:v<N>        карточка
 //	r:<a|y|n>:<runID>        админ: принятие прогона
@@ -52,10 +55,15 @@ const (
 	cbDupeRej
 	cbDupeSkip
 	cbCountry
+	cbMenu
+	cbSettings
+	cbResetAsk
+	cbResetYes
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
-// значение; для f:x — вид сброса ("" — все фильтры). Legacy — f: без версии.
+// значение; для f:x — снимаемый фильтр; для сброса настроек — откуда пришли
+// ("o" — настройки, "f" — поиск). Legacy — f: без версии.
 type callback struct {
 	Kind   cbKind
 	Value  string
@@ -153,6 +161,9 @@ const maxPage = 10000
 
 // parseCallback строго разбирает callback_data; всё вне грамматики — ошибка.
 func parseCallback(data string) (callback, error) {
+	if data == "m" {
+		return callback{Kind: cbMenu}, nil
+	}
 	p := strings.Split(data, ":")
 	switch p[0] {
 	case "f":
@@ -168,6 +179,9 @@ func parseCallback(data string) (callback, error) {
 			return callback{}, errCallback
 		}
 		c.Kind = k
+		if k == cbReset && len(p) != 3 {
+			return callback{}, errCallback // «сбросить всё» — только через подтверждение (s:y)
+		}
 		if len(p) == 3 {
 			if !validValue(k, p[2]) {
 				return callback{}, errCallback
@@ -175,6 +189,25 @@ func parseCallback(data string) (callback, error) {
 			c.Value = p[2]
 		}
 		return c, nil
+	case "s":
+		if len(p) < 3 {
+			return callback{}, errCallback
+		}
+		v, err := version(p[len(p)-1])
+		if err != nil {
+			return callback{}, err
+		}
+		switch {
+		case len(p) == 3 && p[1] == "o":
+			return callback{Kind: cbSettings, V: v}, nil
+		case len(p) == 4 && (p[1] == "r" || p[1] == "y") && (p[2] == "o" || p[2] == "f"):
+			k := cbResetAsk
+			if p[1] == "y" {
+				k = cbResetYes
+			}
+			return callback{Kind: k, Value: p[2], V: v}, nil
+		}
+		return callback{}, errCallback
 	case "p":
 		if len(p) != 3 {
 			return callback{}, errCallback
@@ -238,6 +271,14 @@ func (c callback) encode() (string, error) {
 			s += ":" + c.Value
 		}
 		s += ":v" + strconv.Itoa(c.V)
+	case cbMenu:
+		s = "m"
+	case cbSettings:
+		s = fmt.Sprintf("s:o:v%d", c.V)
+	case cbResetAsk:
+		s = fmt.Sprintf("s:r:%s:v%d", c.Value, c.V)
+	case cbResetYes:
+		s = fmt.Sprintf("s:y:%s:v%d", c.Value, c.V)
 	case cbPage:
 		s = fmt.Sprintf("p:%d:v%d", c.Page, c.V)
 	case cbCard:

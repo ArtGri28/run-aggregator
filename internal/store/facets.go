@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -67,23 +68,32 @@ func (s *Store) TopCities(ctx context.Context, f event.Filter, limit int) ([]Cit
 	return out, nil
 }
 
-// SimilarCities возвращает города, ключ которых начинается с prefix или
-// содержит его в начале любого слова. prefix вне алфавита [a-z0-9-] или
-// короче двух символов — пустой результат без запроса.
-func (s *Store) SimilarCities(ctx context.Context, country, prefix string, from time.Time, limit int) ([]CityCount, error) {
-	if !similarRE.MatchString(prefix) {
+// SimilarCities — подсказки, когда города нет в каталоге: города страны
+// country (пусто — без ограничения), у которых (1) ключ начинается с prefix
+// или содержит слово, начинающееся с prefix, либо (2) название начинается с
+// name без учёта регистра («Моск» → Москва: ключ-синоним moscow с префиксом
+// mosk не совпадает). Правило работает, если его аргумент не короче двух
+// символов; prefix — ещё и только из алфавита ключа. По убыванию числа
+// будущих событий, затем по ключу.
+func (s *Store) SimilarCities(ctx context.Context, country, prefix, name string, from time.Time, limit int) ([]CityCount, error) {
+	byKey := similarRE.MatchString(prefix)
+	byName := utf8.RuneCountInString(name) >= 2
+	if !byKey && !byName {
 		return nil, nil
 	}
+	// Название сравнивается через left(), не LIKE: метасимволы во вводе
+	// пользователя ничего не значат.
 	const q = `
 		SELECT e.city_key, COALESCE(mode() WITHIN GROUP (ORDER BY e.city), e.city_key), count(*)
 		FROM events e` + futureListed + `
 		  AND e.city_key IS NOT NULL
-		  AND (e.city_key LIKE $2::text || '%' OR e.city_key LIKE '%-' || $2::text || '%')
+		  AND (($5::bool AND (e.city_key LIKE $2::text || '%' OR e.city_key LIKE '%-' || $2::text || '%'))
+		    OR ($6::bool AND left(lower(e.city), char_length($7::text)) = lower($7::text)))
 		  AND ($4::text = '' OR e.country_code = $4::text)
 		GROUP BY e.city_key
 		ORDER BY count(*) DESC, e.city_key
 		LIMIT $3`
-	rows, err := s.db.Query(ctx, q, from, prefix, limit, country)
+	rows, err := s.db.Query(ctx, q, from, prefix, limit, country, byKey, byName, name)
 	if err != nil {
 		return nil, fmt.Errorf("similar cities: %w", err)
 	}

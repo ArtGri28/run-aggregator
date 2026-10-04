@@ -1,0 +1,12 @@
+method: editMessageText
+parse_mode: HTML
+---
+🌍 Страна
+---
+[🇧🇾 Беларусь (2)] → f:k:BY:v3
+[🇷🇺 Россия (2)] → f:k:RU:v3
+[✓ 🌍 Все страны (4)] → f:k:*:v3
+[⬅️ Назад] → f:s:v3
+method: answerCallbackQuery
+text: Сначала выберите страну
+show_alert: 

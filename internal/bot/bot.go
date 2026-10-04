@@ -54,7 +54,9 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithMessageTextHandler("start", tgbot.MatchTypeCommandStartOnly, b.onStart),
 		tgbot.WithMessageTextHandler("runs", tgbot.MatchTypeCommandStartOnly, b.onRuns),
 		tgbot.WithMessageTextHandler("dupes", tgbot.MatchTypeCommandStartOnly, b.onDupes),
+		tgbot.WithCallbackQueryDataHandler("m", tgbot.MatchTypeExact, b.cb(b.onMenu)),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
+		tgbot.WithCallbackQueryDataHandler("s:", tgbot.MatchTypePrefix, b.cb(b.onSettings)),
 		tgbot.WithCallbackQueryDataHandler("p:", tgbot.MatchTypePrefix, b.cb(b.onList)),
 		tgbot.WithCallbackQueryDataHandler("e:", tgbot.MatchTypePrefix, b.cb(b.onCard)),
 		tgbot.WithCallbackQueryDataHandler("r:", tgbot.MatchTypePrefix, b.cb(b.onRun)),
@@ -232,7 +234,10 @@ func (b *Bot) cb(fn func(ctx context.Context, q *models.CallbackQuery, c callbac
 
 // cbPrefix — вид callback для логов: только буква до «:» из известных.
 func cbPrefix(data string) string {
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 'p' || data[0] == 'e' || data[0] == 'r' || data[0] == 'd') {
+	if data == "m" {
+		return "m"
+	}
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'r' || data[0] == 'd') {
 		return data[:1]
 	}
 	return "?"

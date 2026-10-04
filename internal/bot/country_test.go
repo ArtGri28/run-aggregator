@@ -313,7 +313,7 @@ func TestNoAreaInTelegram(t *testing.T) {
 		for _, bt := range screens["сводка"].buttons(t) {
 			switch {
 			case bt.Text == "📅 Дата", bt.Text == "📍 Город", bt.Text == "📏 Дистанция", bt.Text == "🏃 Тип",
-				bt.Text == "🔄 Сбросить", strings.HasPrefix(bt.Text, "🔎 Показать "), bt.Text == "🌍 Страна":
+				bt.Text == "🔄 Сбросить", strings.HasPrefix(bt.Text, "🔎 Показать "), bt.Text == "🌍 Страна", bt.Text == backLabel:
 			default:
 				t.Errorf("%s: неожиданная кнопка сводки %q", filters, bt.Text)
 			}

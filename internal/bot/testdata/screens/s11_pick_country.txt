@@ -1,0 +1,7 @@
+method: editMessageText
+parse_mode: HTML
+---
+Ничего не нашлось
+---
+[🌍 Выбрать страну] → f:k:v1
+[⬅️ Назад] → f:s:v1

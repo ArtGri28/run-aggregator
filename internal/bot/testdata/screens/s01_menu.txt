@@ -1,0 +1,12 @@
+method: editMessageText
+parse_mode: HTML
+---
+🏃 <b>КАТАЛОГ ЗАБЕГОВ</b>
+
+Найди свой следующий старт!
+---
+[🔎 Найти забег] → f:s:v2
+[⚙️ Мои настройки] → s:o:v2
+method: answerCallbackQuery
+text: 
+show_alert: 

@@ -52,7 +52,7 @@ func wantRows(t *testing.T, c call, items []store.ListItem, page int) {
 		t.Fatalf("rows = %d, want %d:\n%s", len(rows), len(items), c.Form["text"])
 	}
 	for i, it := range items {
-		prefix := fmt.Sprintf("%d. %s · %s · ", i+1, it.StartDate.Format("02.01"), html.EscapeString(it.City))
+		prefix := fmt.Sprintf("%d. %s · %s · ", i+1, listDate(it.StartDate, fixtureToday.Year()), html.EscapeString(it.City))
 		if !strings.HasPrefix(rows[i], prefix) || !strings.Contains(rows[i], html.EscapeString(it.Title)) {
 			t.Fatalf("row %d = %q, want %q… %s", i, rows[i], prefix, it.Title)
 		}
@@ -185,7 +185,7 @@ func TestCard(t *testing.T) {
 		switch bt.Text {
 		case "🔗 Регистрация":
 			reg = bt.URL
-		case "⬅️ К списку":
+		case backLabel:
 			list = bt.CallbackData
 		}
 	}
@@ -197,7 +197,7 @@ func TestCard(t *testing.T) {
 	noReg := eventWith(t, s, func(e event.Event) bool { return e.RegistrationURL == "" })
 	card = press(t, b, api, fmt.Sprintf("e:%d:1:v1", noReg.ID))
 	text = card.Form["text"]
-	if hasURLButton(t, card) || card.button(t, "⬅️ К списку") != "p:1:v1" {
+	if hasURLButton(t, card) || card.button(t, backLabel) != "p:1:v1" {
 		t.Fatalf("card without registration: buttons %+v", card.buttons(t))
 	}
 	if !strings.Contains(text, "Источники: ") {
@@ -231,12 +231,12 @@ func TestHiddenAndMerged(t *testing.T) {
 			t.Fatalf("list still has a button for event %d", id)
 		}
 	}
-	if gone := press(t, b, api, btnHidden); gone.Form["text"] != "Событие больше не доступно" || gone.button(t, "⬅️ К списку") != "p:1:v1" {
+	if gone := press(t, b, api, btnHidden); gone.Form["text"] != "Событие больше не доступно" || gone.button(t, backLabel) != "p:1:v1" {
 		t.Fatalf("%s: text %q buttons %v", btnHidden, gone.Form["text"], datas(t, gone))
 	}
 	// Слитое событие открывает карточку того, в которое слито (D-16).
 	if card := press(t, b, api, btnMerged); !strings.HasPrefix(card.Form["text"], "🏃 <b>"+html.EscapeString(before[2].Title)+"</b>") ||
-		card.button(t, "⬅️ К списку") != "p:1:v1" {
+		card.button(t, backLabel) != "p:1:v1" {
 		t.Fatalf("%s: text %q buttons %v", btnMerged, card.Form["text"], datas(t, card))
 	}
 	// Несуществующий id — то же сообщение.
@@ -261,7 +261,7 @@ func TestMergedCardOpensRoot(t *testing.T) {
 	} {
 		card := press(t, b, api, c.data)
 		text := card.Form["text"]
-		if !strings.HasPrefix(text, want) || !strings.Contains(text, "Источники: ") || card.button(t, "⬅️ К списку") != c.list {
+		if !strings.HasPrefix(text, want) || !strings.Contains(text, "Источники: ") || card.button(t, backLabel) != c.list {
 			t.Fatalf("%s: text %q buttons %v; want root card and %s", c.data, text, datas(t, card), c.list)
 		}
 	}
@@ -383,7 +383,7 @@ func TestValidURL(t *testing.T) {
 
 func TestLongTexts(t *testing.T) {
 	long := strings.Repeat("Я", 300)
-	sc := listScreen([]store.ListItem{{ID: 1, Title: long, StartDate: fixtureToday, City: "Тула"}}, 1, 1, 1, false)
+	sc := listScreen([]store.ListItem{{ID: 1, Title: long, StartDate: fixtureToday, City: "Тула"}}, 1, 1, 1, false, 2026)
 	row := listRows(sc.text)[0]
 	title := strings.TrimPrefix(row, "1. 29.09 · Тула · ")
 	if utf8.RuneCountInString(title) != maxListTitle || !strings.HasSuffix(title, "…") {
@@ -403,7 +403,7 @@ func TestListScreenShape(t *testing.T) {
 		{ID: 11, Title: "Раз", StartDate: fixtureToday, City: "Тула", Distances: []int{5000, 21097}},
 		{ID: 12, Title: "Два", StartDate: fixtureToday, Status: event.StatusCancelled},
 	}
-	sc := listScreen(items, 12, 2, 4, false)
+	sc := listScreen(items, 12, 2, 4, false, 2026)
 	var got []string
 	for _, r := range sc.kb.InlineKeyboard {
 		for _, bt := range r {
@@ -411,7 +411,7 @@ func TestListScreenShape(t *testing.T) {
 		}
 	}
 	// f:s — без версии (v0): её проставляет stamp при показе экрана.
-	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "⬅️ К фильтрам=f:s:v0"}
+	want := []string{"1=e:11:2:v4", "2=e:12:2:v4", "←=p:1:v4", "стр. 2/3=p:2:v4", "→=p:3:v4", "⬅️ Назад=f:s:v0"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buttons = %v, want %v", got, want)
 	}

@@ -8,7 +8,7 @@ parse_mode: HTML
 ---
 [1] → e:1:1:v0 | [2] → e:2:1:v0
 [стр. 1/1] → p:1:v0
-[⬅️ К фильтрам] → f:s:v0
+[⬅️ Назад] → f:s:v0
 method: answerCallbackQuery
 text: Фильтры изменились — показываю актуальную выдачу
 show_alert: 

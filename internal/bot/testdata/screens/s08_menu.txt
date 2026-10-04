@@ -1,0 +1,9 @@
+method: editMessageText
+parse_mode: HTML
+---
+🌍 Страна
+---
+[🇧🇾 Беларусь (2)] → f:k:BY:v1
+[✓ 🇷🇺 Россия (2)] → f:k:RU:v1
+[🌍 Все страны (4)] → f:k:*:v1
+[⬅️ Назад] → f:s:v1

@@ -15,7 +15,8 @@ func TestCallbackRoundTrip(t *testing.T) {
 		"f:b:v1", "f:b:-:v1", "f:b:0:v1", "f:b:4:v2147483647",
 		"f:t:v1", "f:t:-:v1", "f:t:trail:v1",
 		"f:k:v1", "f:k:-:v1", "f:k:*:v1", "f:k:BY:v1", "f:k:RU:v1", "f:k:PL:v1",
-		"f:x:v1", "f:x:d:v1", "f:x:t:v1", "f:x:k:v1", "f:s:v0",
+		"f:x:d:v1", "f:x:t:v1", "f:x:k:v1", "f:s:v0", "m",
+		"s:o:v1", "s:o:v0", "s:r:o:v1", "s:r:f:v2", "s:y:o:v3", "s:y:f:v2147483647",
 		"p:1:v1", "p:1:v0", "p:10000:v2147483647", "e:9223372036854775807:3:v12",
 		"r:a:5", "r:y:5", "r:n:5",
 		"d:o", "d:m:5", "d:y:5", "d:n:5", "d:x:5", "d:s:9223372036854775807",
@@ -36,7 +37,7 @@ func TestCallbackRoundTrip(t *testing.T) {
 func TestCallbackLegacy(t *testing.T) {
 	for _, s := range []string{
 		"f:s", "f:d", "f:d:a", "f:d:30", "f:d:m202611", "f:c", "f:c:-", "f:c:nizhniy-novgorod",
-		"f:b", "f:b:-", "f:b:4", "f:t:trail", "f:k", "f:k:*", "f:k:BY", "f:x", "f:x:d",
+		"f:b", "f:b:-", "f:b:4", "f:t:trail", "f:k", "f:k:*", "f:k:BY", "f:x:d",
 	} {
 		c, err := parseCallback(s)
 		if err != nil || !c.Legacy || c.V != 0 {
@@ -62,6 +63,8 @@ func TestCallbackReject(t *testing.T) {
 		"f:k:", "f:k:by", "f:k:By", "f:k:B", "f:k:BYY", "f:k:XYZ", "f:k:B1", "f:k:ВУ", "f:k:**", "f:k:*:1", "f:k:BY:1", "f:k: BY", "f:x:K", "f:x:kk",
 		"p:0:v1", "p:01:v1", "p:1", "p:1:1", "p:1:v01", "p:1:v-1", "p:+1:v1", "p:10001:v1",
 		// версия f: — одно последнее поле v<N>
+		// «сбросить всё» без подтверждения больше не кнопка; настройки — только с версией
+		"f:x", "f:x:v1", "s:", "s:o", "s:o:1", "s:r:v1", "s:r:x:v1", "s:y:o", "s:y:o:v1:v2", "s:q:o:v1", "s:o:o:v1", "m:", "m:v1", "mm",
 		"f:v1", "f:s:v1:v2", "f:d:30:v", "f:d:30:v01", "f:d:30:v-1", "f:d:30:v2147483648", "f:d:30:v1:", "f:s:1:v1", "f:q:v1",
 		"e:0:1:v1", "e:1:1", "r:q:5", "r:a:0", "r:a:5:1",
 		// сверх списка плана: лишние части, регистр, пробелы, переполнение
@@ -109,8 +112,8 @@ func TestCallbackLength(t *testing.T) {
 	items := []store.ListItem{{ID: math.MaxInt64, Title: "t"}}
 	for name, sc := range map[string]screen{
 		"summary": summaryScreen(f, "Город", math.MaxInt32, math.MaxInt32, true),
-		"list":    listScreen(items, 50000, 10000, math.MaxInt32, true),
-		"list1":   listScreen(items, 1, 1, 1, false),
+		"list":    listScreen(items, 50000, 10000, math.MaxInt32, true, 2026),
+		"list1":   listScreen(items, 1, 1, 1, false, 2026),
 		"empty":   emptyScreen(f, false),
 	} {
 		if sc.kb == nil || len(sc.kb.InlineKeyboard) == 0 {
