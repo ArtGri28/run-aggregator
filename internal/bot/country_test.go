@@ -175,7 +175,7 @@ func TestCityTextByCountry(t *testing.T) {
 
 	// Россия по умолчанию: Минска в ней нет, Любань — российская.
 	setFilters(`{}`)
-	if c := say("Минск"); !strings.Contains(c.Form["text"], "В каталоге нет забегов в «Минск»") {
+	if c := say("Минск"); !strings.Contains(c.Form["text"], "По запросу «Минск» ничего не нашлось") {
 		t.Errorf("Минск при стране по умолчанию: %q", c.Form["text"])
 	}
 	c := say("Любань")

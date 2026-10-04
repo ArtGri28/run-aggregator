@@ -96,7 +96,7 @@ func TestFilterLabels(t *testing.T) {
 		}
 	}
 	got := summaryLine(userFilters{Dist: []int{0, 3}, Type: "trail", City: "x"}, "<b>Тула&", false)
-	want := "📍 Город: &lt;b&gt;Тула&amp;\n📅 Дата: Все будущие\n📏 Дистанция: До 10 км, 42+ км\n🏃 Тип: Трейл"
+	want := "📍 Город: &lt;b&gt;Тула&amp;\n📅 Дата: Все будущие\n📏 Дистанция: 🟢 До 10 км, 🔴 42+ км\n🏃 Тип: Трейл"
 	if got != want {
 		t.Fatalf("summaryLine = %q, want %q", got, want)
 	}
@@ -111,7 +111,7 @@ func TestFilterMutations(t *testing.T) {
 		t.Fatalf(`setDate("a") = %q, want значение по умолчанию ""`, f.Date)
 	}
 	f = f.setDate("nm").setCity("moscow").setType("road").toggleBucket(3).toggleBucket(1).toggleBucket(3).toggleBucket(0)
-	if want := (userFilters{Date: "nm", City: "moscow", Dist: []int{0, 1}, Type: "road"}); !reflect.DeepEqual(f, want) {
+	if want := (userFilters{Dates: []string{"nm"}, City: "moscow", Dist: []int{0, 1}, Type: "road"}); !reflect.DeepEqual(f, want) {
 		t.Fatalf("после изменений %+v, want %+v", f, want)
 	}
 	// Исходное значение не меняется (срез не разделяется).
@@ -121,9 +121,9 @@ func TestFilterMutations(t *testing.T) {
 	}
 	for field, want := range map[byte]userFilters{
 		'd': {City: "moscow", Dist: []int{0, 1}, Type: "road"},
-		'c': {Date: "nm", Dist: []int{0, 1}, Type: "road"},
-		'b': {Date: "nm", City: "moscow", Type: "road"},
-		't': {Date: "nm", City: "moscow", Dist: []int{0, 1}},
+		'c': {Dates: []string{"nm"}, Dist: []int{0, 1}, Type: "road"},
+		'b': {Dates: []string{"nm"}, City: "moscow", Type: "road"},
+		't': {Dates: []string{"nm"}, City: "moscow", Dist: []int{0, 1}},
 	} {
 		if got := f.unset(field); !reflect.DeepEqual(got, want) {
 			t.Errorf("unset(%c) = %+v, want %+v", field, got, want)
@@ -181,6 +181,15 @@ func noV(data string) string {
 		return versionRE.ReplaceAllString(data, "")
 	}
 	return data
+}
+
+// date1 — единственное значение даты фильтров: пресет либо один отмеченный
+// период; несколько периодов — через запятую.
+func date1(f userFilters) string {
+	if len(f.Dates) > 0 {
+		return strings.Join(f.Dates, ",")
+	}
+	return f.Date
 }
 
 // press нажимает актуальную кнопку (см. fresh) и возвращает единственную
@@ -273,7 +282,7 @@ func TestFilterFlow(t *testing.T) {
 		t.Fatalf("filters_v после корзины = %d, want 3", v)
 	}
 	c = press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "Дистанция: 10–21 км") {
+	if !strings.Contains(c.Form["text"], "Дистанция: 🟡 10–21 км") {
 		t.Fatalf("f:s: текст %q", c.Form["text"])
 	}
 
@@ -312,14 +321,14 @@ func TestFilterFlow(t *testing.T) {
 	c = press(t, b, api, "f:d")
 	months := 0
 	for _, d := range datas(t, c) {
-		if strings.HasPrefix(d, "f:d:m") {
+		if strings.HasPrefix(d, "f:w:m") {
 			months++
 		}
 	}
-	if strings.Contains(strings.Join(datas(t, c), " "), "f:d:30") {
+	if strings.Contains(strings.Join(datas(t, c), " "), ":30") {
 		t.Fatalf("f:d: в меню остался пресет «30 дней»: %v", datas(t, c))
 	}
-	for _, want := range []string{"f:d:cm", "f:d:nm", "f:d:a"} {
+	for _, want := range []string{"f:w:cm", "f:w:nm", "f:w:-"} {
 		if !strings.Contains(strings.Join(datas(t, c), " "), want) {
 			t.Fatalf("f:d: нет кнопки %s: %v", want, datas(t, c))
 		}
@@ -333,7 +342,7 @@ func TestFilterFlow(t *testing.T) {
 	if !strings.Contains(c.Form["text"], "Дата: Следующий месяц") || c.button(t, count(nm)) != "p:1:v5" {
 		t.Fatalf("f:d:nm: текст %q, кнопки %v, want %q и p:1:v5", c.Form["text"], datas(t, c), count(nm))
 	}
-	if f, v := filtersV(t, b); v != 5 || f.Date != "nm" {
+	if f, v := filtersV(t, b); v != 5 || date1(f) != "nm" {
 		t.Fatalf("фильтры %+v v=%d, want date nm, v=5", f, v)
 	}
 }
@@ -359,18 +368,25 @@ func TestCityText(t *testing.T) {
 	api.reset()
 	b.api.ProcessUpdate(ctx, textUpdate(42, "Новгород"))
 	sends = api.of("sendMessage")
-	if len(sends) != 1 || !strings.Contains(sends[0].Form["text"], "В каталоге нет забегов в «Новгород»") {
+	if len(sends) != 1 || !strings.HasPrefix(sends[0].Form["text"], "Запрос «Новгород»") || !strings.Contains(sends[0].Form["text"], "Города по запросу: 2") {
 		t.Fatalf("«Новгород»: sendMessage = %+v", sends)
 	}
-	if got, want := datas(t, sends[0]), []string{"f:c:nizhniy-novgorod", "f:c:velikiy-novgorod", "f:c", "f:s"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("«Новгород»: кнопки %v, want %v", got, want)
+	// Сначала подсказки городов, затем события по запросу, затем выбор города и возврат.
+	got := datas(t, sends[0])
+	if len(got) < 5 || !reflect.DeepEqual(got[:2], []string{"f:c:nizhniy-novgorod", "f:c:velikiy-novgorod"}) || !reflect.DeepEqual(got[len(got)-2:], []string{"f:c", "f:s"}) {
+		t.Fatalf("«Новгород»: кнопки %v", got)
+	}
+	for _, r := range listRows(t, sends[0]) {
+		if !strings.Contains(strings.ToLower(r), "новгород") {
+			t.Errorf("«Новгород»: событие не по запросу: %q", r)
+		}
 	}
 
 	// Разметка в вводе экранируется.
 	api.reset()
 	b.api.ProcessUpdate(ctx, textUpdate(42, "<b>Тула&"))
 	sends = api.of("sendMessage")
-	if len(sends) != 1 || strings.Contains(sends[0].Form["text"], "<b>") || !strings.Contains(sends[0].Form["text"], "&lt;b&gt;") {
+	if len(sends) != 1 || strings.Contains(sends[0].Form["text"], "<b>Тула") || !strings.Contains(sends[0].Form["text"], "«&lt;b&gt;Тула&amp;»") {
 		t.Fatalf("«<b>Тула&»: sendMessage = %+v", sends)
 	}
 
@@ -469,7 +485,7 @@ func TestStaleMonthFilter(t *testing.T) {
 	if !strings.Contains(c.Form["text"], "Дата: Все будущие") || c.button(t, "🔎 Показать "+strconv.Itoa(n)+" ") != page {
 		t.Fatalf("сводка: текст %q кнопки %v; want «Дата: Все будущие» и «Показать %d» %s", c.Form["text"], datas(t, c), n, page)
 	}
-	if c = press(t, b, api, page); !strings.HasPrefix(c.Form["text"], "🔎 Найдено") {
+	if c = press(t, b, api, page); !strings.HasPrefix(c.Form["text"], "🔎 <b>Найдено") {
 		t.Fatalf("выдача: текст %q", c.Form["text"])
 	}
 	press(t, b, api, "f:t:road")
@@ -571,7 +587,7 @@ func TestLoadFiltersCountry(t *testing.T) {
 	// Остальные фильтры страной не затрагиваются; значение страны вне
 	// формата не сбрасывает их.
 	got := loadFilters([]byte(`{"date":"nm","city":"minsk","dist2":[1],"type":"road","country":"BY"}`), today)
-	if want := (userFilters{Date: "nm", City: "minsk", Dist: []int{1}, Type: "road", Country: "BY"}); !reflect.DeepEqual(got, want) {
+	if want := (userFilters{Dates: []string{"nm"}, City: "minsk", Dist: []int{1}, Type: "road", Country: "BY"}); !reflect.DeepEqual(got, want) {
 		t.Errorf("loadFilters(полный) = %+v, want %+v", got, want)
 	}
 	// Город не живёт при «всех странах».
@@ -579,7 +595,7 @@ func TestLoadFiltersCountry(t *testing.T) {
 		t.Errorf("loadFilters(* и город) = %+v", got)
 	}
 	got = loadFilters([]byte(`{"date":"nm","city":"moscow","country":"XYZ"}`), today)
-	if want := (userFilters{Date: "nm", City: "moscow"}); !reflect.DeepEqual(got, want) {
+	if want := (userFilters{Dates: []string{"nm"}, City: "moscow"}); !reflect.DeepEqual(got, want) {
 		t.Errorf("loadFilters(мусорная страна) = %+v, want %+v", got, want)
 	}
 }
@@ -645,7 +661,7 @@ func TestLegacyFiltersKeepVersion(t *testing.T) {
 	}
 	// Конкретная страна: версия растёт, город другой страны сброшен.
 	f2, v2, err := b.update(ctx, 42, func(f userFilters) userFilters { return f.setCountry("BY") })
-	if err != nil || v2 != v0+1 || f2.Country != "BY" || f2.City != "" || f2.Date != "nm" {
+	if err != nil || v2 != v0+1 || f2.Country != "BY" || f2.City != "" || date1(f2) != "nm" {
 		t.Fatalf("setCountry(BY): v %d, %+v, %v", v2, f2, err)
 	}
 	// Двойное нажатие той же кнопки версию не меняет.

@@ -59,6 +59,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithCallbackQueryDataHandler("s:", tgbot.MatchTypePrefix, b.cb(b.onSettings)),
 		tgbot.WithCallbackQueryDataHandler("p:", tgbot.MatchTypePrefix, b.cb(b.onList)),
 		tgbot.WithCallbackQueryDataHandler("e:", tgbot.MatchTypePrefix, b.cb(b.onCard)),
+		tgbot.WithCallbackQueryDataHandler("g:", tgbot.MatchTypePrefix, b.cb(b.onSearch)),
 		tgbot.WithCallbackQueryDataHandler("r:", tgbot.MatchTypePrefix, b.cb(b.onRun)),
 		tgbot.WithCallbackQueryDataHandler("d:", tgbot.MatchTypePrefix, b.cb(b.onDupe)),
 	}
@@ -237,7 +238,7 @@ func cbPrefix(data string) string {
 	if data == "m" {
 		return "m"
 	}
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'r' || data[0] == 'd') {
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd') {
 		return data[:1]
 	}
 	return "?"

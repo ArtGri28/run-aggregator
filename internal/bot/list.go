@@ -113,29 +113,41 @@ func cut(s string, n int) string {
 	return string([]rune(s)[:n-1]) + "…"
 }
 
-// listScreen — страница списка: каждое событие — кнопка «дата · город ·
-// название», открывающая карточку; под ними навигация «← стр/всего →» и
-// возврат к поиску. В тексте — число найденных и заданные фильтры (filters,
-// готовый HTML; "" — не заданы). year — текущий год (см. listDate). flags —
-// перед городом флаг страны события (выдача «все страны»); область и район не
-// показываются никогда. Дистанции — в карточке: кнопка однострочная.
+// maxBtnCity — рун города в кнопке события: длинный город не вытесняет название.
+const maxBtnCity = 16
+
+// eventBtn — кнопка события «дата · город · название»; c — что она открывает
+// (карточку из списка или из результатов поиска).
+// Кнопка однострочная (перенос строки Telegram в подписи не показывает),
+// поэтому она не длиннее maxListBtn, а город — не длиннее maxBtnCity. flags —
+// перед городом флаг страны события; область и район не показываются никогда.
+func eventBtn(it store.ListItem, c callback, flags bool, year int) row {
+	parts := []string{listDate(it.StartDate, year)}
+	if it.City != "" {
+		city := cut(it.City, maxBtnCity)
+		if f := countryFlag(it.CountryCode); flags && f != "" {
+			city = f + " " + city
+		}
+		parts = append(parts, city)
+	}
+	parts = append(parts, statusIcon(it.Status)+it.Title)
+	return btn(cut(strings.Join(parts, " · "), maxListBtn), c)
+}
+
+// listScreen — страница списка: каждое событие — кнопка (eventBtn); под ними
+// навигация «← стр/всего →» и возврат к поиску. В тексте — число найденных
+// жирным и отдельной строкой заданные фильтры (filters, готовый HTML; "" — не
+// заданы). year — текущий год (см. listDate). flags — выдача «все страны».
+// Дистанции — в карточке.
 func listScreen(items []store.ListItem, total, page, v int, flags bool, year int, filters string) screen {
 	pages := (total + pageSize - 1) / pageSize
-	if filters == "" {
-		filters = "все будущие забеги"
+	head := "⚙️ Фильтры не заданы"
+	if filters != "" {
+		head = "⚙️ Фильтры: " + filters
 	}
 	rows := make([]row, 0, len(items)+2)
 	for _, it := range items {
-		parts := []string{listDate(it.StartDate, year)}
-		if it.City != "" {
-			city := it.City
-			if f := countryFlag(it.CountryCode); flags && f != "" {
-				city = f + " " + city
-			}
-			parts = append(parts, city)
-		}
-		parts = append(parts, statusIcon(it.Status)+it.Title)
-		rows = append(rows, btn(cut(strings.Join(parts, " · "), maxListBtn), callback{Kind: cbCard, ID: it.ID, Page: page, V: v}))
+		rows = append(rows, eventBtn(it, callback{Kind: cbCard, ID: it.ID, Page: page, V: v}, flags, year))
 	}
 	var nav row
 	if page > 1 {
@@ -145,7 +157,7 @@ func listScreen(items []store.ListItem, total, page, v int, flags bool, year int
 	if page < pages {
 		nav.add("→", callback{Kind: cbPage, Page: page + 1, V: v})
 	}
-	return screen{text: fmt.Sprintf("🔎 Найдено %d\n%s", total, filters), kb: keyboard(append(rows, nav, btn(backLabel, back))...)}
+	return screen{text: fmt.Sprintf("🔎 <b>Найдено: %d</b>\n\n%s", total, head), kb: keyboard(append(rows, nav, btn(backLabel, back))...)}
 }
 
 // listDate — дата в строке списка: «ДД.ММ», а для события не текущего года
@@ -165,49 +177,57 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	if c.Kind != cbCard {
 		return staleNotice
 	}
-	// Кнопки карточки — с текущей версией фильтров: карточка из старого
-	// сообщения открывается, а «назад» ведёт в актуальную выдачу.
-	raw, v, _, err := b.cbState(ctx, q.From.ID, c)
-	if err != nil {
-		b.logger().Error("filters", "err", err)
+	sc, _, ok := b.buildCard(ctx, q.From.ID, c)
+	if !ok {
 		return errNotice
-	}
-	root, err := b.Store.RootEventID(ctx, c.ID)
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		b.logger().Error("root event", "err", err)
-		return errNotice
-	}
-	var e event.Event
-	if err == nil {
-		e, err = b.Store.GetEvent(ctx, root)
-	}
-	var sc screen
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		sc = goneScreen(c.Page, v)
-	case err != nil:
-		b.logger().Error("get event", "err", err)
-		return errNotice
-	// Слитый корень — страховка от гонки со слиянием между запросами.
-	case !e.IsListed || e.MergedIntoID != nil:
-		sc = goneScreen(c.Page, v)
-	default:
-		srcs, err := b.Store.EventSources(ctx, e.ID)
-		if err != nil {
-			b.logger().Error("event sources", "err", err)
-			return errNotice
-		}
-		// Место: «📍 город», а при «всех странах» ещё и «🌍 страна».
-		style := placePlain
-		if loadFilters(raw, b.today()).Country == allCountries {
-			style = placeWithCountry
-		}
-		sc = cardScreen(e, srcs, c.Page, v, style)
 	}
 	if err := b.show(ctx, q, sc); err != nil {
 		b.logger().Warn("show card", "err", err)
 	}
 	return ""
+}
+
+// buildCard — экран карточки события c.ID (либо «Событие больше не доступно»)
+// с возвратом на страницу c.Page и версия фильтров для его кнопок; ok = false —
+// внутренняя ошибка (уже в логе).
+func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen, v int, ok bool) {
+	// Кнопки карточки — с текущей версией фильтров: карточка из старого
+	// сообщения открывается, а «назад» ведёт в актуальную выдачу.
+	raw, v, _, err := b.cbState(ctx, tgID, c)
+	if err != nil {
+		b.logger().Error("filters", "err", err)
+		return screen{}, 0, false
+	}
+	root, err := b.Store.RootEventID(ctx, c.ID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		b.logger().Error("root event", "err", err)
+		return screen{}, 0, false
+	}
+	var e event.Event
+	if err == nil {
+		e, err = b.Store.GetEvent(ctx, root)
+	}
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return goneScreen(c.Page, v), v, true
+	case err != nil:
+		b.logger().Error("get event", "err", err)
+		return screen{}, 0, false
+	// Слитый корень — страховка от гонки со слиянием между запросами.
+	case !e.IsListed || e.MergedIntoID != nil:
+		return goneScreen(c.Page, v), v, true
+	}
+	srcs, err := b.Store.EventSources(ctx, e.ID)
+	if err != nil {
+		b.logger().Error("event sources", "err", err)
+		return screen{}, 0, false
+	}
+	// Место: «📍 город», а при «всех странах» ещё и «🌍 страна».
+	style := placePlain
+	if loadFilters(raw, b.today()).Country == allCountries {
+		style = placeWithCountry
+	}
+	return cardScreen(e, srcs, c.Page, v, style), v, true
 }
 
 func goneScreen(page, v int) screen {

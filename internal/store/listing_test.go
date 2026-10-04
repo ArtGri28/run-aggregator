@@ -270,3 +270,74 @@ func TestListItemCountry(t *testing.T) {
 		t.Fatalf("ListEvents = %+v, %v; want страны RU, BY", items, err)
 	}
 }
+
+// TestSearchCandidates — каталог для текстового поиска: только будущие
+// видимые события страны, по дате; limit ограничивает число.
+func TestSearchCandidates(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	a := listEvent(t, s, "2026-10-05", "Тула", "tula", event.TypeTrail, 5000)
+	b := listEvent(t, s, "2026-10-01", "Берёзовск", "berezovsk", event.TypeRoad, 5000)
+	listEvent(t, s, "2026-09-01", "Тула", "tula", event.TypeRoad, 5000) // в прошлом
+	c := listEventIn(t, s, "BY", "2026-10-07", "Минск", "minsk", event.TypeRoad, 5000)
+	hidden := listEvent(t, s, "2026-10-09", "Тула", "tula", event.TypeRoad, 5000)
+	if _, err := s.db.Exec(ctx, `UPDATE events SET is_listed = false WHERE id = $1`, hidden); err != nil {
+		t.Fatal(err)
+	}
+	from := mustDateFixed("2026-10-01")
+	for _, tc := range []struct {
+		country string
+		limit   int
+		want    []int64
+	}{
+		{"RU", 10, []int64{b, a}},
+		{"", 10, []int64{b, a, c}},
+		{"", 2, []int64{b, a}},
+		{"PL", 10, []int64{}},
+	} {
+		items, err := s.SearchCandidates(ctx, tc.country, from, tc.limit)
+		got := []int64{}
+		for _, it := range items {
+			got = append(got, it.ID)
+		}
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("SearchCandidates(%q, limit %d) = %v, %v; want %v", tc.country, tc.limit, got, err, tc.want)
+		}
+	}
+	if items, _ := s.SearchCandidates(ctx, "RU", from, 10); items[0].Title == "" || items[0].City != "Берёзовск" || items[0].CountryCode != "RU" {
+		t.Errorf("поля кандидата: %+v", items[0])
+	}
+}
+
+// TestListPeriods — периоды дат: событие подходит, если попадает хотя бы в
+// один; без периодов действует только From…To.
+func TestListPeriods(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	oct := listEvent(t, s, "2026-10-10", "Тула", "tula", event.TypeRoad, 5000)
+	listEvent(t, s, "2026-11-10", "Тула", "tula", event.TypeRoad, 5000)
+	dec := listEvent(t, s, "2026-12-31", "Тула", "tula", event.TypeRoad, 5000)
+	f := event.Filter{From: mustDateFixed("2026-10-01"), Periods: []event.DateRange{
+		{From: mustDateFixed("2026-10-01"), To: mustDateFixed("2026-10-31")},
+		{From: mustDateFixed("2026-12-01"), To: mustDateFixed("2026-12-31")},
+	}}
+	items, err := s.ListEvents(ctx, f, 10, 0)
+	if err != nil || len(items) != 2 || items[0].ID != oct || items[1].ID != dec {
+		t.Fatalf("ListEvents(периоды) = %+v, %v", items, err)
+	}
+	if n, err := s.CountEvents(ctx, f); err != nil || n != 2 {
+		t.Errorf("CountEvents(периоды) = %d, %v", n, err)
+	}
+	if cities, err := s.TopCities(ctx, f, 5); err != nil || len(cities) != 1 || cities[0].N != 2 {
+		t.Errorf("TopCities(периоды) = %+v, %v", cities, err)
+	}
+	f.Periods = nil
+	if n, _ := s.CountEvents(ctx, f); n != 3 {
+		t.Errorf("CountEvents(без периодов) = %d, want 3", n)
+	}
+	// Нижняя граница From действует вместе с периодами.
+	f.From, f.Periods = mustDateFixed("2026-10-11"), []event.DateRange{{From: mustDateFixed("2026-10-01"), To: mustDateFixed("2026-10-31")}}
+	if n, _ := s.CountEvents(ctx, f); n != 0 {
+		t.Errorf("CountEvents(период раньше From) = %d, want 0", n)
+	}
+}

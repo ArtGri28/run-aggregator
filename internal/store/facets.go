@@ -55,7 +55,7 @@ func (s *Store) TopCities(ctx context.Context, f event.Filter, limit int) ([]Cit
 		  AND e.city_key IS NOT NULL
 		GROUP BY e.city_key
 		ORDER BY count(*) DESC, e.city_key
-		LIMIT $8`
+		LIMIT $10`
 	f.CityKey = ""
 	rows, err := s.db.Query(ctx, q, append(filterArgs(f), limit)...)
 	if err != nil {

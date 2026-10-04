@@ -30,8 +30,14 @@ const defaultCountry = "RU"
 // абсолютные; пустой объект — «все будущие даты, вся Россия, любая
 // дистанция, любой тип».
 type userFilters struct {
-	Date string `json:"date,omitempty"` // "" и "a" — все будущие
-	City string `json:"city,omitempty"` // city_key страны фильтра
+	// Date — одиночный пресет прежнего формата: после loadFilters только "",
+	// "a" (все будущие) или "30". Месяц и «этот/следующий месяц» из старых
+	// фильтров переносятся в Dates.
+	Date string `json:"date,omitempty"`
+	// Dates — отмеченные периоды: "cm", "nm", "mYYYYMM"; событие подходит,
+	// если попадает хотя бы в один. Пусто — действует Date.
+	Dates []string `json:"dates,omitempty"`
+	City  string   `json:"city,omitempty"` // city_key страны фильтра
 	// Dist — индексы buckets. Ключ dist2: под прежним ключом dist лежали
 	// индексы прежних корзин с другими границами, они не читаются.
 	Dist []int  `json:"dist2,omitempty"`
@@ -41,6 +47,18 @@ type userFilters struct {
 	Country string `json:"country,omitempty"`
 }
 
+// MarshalJSON: один отмеченный период хранится в прежнем поле date — так его
+// читает и прежняя версия бота, а сохранение без изменений не меняет JSON и
+// не поднимает версию фильтров.
+func (f userFilters) MarshalJSON() ([]byte, error) {
+	type plain userFilters
+	p := plain(f)
+	if len(p.Dates) == 1 {
+		p.Date, p.Dates = p.Dates[0], nil
+	}
+	return json.Marshal(p)
+}
+
 // buckets — корзины дистанций: сплошные полуинтервалы (lo, hi] в метрах.
 // Границы стоят за классическими дистанциями: 10 км — в первой корзине,
 // полумарафон (21,1) — во второй, марафон (42,2) — в третьей.
@@ -48,10 +66,10 @@ var buckets = [...]struct {
 	emoji, label string
 	lo, hi       int
 }{
-	{"🟢", "до 10 км", 0, 10000},
-	{"🔵", "10–21 км", 10000, 21100},
-	{"🟣", "21–42 км", 21100, 42200},
-	{"🏔", "42+ км", 42200, 2147483647},
+	{"🟢", "До 10 км", 0, 10000},
+	{"🟡", "10–21 км", 10000, 21100},
+	{"🟠", "21–42 км", 21100, 42200},
+	{"🔴", "42+ км", 42200, 2147483647},
 }
 
 var typeLabels = map[event.Type]string{
@@ -102,6 +120,22 @@ func loadFilters(raw []byte, today time.Time) userFilters {
 	if _, to := dateRange(f.Date, today); monthRE.MatchString(f.Date) && to.Before(today) {
 		f.Date = ""
 	}
+	// Периоды: только допустимые и не прошедшие, без повторов, по порядку.
+	// Одиночный месяц прежнего формата — тот же период.
+	if len(f.Dates) == 0 && validPeriod(f.Date) {
+		f.Dates = []string{f.Date}
+	}
+	var dates []string
+	for _, d := range f.Dates {
+		if _, to := dateRange(d, today); validPeriod(d) && !to.Before(today) && !slices.Contains(dates, d) && len(dates) < maxPeriods {
+			dates = append(dates, d)
+		}
+	}
+	slices.SortFunc(dates, func(a, b string) int { return strings.Compare(periodOrder(a), periodOrder(b)) })
+	f.Dates = dates
+	if len(f.Dates) > 0 || validPeriod(f.Date) {
+		f.Date = ""
+	}
 	if f.City != "" && !validCityKey(f.City) {
 		f.City = ""
 	}
@@ -131,13 +165,56 @@ func loadFilters(raw []byte, today time.Time) userFilters {
 // состояния: update применяет изменение под блокировкой строки, поэтому
 // двойное нажатие безопасно (даёт «выкл→вкл»).
 
-func (f userFilters) setDate(v string) userFilters {
-	if v == "a" {
-		v = ""
+// maxPeriods — предел числа отмеченных периодов: в меню их двенадцать.
+const maxPeriods = 12
+
+// periodOrder — ключ порядка периодов: этот месяц, следующий, затем месяцы.
+func periodOrder(p string) string {
+	switch p {
+	case "cm":
+		return "0"
+	case "nm":
+		return "1"
 	}
-	f.Date = v
+	return "2" + p
+}
+
+// setDate задаёт одно значение даты, заменяя прежний выбор: так работают
+// кнопки дат из старых сообщений. "a" — все будущие.
+func (f userFilters) setDate(v string) userFilters {
+	f.Date, f.Dates = "", nil
+	switch {
+	case validPeriod(v):
+		f.Dates = []string{v}
+	case v != "a":
+		f.Date = v
+	}
 	return f
 }
+
+// togglePeriod отмечает или снимает период относительно текущего состояния
+// (под блокировкой строки в update); "-" снимает все — «все будущие».
+// Пресет «30 дней» с отмеченными периодами не сочетается и снимается.
+func (f userFilters) togglePeriod(p string) userFilters {
+	f.Date = ""
+	if p == "-" {
+		f.Dates = nil
+		return f
+	}
+	if j := slices.Index(f.Dates, p); j >= 0 {
+		f.Dates = slices.Delete(slices.Clone(f.Dates), j, j+1)
+		return f
+	}
+	if len(f.Dates) >= maxPeriods {
+		return f
+	}
+	f.Dates = append(slices.Clone(f.Dates), p)
+	slices.SortFunc(f.Dates, func(a, b string) int { return strings.Compare(periodOrder(a), periodOrder(b)) })
+	return f
+}
+
+// hasDate — дата ограничена: отмечены периоды или действует пресет.
+func (f userFilters) hasDate() bool { return len(f.Dates) > 0 || (f.Date != "" && f.Date != "a") }
 
 func (f userFilters) setCity(key string) userFilters {
 	if key == "-" {
@@ -193,7 +270,7 @@ func (f userFilters) clearBuckets() userFilters {
 func (f userFilters) unset(field byte) userFilters {
 	switch field {
 	case 'd':
-		f.Date = ""
+		f.Date, f.Dates = "", nil
 	case 'c':
 		f.City = ""
 	case 'b':
@@ -219,6 +296,8 @@ func mutation(c callback) func(userFilters) userFilters {
 		return nil
 	case c.Kind == cbDate:
 		return func(f userFilters) userFilters { return f.setDate(v) }
+	case c.Kind == cbPeriod:
+		return func(f userFilters) userFilters { return f.togglePeriod(v) }
 	case c.Kind == cbCity:
 		return func(f userFilters) userFilters {
 			if f.Country == allCountries {
@@ -305,6 +384,10 @@ func (f userFilters) countryCode() string {
 func (f userFilters) query(today time.Time) event.Filter {
 	q := event.Filter{CountryCode: f.countryCode(), CityKey: f.City, Type: event.Type(f.Type)}
 	q.From, q.To = dateRange(f.Date, today)
+	for _, p := range f.Dates {
+		from, to := dateRange(p, today)
+		q.Periods = append(q.Periods, event.DateRange{From: from, To: to})
+	}
 	for _, i := range f.Dist {
 		q.Distances = append(q.Distances, event.DistanceRange{Lo: buckets[i].lo, Hi: buckets[i].hi})
 	}
@@ -327,13 +410,27 @@ func dateLabel(d string) string {
 	return "все будущие"
 }
 
+// datesLabel — выбранные даты: отмеченные периоды через запятую либо пресет.
+func datesLabel(f userFilters) string {
+	if len(f.Dates) == 0 {
+		return upperFirst(dateLabel(f.Date))
+	}
+	l := make([]string, len(f.Dates))
+	for i, p := range f.Dates {
+		l[i] = upperFirst(dateLabel(p))
+	}
+	return strings.Join(l, ", ")
+}
+
+// distLabel — выбранные корзины с их цветными метками; метка корзины одна
+// и та же во всех экранах.
 func distLabel(dist []int) string {
 	if len(dist) == 0 {
 		return "любая"
 	}
 	l := make([]string, len(dist))
 	for i, b := range dist {
-		l[i] = buckets[b].label
+		l[i] = buckets[b].emoji + " " + buckets[b].label
 	}
 	return strings.Join(l, ", ")
 }
@@ -368,7 +465,7 @@ func summaryLine(f userFilters, cityName string, showCountry bool) string {
 	}
 	lines := []string{
 		"📍 Город: " + city,
-		"📅 Дата: " + upperFirst(dateLabel(f.Date)),
+		"📅 Дата: " + datesLabel(f),
 		"📏 Дистанция: " + upperFirst(distLabel(f.Dist)),
 		"🏃 Тип: " + upperFirst(typeLabel(f.Type)),
 	}
@@ -386,7 +483,7 @@ func summaryLine(f userFilters, cityName string, showCountry bool) string {
 // пяти: страна (не Россия), город, даты, дистанции, тип.
 func (f userFilters) activeCount() int {
 	n := 0
-	for _, on := range []bool{f.Country != "", f.City != "", f.Date != "" && f.Date != "a", len(f.Dist) > 0, f.Type != ""} {
+	for _, on := range []bool{f.Country != "", f.City != "", f.hasDate(), len(f.Dist) > 0, f.Type != ""} {
 		if on {
 			n++
 		}
@@ -404,8 +501,8 @@ func activeLine(f userFilters, cityName string) string {
 	if f.City != "" {
 		parts = append(parts, html.EscapeString(cityName))
 	}
-	if f.Date != "" && f.Date != "a" {
-		parts = append(parts, upperFirst(dateLabel(f.Date)))
+	if f.hasDate() {
+		parts = append(parts, datesLabel(f))
 	}
 	if len(f.Dist) > 0 {
 		parts = append(parts, distLabel(f.Dist))
@@ -472,7 +569,7 @@ func emptyScreen(f userFilters, pickCountry bool) screen {
 	if f.Country != "" {
 		rows = append(rows, btn("Снять страну", callback{Kind: cbReset, Value: "k"}))
 	}
-	if f.Date != "" && f.Date != "a" {
+	if f.hasDate() {
 		rows = append(rows, btn("Снять дату", callback{Kind: cbReset, Value: "d"}))
 	}
 	if f.City != "" {
@@ -504,24 +601,28 @@ func check(on bool, label string) string {
 }
 
 // dateMenu — «этот» и «следующий» месяц, за ними десять следующих месяцев
-// (первые два уже в верхнем ряду), внизу «все будущие». Пресет «30 дней» в
-// меню не выводится, но в сохранённых фильтрах и старых кнопках действует.
+// (первые два уже в верхнем ряду), внизу «все будущие». Периоды отмечаются и
+// снимаются по одному, можно несколько; «все будущие» — отдельный режим: снимает
+// все отметки. Меню остаётся на экране, выбор сохраняется сразу. Пресет
+// «30 дней» в меню не выводится, но в сохранённых фильтрах и старых кнопках
+// действует.
 func dateMenu(f userFilters, today time.Time) screen {
+	on := func(p string) bool { return slices.Contains(f.Dates, p) }
 	var top row
-	top.add(check(f.Date == "cm", "📅 Этот месяц"), callback{Kind: cbDate, Value: "cm"})
-	top.add(check(f.Date == "nm", "🗓 Следующий месяц"), callback{Kind: cbDate, Value: "nm"})
+	top.add(check(on("cm"), "📅 Этот месяц"), callback{Kind: cbPeriod, Value: "cm"})
+	top.add(check(on("nm"), "🗓 Следующий месяц"), callback{Kind: cbPeriod, Value: "nm"})
 	rows := []row{top}
 	var mr row
 	for i, o := range monthOptions(today)[2:] {
-		mr.add(check(f.Date == o.Value, upperFirst(o.Label)), callback{Kind: cbDate, Value: o.Value})
+		mr.add(check(on(o.Value), upperFirst(o.Label)), callback{Kind: cbPeriod, Value: o.Value})
 		if i%2 == 1 {
 			rows, mr = append(rows, mr), nil
 		}
 	}
 	rows = append(rows, mr,
-		btn(check(f.Date == "", "🔮 Все будущие"), callback{Kind: cbDate, Value: "a"}),
+		btn(check(!f.hasDate(), "🔮 Все будущие"), callback{Kind: cbPeriod, Value: "-"}),
 		btn(backLabel, back))
-	return screen{text: "Выберите даты", kb: keyboard(rows...)}
+	return screen{text: "Выберите даты (можно несколько)", kb: keyboard(rows...)}
 }
 
 // bucketMenu — корзины дистанций; выбранные отмечены «✓».
@@ -815,6 +916,8 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 		notice = cityNeedsCountry
 	case c.Kind == cbBucket:
 		sc = bucketMenu(f)
+	case c.Kind == cbPeriod:
+		sc = dateMenu(f, b.today())
 	case mut != nil || c.Kind == cbSummary:
 		sc, err = b.summary(ctx, f, v)
 	case c.Kind == cbDate:
@@ -838,8 +941,12 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 
 const maxCityInput = 64
 
-// onText: любое текстовое сообщение не-команда в личном чате — запрос
-// города (без состояния «жду ввод»). Текст в лог не пишется (BOT-08).
+// onText: любое текстовое сообщение не-команда в личном чате — запрос: город
+// или название забега (без состояния «жду ввод»). Точное название города
+// страны фильтров выбирает город, как раньше; иначе бот ищет события по
+// названию и городу и показывает их кнопками вместе с подсказками городов.
+// Поиск фильтры не меняет и идёт по всем будущим событиям страны фильтров
+// (при «всех странах» — по всем). Текст в лог не пишется (BOT-08).
 func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	m := u.Message
 	if m == nil || m.From == nil {
@@ -851,69 +958,56 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 			b.logger().Warn("send text reply", "err", err)
 		}
 	}
-	text := strings.TrimSpace(m.Text)
+	fail := func(what string, err error) {
+		b.logger().Error(what, "err", err)
+		say(screen{text: errNotice, plain: true})
+	}
+	text := strings.Join(strings.Fields(m.Text), " ") // без переводов строк: запрос — одна строка сообщения
 	if text == "" || utf8.RuneCountInString(text) > maxCityInput || strings.HasPrefix(text, "/") {
 		say(screen{text: "Нажмите /start, чтобы найти забег", plain: true})
 		return
 	}
 	today := b.today()
 	// Фильтры читаются до любого ответа с кнопками: кнопкам нужна версия.
-	// Город ищется в стране фильтров пользователя: одинаковый ключ в двух
-	// странах — разные города.
 	raw, v, err := b.Store.Filters(ctx, m.From.ID)
 	if err != nil {
-		b.logger().Error("city text", "err", err)
-		say(screen{text: errNotice, plain: true})
-		return
-	}
-	key := normalize.CityKey(text)
-	if key == "" || !validCityKey(key) {
-		say(screen{text: "Не понял название города — попробуйте иначе или выберите из списка", plain: true,
-			kb: keyboard(btn("📍 Выбрать из списка", callback{Kind: cbCity}), btn(backLabel, back))})
+		fail("text", err)
 		return
 	}
 	uf := loadFilters(raw, today)
-	if uf.Country == allCountries {
-		say(screen{text: cityNeedsCountry, plain: true, kb: keyboard(btn("🌍 Страна", callback{Kind: cbCountry}), btn(backLabel, back))})
-		return
-	}
+	// Город ищется в стране фильтров пользователя: одинаковый ключ в двух
+	// странах — разные города.
 	country := uf.countryCode()
-	_, n, err := b.Store.CityName(ctx, country, key, today)
-	if err != nil {
-		b.logger().Error("city text", "err", err)
-		say(screen{text: errNotice, plain: true})
-		return
+	key := normalize.CityKey(text)
+	if !validCityKey(key) || uf.Country == allCountries {
+		key = ""
 	}
-	b.logger().Info("city text", "found", n > 0)
-	if n > 0 {
-		var f userFilters
-		f, v, err = b.update(ctx, m.From.ID, func(f userFilters) userFilters { return f.setCity(key) })
-		var sc screen
-		if err == nil {
-			sc, err = b.summary(ctx, f, v)
-		}
+	if key != "" {
+		_, n, err := b.Store.CityName(ctx, country, key, today)
 		if err != nil {
-			b.logger().Error("city text", "err", err)
-			say(screen{text: errNotice, plain: true})
+			fail("city text", err)
 			return
 		}
-		say(sc)
-		return
+		if n > 0 {
+			b.logger().Info("text", "city", true)
+			var f userFilters
+			f, v, err = b.update(ctx, m.From.ID, func(f userFilters) userFilters { return f.setCity(key) })
+			var sc screen
+			if err == nil {
+				sc, err = b.summary(ctx, f, v)
+			}
+			if err != nil {
+				fail("city text", err)
+				return
+			}
+			say(sc)
+			return
+		}
 	}
-	similar, err := b.Store.SimilarCities(ctx, country, key, text, today, 5)
+	sc, err := b.searchResults(ctx, uf, text, v)
 	if err != nil {
-		b.logger().Error("similar cities", "err", err)
-		say(screen{text: errNotice, plain: true})
+		fail("search", err)
 		return
 	}
-	reply := "В каталоге нет забегов в «" + html.EscapeString(text) + "»"
-	var rows []row
-	for _, c := range similar {
-		rows = append(rows, btn(fmt.Sprintf("%s (%d)", c.Name, c.N), callback{Kind: cbCity, Value: c.Key}))
-	}
-	if len(rows) > 0 {
-		reply += "\nВозможно, вы имели в виду:"
-	}
-	rows = append(rows, btn("📍 Выбрать из списка", callback{Kind: cbCity}), btn(backLabel, back))
-	say(screen{text: reply, kb: keyboard(rows...)})
+	say(sc)
 }

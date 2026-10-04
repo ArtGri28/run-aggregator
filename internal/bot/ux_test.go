@@ -214,7 +214,7 @@ func TestActiveCount(t *testing.T) {
 	if got := settingsScreen(userFilters{Type: "trail", Dist: []int{3}}, "").text; !strings.HasSuffix(got, "🔎 Активно фильтров: 2 из 5") {
 		t.Errorf("настройки с фильтрами:\n%s", got)
 	}
-	if got := activeLine(userFilters{City: "x", Type: "obstacle", Dist: []int{0}}, "<Тула>"); got != "&lt;Тула&gt; · до 10 км · OCR · с препятствиями" {
+	if got := activeLine(userFilters{City: "x", Type: "obstacle", Dist: []int{0}}, "<Тула>"); got != "&lt;Тула&gt; · 🟢 До 10 км · OCR · с препятствиями" {
 		t.Errorf("activeLine = %q", got)
 	}
 }

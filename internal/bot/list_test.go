@@ -34,7 +34,7 @@ func listRows(t *testing.T, c call) []string {
 	t.Helper()
 	var out []string
 	for _, bt := range c.buttons(t) {
-		if strings.HasPrefix(bt.CallbackData, "e:") {
+		if strings.HasPrefix(bt.CallbackData, "e:") || (strings.HasPrefix(bt.CallbackData, "g:") && bt.Text != backLabel) {
 			out = append(out, bt.Text)
 		}
 	}
@@ -52,7 +52,7 @@ func listText(t *testing.T, c call) string {
 func firstCard(t *testing.T, c call) string {
 	t.Helper()
 	for _, bt := range c.buttons(t) {
-		if strings.HasPrefix(bt.CallbackData, "e:") {
+		if strings.HasPrefix(bt.CallbackData, "e:") || strings.HasPrefix(bt.CallbackData, "g:") {
 			return noV(bt.CallbackData)
 		}
 	}
@@ -139,7 +139,7 @@ func TestListStaleAndClamp(t *testing.T) {
 	if got := api.of("answerCallbackQuery")[0].Form["text"]; got != "Фильтры изменились — показываю актуальную выдачу" {
 		t.Fatalf("stale notice = %q", got)
 	}
-	if !strings.HasPrefix(stale.Form["text"], fmt.Sprintf("🔎 Найдено %d\n", len(msk))) || stale.button(t, fmt.Sprintf("1/%d", pages)) == "" {
+	if !strings.HasPrefix(stale.Form["text"], fmt.Sprintf("🔎 <b>Найдено: %d</b>\n", len(msk))) || stale.button(t, fmt.Sprintf("1/%d", pages)) == "" {
 		t.Fatalf("stale page: text %q buttons %v", stale.Form["text"], stale.buttons(t))
 	}
 	for i, r := range listRows(t, stale) {
@@ -433,10 +433,10 @@ func TestListScreenShape(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("buttons = %v, want %v", got, want)
 	}
-	if sc.text != "🔎 Найдено 12\nвсе будущие забеги" {
+	if sc.text != "🔎 <b>Найдено: 12</b>\n\n⚙️ Фильтры не заданы" {
 		t.Fatalf("text = %q", sc.text)
 	}
-	if sc := listScreen(items, 12, 1, 4, false, 2026, "Трейл · Тула"); sc.text != "🔎 Найдено 12\nТрейл · Тула" {
+	if sc := listScreen(items, 12, 1, 4, false, 2026, "Трейл · Тула"); sc.text != "🔎 <b>Найдено: 12</b>\n\n⚙️ Фильтры: Трейл · Тула" {
 		t.Fatalf("text with filters = %q", sc.text)
 	}
 }

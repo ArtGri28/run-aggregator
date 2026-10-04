@@ -15,7 +15,8 @@ import (
 // записан так же, как в частичных индексах events, чтобы планировщик их
 // использовал. Параметры: $1 from, $2 to, $3 city_key (пустая строка — любой),
 // $4 event_type (пустая строка — любой), $5 lo и $6 hi — пары диапазонов дистанций
-// (пусто — любая дистанция), $7 country_code (пустая строка — любая страна).
+// (пусто — любая дистанция), $7 country_code (пустая строка — любая страна),
+// $8 начало и $9 конец периодов дат (пусто — без ограничения периодами).
 const listWhere = `
 	WHERE e.is_listed AND e.merged_into_id IS NULL
 	  AND e.start_date >= $1::date AND e.start_date <= $2::date
@@ -24,7 +25,10 @@ const listWhere = `
 	  AND (COALESCE(cardinality($5::int[]), 0) = 0 OR EXISTS (
 	        SELECT 1 FROM event_distances d, unnest($5::int[], $6::int[]) AS r(lo, hi)
 	        WHERE d.event_id = e.id AND d.distance_m > r.lo AND d.distance_m <= r.hi))
-	  AND ($7::text = '' OR e.country_code = $7::text)`
+	  AND ($7::text = '' OR e.country_code = $7::text)
+	  AND (COALESCE(cardinality($8::date[]), 0) = 0 OR EXISTS (
+	        SELECT 1 FROM unnest($8::date[], $9::date[]) AS p(lo, hi)
+	        WHERE e.start_date >= p.lo AND e.start_date <= p.hi))`
 
 // ListItem — строка списка выдачи.
 type ListItem struct {
@@ -41,7 +45,7 @@ type ListItem struct {
 // noUpperBound — верхняя граница дат для нулевого Filter.To.
 var noUpperBound = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 
-// filterArgs строит аргументы $1…$7 listWhere. Срезы диапазонов всегда
+// filterArgs строит аргументы $1…$9 listWhere. Срезы диапазонов всегда
 // непустые по типу ([]int32{}, не nil): pgx кодирует nil как NULL.
 func filterArgs(f event.Filter) []any {
 	to := f.To
@@ -52,7 +56,11 @@ func filterArgs(f event.Filter) []any {
 	for _, r := range f.Distances {
 		lo, hi = append(lo, int32(r.Lo)), append(hi, int32(r.Hi))
 	}
-	return []any{f.From, to, f.CityKey, string(f.Type), lo, hi, f.CountryCode}
+	plo, phi := []time.Time{}, []time.Time{}
+	for _, p := range f.Periods {
+		plo, phi = append(plo, p.From), append(phi, p.To)
+	}
+	return []any{f.From, to, f.CityKey, string(f.Type), lo, hi, f.CountryCode, plo, phi}
 }
 
 // ListEvents возвращает страницу выдачи по фильтру в порядке start_date, id.
@@ -63,7 +71,7 @@ func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset in
 		                 FROM event_distances d WHERE d.event_id = e.id), '{}')
 		FROM events e` + listWhere + `
 		ORDER BY e.start_date, e.id
-		LIMIT $8 OFFSET $9`
+		LIMIT $10 OFFSET $11`
 	rows, err := s.db.Query(ctx, q, append(filterArgs(f), limit, offset)...)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
@@ -83,6 +91,36 @@ func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset in
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
+	}
+	return items, nil
+}
+
+// SearchCandidates — видимые события страны country (пусто — все страны) с
+// датой не раньше from, в порядке start_date, id, не больше limit: каталог,
+// по которому бот ищет текстовый запрос. Сравнение слов делает бот: так оно
+// не зависит от локали базы. Дистанции не заполняются. Только читает.
+func (s *Store) SearchCandidates(ctx context.Context, country string, from time.Time, limit int) ([]ListItem, error) {
+	const q = `
+		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status
+		FROM events e` + futureListed + `
+		  AND ($2::text = '' OR e.country_code = $2::text)
+		ORDER BY e.start_date, e.id
+		LIMIT $3`
+	rows, err := s.db.Query(ctx, q, from, country, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search candidates: %w", err)
+	}
+	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ListItem, error) {
+		var it ListItem
+		var status string
+		if err := row.Scan(&it.ID, &it.Title, &it.StartDate, &it.CountryCode, &it.City, &status); err != nil {
+			return ListItem{}, err
+		}
+		it.Status = event.Status(status)
+		return it, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search candidates: %w", err)
 	}
 	return items, nil
 }

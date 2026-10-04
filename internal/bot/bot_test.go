@@ -266,7 +266,7 @@ func TestTracerSearch(t *testing.T) {
 		t.Fatalf("p:1:v1: editMessageText = %+v, want one for message 7", edits)
 	}
 	pages := (want + pageSize - 1) / pageSize
-	if text := edits[0].Form["text"]; text != "🔎 Найдено "+strconv.Itoa(want)+"\nвсе будущие забеги" || edits[0].button(t, "1/"+strconv.Itoa(pages)) != "p:1:v1" {
+	if text := edits[0].Form["text"]; text != "🔎 <b>Найдено: "+strconv.Itoa(want)+"</b>\n\n⚙️ Фильтры не заданы" || edits[0].button(t, "1/"+strconv.Itoa(pages)) != "p:1:v1" {
 		t.Fatalf("list: text %q buttons %+v", text, edits[0].buttons(t))
 	}
 	items, err := s.ListEvents(ctx, event.Filter{From: time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)}, pageSize, 0)
@@ -328,7 +328,7 @@ func TestLoadFilters(t *testing.T) {
 		t.Fatalf("loadFilters(invalid values) = %+v, want %+v", got, want)
 	}
 	valid := `{"date":"m202611","city":"nizhniy-novgorod","dist2":[3,2,2],"type":"trail"}`
-	if got, want := loadFilters([]byte(valid), today), (userFilters{Date: "m202611", City: "nizhniy-novgorod", Dist: []int{2, 3}, Type: "trail"}); !reflect.DeepEqual(got, want) {
+	if got, want := loadFilters([]byte(valid), today), (userFilters{Dates: []string{"m202611"}, City: "nizhniy-novgorod", Dist: []int{2, 3}, Type: "trail"}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("loadFilters(valid) = %+v, want %+v", got, want)
 	}
 	// Прошедший месяц сбрасывается (LO-05); текущий, будущий и пресеты — нет.
@@ -336,8 +336,8 @@ func TestLoadFilters(t *testing.T) {
 		"m202608": "", "m202609": "m202609", "m202610": "m202610",
 		"30": "30", "cm": "cm", "nm": "nm", "a": "a",
 	} {
-		if got := loadFilters([]byte(`{"date":"`+date+`"}`), today); got.Date != want {
-			t.Fatalf("loadFilters(date %s).Date = %q, want %q", date, got.Date, want)
+		if got := loadFilters([]byte(`{"date":"`+date+`"}`), today); date1(got) != want {
+			t.Fatalf("loadFilters(date %s) = %q, want %q", date, date1(got), want)
 		}
 	}
 	if got, want := loadFilters([]byte(`{"date":"m202512","city":"moscow"}`), today), (userFilters{City: "moscow"}); !reflect.DeepEqual(got, want) {

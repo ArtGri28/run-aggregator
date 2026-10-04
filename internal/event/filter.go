@@ -5,6 +5,9 @@ import "time"
 // DistanceRange — диапазон дистанции (Lo, Hi] в метрах: Lo не входит, Hi входит.
 type DistanceRange struct{ Lo, Hi int }
 
+// DateRange — период дат включительно (полночь UTC).
+type DateRange struct{ From, To time.Time }
+
 // Filter — параметры выдачи бота. From и To — календарные даты (полночь UTC),
 // включительно; нулевой To — без верхней границы. Пустые CountryCode,
 // CityKey, Type и Distances означают «любой»; событие подходит, если хотя бы
@@ -17,4 +20,7 @@ type Filter struct {
 	CityKey     string
 	Type        Type
 	Distances   []DistanceRange
+	// Periods — дополнительно к From и To: дата события попадает хотя бы в
+	// один период; пусто — без ограничения.
+	Periods []DateRange
 }

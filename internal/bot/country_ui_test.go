@@ -125,7 +125,7 @@ func TestCountrySelect(t *testing.T) {
 		t.Errorf("сводка после выбора BY:\n%s", c.Form["text"])
 	}
 	f, _ := filtersV(t, b)
-	if f.Country != "BY" || f.City != "" || f.Date != "nm" || !reflect.DeepEqual(f.Dist, []int{0}) {
+	if f.Country != "BY" || f.City != "" || date1(f) != "nm" || !reflect.DeepEqual(f.Dist, []int{0}) {
 		t.Errorf("фильтры после BY: %+v", f)
 	}
 	if n := showCount(t, c); n != 2 {
@@ -147,7 +147,7 @@ func TestCountrySelect(t *testing.T) {
 	}
 	press(t, b, api, "f:k:RU")
 	f, _ = filtersV(t, b)
-	if f.Country != "" || f.City != "" || f.Date != "nm" {
+	if f.Country != "" || f.City != "" || date1(f) != "nm" {
 		t.Errorf("фильтры после RU: %+v", f)
 	}
 	raw, _, _ := b.Store.Filters(context.Background(), 42)
@@ -182,12 +182,20 @@ func TestCountryAllMode(t *testing.T) {
 		t.Errorf("f:c:lyuban: %+v v=%d (было %d), ответ %q", f, v, v0, toast(api))
 	}
 
-	// Текстовый ввод города.
+	// Текст при «всех странах»: город фильтром не выбирается, но события по
+	// запросу находятся во всех странах — с флагами; вместо выбора города —
+	// выбор страны.
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), textUpdate(42, "Любань"))
 	sends := api.of("sendMessage")
-	if len(sends) != 1 || sends[0].Form["text"] != "Сначала выберите страну" || buttonText(t, sends[0], "f:k") != "🌍 Страна" {
+	if len(sends) != 1 || !strings.HasPrefix(sends[0].Form["text"], "Запрос «Любань»") || buttonText(t, sends[0], "f:k") != "🌍 Страна" {
 		t.Fatalf("ввод города: %+v", sends)
+	}
+	if rows := listRows(t, sends[0]); len(rows) != 2 || !strings.Contains(rows[0], "🇷🇺 Любань") || !strings.Contains(rows[1], "🇧🇾 Любань") {
+		t.Errorf("поиск при «всех странах»: %q", rows)
+	}
+	if strings.Contains(strings.Join(datas(t, sends[0]), " "), "f:c") {
+		t.Errorf("при «всех странах» предложен выбор города: %v", datas(t, sends[0]))
 	}
 	if f, v := filtersV(t, b); f.City != "" || v != v0 {
 		t.Errorf("город после ввода: %+v v=%d", f, v)

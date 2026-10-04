@@ -14,7 +14,8 @@ import (
 // Кодек callback_data — контракт для всех экранов; предел Telegram — 64 байта.
 //
 //	f:s:v<N>                      сводка (N — версия фильтров пользователя)
-//	f:d[:a|30|cm|nm|mYYYYMM]:v<N> дата: подменю / значение
+//	f:d[:a|30|cm|nm|mYYYYMM]:v<N> дата: подменю / одно значение (так задают кнопки старых сообщений)
+//	f:w:<-|cm|nm|mYYYYMM>:v<N>    период дат: снять все / отметить или снять один
 //	f:c[:-|<city_key>]:v<N>       город
 //	f:n[:-|0..3]:v<N>             корзина дистанции
 //	f:b[:-]:v<N>                  то же в сообщениях до смены корзин: только открыть и снять
@@ -26,6 +27,8 @@ import (
 //	m                        главное меню (от фильтров не зависит — без версии)
 //	p:<стр>:v<N>             страница списка
 //	e:<id>:<стр>:v<N>        карточка
+//	g:<id>:v<N>              карточка из результатов текстового поиска
+//	g:b:v<N>                 назад к результатам поиска (запрос — в тексте сообщения)
 //	r:<a|y|n>:<runID>        админ: принятие прогона
 //	d:o                      админ: очередь дублей с начала
 //	d:<m|y|n|x|s>:<cid>      админ: слить (подтверждение) / да / отмена / разные / пропустить
@@ -60,6 +63,9 @@ const (
 	cbSettings
 	cbResetAsk
 	cbResetYes
+	cbPeriod
+	cbSearchCard
+	cbSearchBack
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -85,8 +91,8 @@ const maxCityKeyBytes = 60 // 64 − len("f:c:")
 
 // Корзины дистанций сменились: новые кнопки — f:n. Номер корзины в f:b из
 // старого сообщения значил бы другой диапазон, поэтому такая кнопка устарела.
-var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "c": cbCity, "b": cbBucket, "n": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
-var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbCity: "c", cbBucket: "n", cbType: "t", cbCountry: "k", cbReset: "x"}
+var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "w": cbPeriod, "c": cbCity, "b": cbBucket, "n": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
+var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbPeriod: "w", cbCity: "c", cbBucket: "n", cbType: "t", cbCountry: "k", cbReset: "x"}
 
 var dKinds = map[string]cbKind{"m": cbDupeAsk, "y": cbDupeYes, "n": cbDupeNo, "x": cbDupeRej, "s": cbDupeSkip}
 var dLetters = map[cbKind]string{cbDupeAsk: "m", cbDupeYes: "y", cbDupeNo: "n", cbDupeRej: "x", cbDupeSkip: "s"}
@@ -110,6 +116,9 @@ func validDate(s string) bool {
 	return monthRE.MatchString(s)
 }
 
+// validPeriod — период дат, который можно отметить вместе с другими.
+func validPeriod(s string) bool { return s == "cm" || s == "nm" || monthRE.MatchString(s) }
+
 func validCityKey(s string) bool { return len(s) <= maxCityKeyBytes && cityKeyRE.MatchString(s) }
 
 // validCountry — значение фильтра страны: "" (по умолчанию), "*" (все страны)
@@ -121,6 +130,8 @@ func validValue(k cbKind, v string) bool {
 	switch k {
 	case cbDate:
 		return validDate(v)
+	case cbPeriod:
+		return v == "-" || validPeriod(v)
 	case cbCity:
 		return v == "-" || validCityKey(v)
 	case cbBucket:
@@ -182,8 +193,8 @@ func parseCallback(data string) (callback, error) {
 			return callback{}, errCallback
 		}
 		c.Kind = k
-		if k == cbReset && len(p) != 3 {
-			return callback{}, errCallback // «сбросить всё» — только через подтверждение (s:y)
+		if (k == cbReset || k == cbPeriod) && len(p) != 3 {
+			return callback{}, errCallback // «сбросить всё» — только через подтверждение (s:y); у периода значение обязательно
 		}
 		if len(p) == 3 {
 			if !validValue(k, p[2]) || (p[1] == "b" && p[2] != "-") {
@@ -235,6 +246,19 @@ func parseCallback(data string) (callback, error) {
 		}
 		v, err := version(p[3])
 		return callback{Kind: cbCard, ID: id, Page: int(page), V: v}, err
+	case "g":
+		if len(p) != 3 {
+			return callback{}, errCallback
+		}
+		v, err := version(p[2])
+		if err != nil {
+			return callback{}, err
+		}
+		if p[1] == "b" {
+			return callback{Kind: cbSearchBack, V: v}, nil
+		}
+		id, err := num(p[1], 1, math.MaxInt64)
+		return callback{Kind: cbSearchCard, ID: id, V: v}, err
 	case "r":
 		if len(p) != 3 {
 			return callback{}, errCallback
@@ -268,7 +292,7 @@ func parseCallback(data string) (callback, error) {
 func (c callback) encode() (string, error) {
 	var s string
 	switch c.Kind {
-	case cbSummary, cbDate, cbCity, cbBucket, cbType, cbCountry, cbReset:
+	case cbSummary, cbDate, cbPeriod, cbCity, cbBucket, cbType, cbCountry, cbReset:
 		s = "f:" + fLetters[c.Kind]
 		if c.Value != "" {
 			s += ":" + c.Value
@@ -286,6 +310,10 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("p:%d:v%d", c.Page, c.V)
 	case cbCard:
 		s = fmt.Sprintf("e:%d:%d:v%d", c.ID, c.Page, c.V)
+	case cbSearchCard:
+		s = fmt.Sprintf("g:%d:v%d", c.ID, c.V)
+	case cbSearchBack:
+		s = fmt.Sprintf("g:b:v%d", c.V)
 	case cbRunAsk:
 		s = fmt.Sprintf("r:a:%d", c.ID)
 	case cbRunYes:
