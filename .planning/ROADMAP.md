@@ -274,7 +274,7 @@ Plans:
   3. Реализация соответствует контракту; устаревшие кнопки не ломают бот
   4. Владелец прошёл приёмку в Telegram по чек-листу сценариев
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/9 plans executed
 
 Plans:
 **Wave 1**
@@ -305,7 +305,11 @@ Plans:
 
 - [x] 08-07-PLAN.md — Локальная UX-приёмка: покрытие контракта тестами, просмотр эталонов владельцем (UX-02)
 
-**Wave 8** *(blocked on Wave 7 completion, RESTORE GATE Phase 6 и отдельных разрешениях на ship и выкат)*
+**Wave 8** *(blocked on Wave 7 completion)*
+
+- [x] 08-09-PLAN.md — Закрытие пробелов проверки: два текстовых ответа с навигацией («Сначала выберите страну», «Не понял название города»), эталоны, дополнения аудита и контракта (решение владельца 2026-10-04, вариант Б)
+
+**Wave 9** *(blocked on Wave 8 completion, RESTORE GATE Phase 6 и отдельных разрешениях на ship и выкат)*
 
 - [ ] 08-08-PLAN.md — Production-приёмка в Telegram (UX-03)
 
@@ -323,4 +327,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
 | 6. Production | 0/TBD | Not started | - |
 | 7. Deduplication Transparency | 5/5 | In Progress | - |
-| 8. Telegram Bot UX | 7/8 | In Progress | - |
+| 8. Telegram Bot UX | 8/9 | In Progress | - |

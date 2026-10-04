@@ -766,12 +766,8 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		say(screen{text: "Нажмите /start, чтобы найти забег", plain: true})
 		return
 	}
-	key := normalize.CityKey(text)
-	if key == "" || !validCityKey(key) {
-		say(screen{text: "Не понял название города — попробуйте иначе или выберите из списка", plain: true})
-		return
-	}
 	today := b.today()
+	// Фильтры читаются до любого ответа с кнопками: кнопкам нужна версия.
 	// Город ищется в стране фильтров пользователя: одинаковый ключ в двух
 	// странах — разные города.
 	raw, v, err := b.Store.Filters(ctx, m.From.ID)
@@ -780,9 +776,15 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		say(screen{text: errNotice, plain: true})
 		return
 	}
+	key := normalize.CityKey(text)
+	if key == "" || !validCityKey(key) {
+		say(screen{text: "Не понял название города — попробуйте иначе или выберите из списка", plain: true,
+			kb: keyboard(btn("📍 Выбрать из списка", callback{Kind: cbCity}), btn(backLabel, back))})
+		return
+	}
 	uf := loadFilters(raw, today)
 	if uf.Country == allCountries {
-		say(screen{text: cityNeedsCountry, plain: true, kb: keyboard(btn("🌍 Страна", callback{Kind: cbCountry}))})
+		say(screen{text: cityNeedsCountry, plain: true, kb: keyboard(btn("🌍 Страна", callback{Kind: cbCountry}), btn(backLabel, back))})
 		return
 	}
 	country := uf.countryCode()

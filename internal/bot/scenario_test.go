@@ -93,7 +93,7 @@ func TestS04City(t *testing.T) {
 
 // TestS05CityText — S-05: город текстом, подсказки (P8).
 func TestS05CityText(t *testing.T) {
-	_, api, b := countryFixture(t)
+	s, api, b := countryFixture(t)
 	filtersV(t, b)
 	textSnap(t, b, api, "Москва", "s05_found")
 	if f, _ := filtersV(t, b); f.City != "moscow" {
@@ -110,6 +110,31 @@ func TestS05CityText(t *testing.T) {
 	press(t, b, api, "f:c:-")
 	textSnap(t, b, api, "Атлантида", "s05_none")
 	textSnap(t, b, api, "/foo", "s05_command")
+
+	// 7. Из текста не получается ключ города: подсказка с навигацией, кнопки
+	// с текущей версией; фильтры не меняются.
+	f0, v0 := filtersV(t, b)
+	textSnap(t, b, api, "!!!", "s05_unclear")
+	if f, v := filtersV(t, b); v != v0 || f.City != f0.City {
+		t.Errorf("непонятный ввод изменил фильтры: %+v v%d → %+v v%d", f0, v0, f, v)
+	}
+	if c := press(t, b, api, "f:c"); c.Form["text"] != "Выберите город или напишите его название сообщением" {
+		t.Errorf("«Выбрать из списка» открыл не меню города: %q", c.Form["text"])
+	}
+
+	// 6. Город текстом при «всех странах»: сначала страна; «Назад» ведёт в поиск.
+	setUserFilters(t, s, `{"country":"*"}`)
+	_, v0 = filtersV(t, b)
+	textSnap(t, b, api, "Москва", "s05_needs_country")
+	if f, v := filtersV(t, b); v != v0 || f.City != "" || f.Country != allCountries {
+		t.Errorf("ввод города при всех странах изменил фильтры: %+v v%d", f, v)
+	}
+	if c := press(t, b, api, "f:s"); !strings.Contains(c.Form["text"], "ПОИСК ЗАБЕГА") {
+		t.Errorf("«Назад» открыл не поиск: %q", c.Form["text"])
+	}
+	if !t.Failed() {
+		t.Log("TRACER scenario=S-05 steps=7 match=yes")
+	}
 }
 
 // TestS06Distance — S-06: дистанция.
