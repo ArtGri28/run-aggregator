@@ -221,6 +221,8 @@ Plans:
 
 **Plans**: TBD
 
+**Progress (2026-10-04)**: 06-04 — пакет `agg` доставлен и установлен, часы синхронизированы по фактическому состоянию (`NTPSynchronized=yes`, `clock-apply.sh` не применялся), `age` 1.1.1 установлен; каталоги бэкапа, Telegram-конфигурация, первая копия и cron не настроены. Копии нет, RESTORE GATE не пройден, ни один план фазы не завершён
+
 ### Phase 7: Deduplication Transparency
 
 **Goal**: Владелец видит, какие пары слило бы автослияние, и может отменить ошибочное слияние; автослияние остаётся выключенным
@@ -258,7 +260,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion и условиях Phase 6, D-03)*
 
-- [x] 07-05-PLAN.md — `agg verify`: потенциальные автослияния; меняет пакет `agg` — выполнен по разрешению владельца (2026-10-03), пакет на VPS устарел до следующего `ship.sh`
+- [x] 07-05-PLAN.md — `agg verify`: потенциальные автослияния; меняет пакет `agg` — выполнен по разрешению владельца (2026-10-03); пакет доставлен `ship.sh` и установлен владельцем 2026-10-04
 
 ### Phase 8: Telegram Bot UX
 
@@ -325,6 +327,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
 | 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
-| 6. Production | 0/TBD | Not started | - |
+| 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | In Progress | - |
 | 8. Telegram Bot UX | 8/9 | In Progress | - |
