@@ -83,7 +83,14 @@ stub dd 'for a in "$@"; do case "$a" in of=*) : > "${a#of=}" ;; esac; done'
 stub mkswap '[ ! -e "$STATE/mkswap.fail" ]'
 stub df 'echo "Filesystem 1048576-blocks Used Available Capacity Mounted on"; echo "/dev/x 30000 5000 $(cat "$STATE/df" 2>/dev/null || echo 20000) 18% /"'
 stub tty 'cat "$STATE/tty" 2>/dev/null || echo /dev/tty1'
-stub sshd 'case "$1" in -T) if [ -e "$ROOTD/sshd.d/00-aggregator.conf" ] && [ -e "$STATE/sshd.after" ]; then cat "$STATE/sshd.after"; else cat "$STATE/sshd.T"; fi ;; -t) [ ! -e "$STATE/sshd.t.fail" ] ;; esac'
+# sshd -T: «после» — когда drop-in есть и действует; при $STATE/main.wins drop-in не
+# действует, пока основной файл не начинается с директив режима. sshd -t падает при
+# $STATE/sshd.t.fail, а при $STATE/sshd.t.fail.main — только на правленом основном файле.
+stub sshd 'M="$ROOTD/sshd_config"; fixed=no; head -2 "$M" 2>/dev/null | grep -q "^PasswordAuthentication no" && fixed=yes
+case "$1" in
+  -T) if [ -e "$ROOTD/sshd.d/00-aggregator.conf" ] && [ -e "$STATE/sshd.after" ] && { [ ! -e "$STATE/main.wins" ] || [ "$fixed" = yes ]; }; then cat "$STATE/sshd.after"; else cat "$STATE/sshd.T"; fi ;;
+  -t) [ ! -e "$STATE/sshd.t.fail" ] && { [ ! -e "$STATE/sshd.t.fail.main" ] || [ "$fixed" = no ]; } ;;
+esac'
 stub ufw 'case "$1" in status) cat "$STATE/ufw.status" 2>/dev/null ;; esac; exit 0'
 stub ss 'cat "$STATE/ss.out" 2>/dev/null; exit 0'
 stub systemctl 'case "$*" in "is-enabled docker") cat "$STATE/docker.enabled" 2>/dev/null || echo enabled ;; is-enabled*) echo enabled ;; is-active*) echo active ;; esac; exit 0'
@@ -102,7 +109,7 @@ fresh() {
   export STATE="$S" ROOTD="$R"
   sed -e '/\[ "\$(id -u)" -eq 0 \]/d' \
     -e "s#^SWAPFILE=.*#SWAPFILE=$R/swapfile#" -e "s#^FSTAB=.*#FSTAB=$R/fstab#" \
-    -e "s#^SSHD_DROPIN=.*#SSHD_DROPIN=$DROP#" -e "s#^ROOT_KEYS=.*#ROOT_KEYS=$R/root_keys#" \
+    -e "s#^SSHD_DROPIN=.*#SSHD_DROPIN=$DROP#" -e "s#^SSHD_MAIN=.*#SSHD_MAIN=$R/sshd_config#" -e "s#^ROOT_KEYS=.*#ROOT_KEYS=$R/root_keys#" \
     -e "s#^UFW_DEFAULT=.*#UFW_DEFAULT=$R/ufw.default#" -e "s#^TMPROOT=.*#TMPROOT=$R/tmp#" \
     -e "s#^LOADROOT=.*#LOADROOT=$R/var#" -e "s#^OWNER=.*#OWNER=$ME#" host-apply.sh > "$T/apply.sh"
   grep -q "^SWAPFILE=$R/swapfile\$" "$T/apply.sh" && grep -q "^OWNER=$ME\$" "$T/apply.sh" && ! grep -q 'id -u' "$T/apply.sh" \
@@ -113,7 +120,10 @@ fresh() {
   printf 'UUID=x / ext4 defaults 0 1\n' > "$R/fstab"
   printf "$SSHD_BEFORE" > "$S/sshd.T"; printf "$SSHD_AFTER" > "$S/sshd.after"
   echo 'ssh-ed25519 AAAA test' > "$R/root_keys"; echo 'IPV6=yes' > "$R/ufw.default"
+  printf 'Port 22\n#PermitRootLogin no\nUsePAM yes\n' > "$R/sshd_config"
 }
+# main_yes: основной файл сам задаёт значения, как шаблон провайдера без Include.
+main_yes() { printf 'Port 22\nPasswordAuthentication yes\nChallengeResponseAuthentication yes\nKbdInteractiveAuthentication yes\n  permitrootlogin yes\n#PasswordAuthentication yes\nUsePAM yes\n' > "$R/sshd_config"; cp "$R/sshd_config" "$T/main.was"; touch "$S/main.wins"; }
 # hm <режим> <ввод> [VAR=значение …]: запуск копии, код в RC, вывод в $T/hout.
 # Приглашение ввода слова печатается без перевода строки (его даёт Enter владельца),
 # поэтому первая строка после слова в выводе теста идёт за приглашением.
@@ -168,7 +178,18 @@ mcase ssh "у root нет ключа — STOP до слова" '[ "$RC" != 0 ] &
 fresh; touch "$S/sshd.t.fail"; hm ssh 'SSH\n'
 mcase ssh "сбой sshd -t — drop-in удалён, reload не вызван" '[ "$RC" != 0 ] && [ ! -e "$DROP" ] && ! grep -q "systemctl reload" "$S/calls"'
 fresh; printf "$SSHD_BEFORE" > "$S/sshd.after"; hm ssh 'SSH\n'
-mcase ssh "значения после изменения не те — код не 0 и подсказка отката" '[ "$RC" != 0 ] && grep -q "^STOP: значения не те" "$T/hout" && grep -q "^Откат: rm -f" "$T/hout"'
+mcase ssh "значения не те, основной файл ни при чём — код не 0, подсказка отката, reload не вызван" '[ "$RC" != 0 ] && grep -q "^STOP: значения не те" "$T/hout" && grep -q "Откат: rm -f" "$T/hout" && ! grep -q "^systemctl reload" "$S/calls" && [ ! -e "$R/sshd_config.agg-bak" ]'
+fresh; main_yes; hm ssh 'SSH\n'
+mcase ssh "основной файл задаёт значения — показан до слова, строки закомментированы, директивы в начале, копия, reload" \
+  '[ "$RC" = 0 ] && grep -q "строка 2:PasswordAuthentication yes" "$T/hout" && cmp -s "$R/sshd_config.agg-bak" "$T/main.was" && [ "$(sed -n 2,4p "$R/sshd_config")" = "$(printf "PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password")" ] && [ "$(grep -c "^#agg# " "$R/sshd_config")" = 4 ] && grep -qx "#agg#   permitrootlogin yes" "$R/sshd_config" && grep -qx "#PasswordAuthentication yes" "$R/sshd_config" && grep -qx "UsePAM yes" "$R/sshd_config" && [ "$(grep -c "systemctl reload ssh" "$S/calls")" = 1 ] && grep -q "Откат: rm -f .*; cat .*sshd_config.agg-bak > .*sshd_config; sshd -t && systemctl reload ssh" "$T/hout" && [ ! -e "$R/sshd_config.agg-new" ]'
+hm ssh 'SSH\n'
+mcase ssh "повторный запуск после правки основного файла — файл не меняется, копия прежняя" '[ "$RC" = 0 ] && cmp -s "$R/sshd_config.agg-bak" "$T/main.was" && [ "$(grep -c "^PasswordAuthentication no" "$R/sshd_config")" = 1 ]'
+fresh; main_yes; touch "$S/sshd.t.fail.main"; hm ssh 'SSH\n'
+mcase ssh "sshd -t не принял правленый основной файл — он возвращён, drop-in удалён, reload не вызван" '[ "$RC" != 0 ] && cmp -s "$R/sshd_config" "$T/main.was" && [ ! -e "$DROP" ] && ! grep -q "systemctl reload" "$S/calls" && grep -q "^STOP: sshd -t не принял основной файл" "$T/hout"'
+fresh; main_yes; printf "$SSHD_BEFORE" > "$S/sshd.after"; hm ssh 'SSH\n'
+mcase ssh "значения не те и после правки основного файла — он возвращён, drop-in удалён, reload не вызван" '[ "$RC" != 0 ] && cmp -s "$R/sshd_config" "$T/main.was" && [ ! -e "$DROP" ] && ! grep -q "systemctl reload" "$S/calls" && grep -q "и после правки основного файла" "$T/hout"'
+fresh; main_yes; hm ssh 'ssh\n'
+mcase ssh "основной файл задаёт значения, неверное слово — ничего не изменено" '[ "$RC" != 0 ] && cmp -s "$R/sshd_config" "$T/main.was" && [ ! -e "$DROP" ] && [ ! -e "$R/sshd_config.agg-bak" ]'
 
 fresh; hm tinyproxy 'TINYPROXY\n'
 mcase tinyproxy "верное слово — служба остановлена и отключена" '[ "$RC" = 0 ] && [ "$(mods)" = "systemctl disable --now tinyproxy;" ] && grep -q "^Откат: systemctl enable --now tinyproxy" "$T/hout"'

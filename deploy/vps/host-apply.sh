@@ -8,7 +8,10 @@
 #   swap      — файл подкачки SWAP_MB МБ и строка в fstab — swapoff, строка и файл удаляются
 #   ufw       — входящие закрыты, кроме портов sshd; только из веб-консоли — ufw disable
 #   ssh       — вход по паролю выключен для всех, root только по ключу; только из
-#               веб-консоли — удаление drop-in и reload ssh
+#               веб-консоли — удаление drop-in, возврат копии основного файла, reload ssh.
+#               Если основной sshd_config задаёт эти значения сам (каталог drop-in не
+#               подключён или подключён ниже), режим правит основной файл: копия
+#               sshd_config.agg-bak, мешающие строки закомментированы, директивы — в начало
 #   tinyproxy — служба остановлена и отключена — systemctl enable --now tinyproxy
 #   reboot    — перезагрузка хоста после показа того, что вернётся — отката нет
 #   cleanup   — копии пакета в /tmp и остатки загрузки образа — отката нет
@@ -22,6 +25,7 @@ SWAPFILE=/swapfile
 FSTAB=/etc/fstab
 SWAP_MB=2048
 SSHD_DROPIN=/etc/ssh/sshd_config.d/00-aggregator.conf
+SSHD_MAIN=/etc/ssh/sshd_config
 ROOT_KEYS=/root/.ssh/authorized_keys
 UFW_DEFAULT=/etc/default/ufw
 TMPROOT=/tmp
@@ -54,6 +58,21 @@ console_only() {
 
 # sshd_val <директива>: действующее значение из sshd -T ("" — не прочитано).
 sshd_val() { sshd -T 2>/dev/null | awk -v k="$1" '$1 == k {print $2; exit}'; }
+
+# ssh_bad: какие из трёх значений sshd не те, что нужны ("" — все верны).
+# sshd -T печатает prohibit-password как without-password.
+ssh_bad() {
+  local bad="" k v
+  for k in passwordauthentication kbdinteractiveauthentication; do
+    [ "$(sshd_val "$k")" = no ] || bad="$bad $k"
+  done
+  v=$(sshd_val permitrootlogin)
+  [ "$v" = prohibit-password ] || [ "$v" = without-password ] || bad="$bad permitrootlogin"
+  printf '%s' "$bad"
+}
+
+# ssh_main_lines: строки основного файла, задающие эти значения (с номерами).
+ssh_main_lines() { grep -niE '^[[:space:]]*(passwordauthentication|kbdinteractiveauthentication|challengeresponseauthentication|permitrootlogin)[[:space:]]' "$SSHD_MAIN" 2>/dev/null || true; }
 
 # pkg_dirs: копии пакета во временных каталогах root — каталоги TMPROOT/tmp.* с
 # файлами SHA256SUMS и agg-install.sh, кроме текущего.
@@ -154,6 +173,12 @@ case "$MODE" in
     [[ ${KEYS:-0} =~ ^[0-9]+$ ]] && [ "${KEYS:-0}" -ge 1 ] || { echo "STOP: у root нет ни одного ключа в $ROOT_KEYS — сначала добавьте ключ и проверьте вход по нему. Хост не изменён."; exit 1; }
     echo "Ключей у root: $KEYS."
     echo "Будет записан $SSHD_DROPIN: вход по паролю выключается для ВСЕХ учётных записей, root входит только по ключу."
+    MAIN_LINES=$(ssh_main_lines)
+    if [ -n "$MAIN_LINES" ]; then
+      echo "Основной файл $SSHD_MAIN сам задаёт эти значения:"
+      printf '%s\n' "$MAIN_LINES" | sed 's/^/  строка /'
+      echo "Если drop-in на них не повлияет, эти строки будут закомментированы, а три директивы добавлены в начало файла (копия — $SSHD_MAIN.agg-bak)."
+    fi
     echo "До слова убедитесь: вход root по ключу уже проверен в отдельной сессии. Веб-консоль провайдера остаётся запасным входом."
     confirm SSH
     printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n' > "$SSHD_DROPIN.agg-new"
@@ -164,18 +189,45 @@ case "$MODE" in
       echo "STOP: sshd -t не принял настройки, drop-in удалён, sshd не перезагружался."
       exit 1
     fi
+    BAD=$(ssh_bad)
+    if [ -n "$BAD" ] && [ -n "$MAIN_LINES" ]; then
+      # Drop-in не действует: значения задаёт основной файл (действует первое).
+      echo "Drop-in не изменил:$BAD — правлю $SSHD_MAIN."
+      [ -e "$SSHD_MAIN.agg-bak" ] || cp -p "$SSHD_MAIN" "$SSHD_MAIN.agg-bak"
+      cp -p "$SSHD_MAIN" "$SSHD_MAIN.agg-new"
+      {
+        echo "# aggregator: вход по паролю выключен, root только по ключу (host-apply.sh ssh)"
+        printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLogin prohibit-password\n'
+        awk '{ if (tolower($0) ~ /^[[:space:]]*(passwordauthentication|kbdinteractiveauthentication|challengeresponseauthentication|permitrootlogin)[[:space:]]/) print "#agg# " $0; else print }' "$SSHD_MAIN.agg-bak"
+      } > "$SSHD_MAIN.agg-new"
+      cat "$SSHD_MAIN.agg-new" > "$SSHD_MAIN"
+      rm -f "$SSHD_MAIN.agg-new"
+      if ! sshd -t; then
+        cat "$SSHD_MAIN.agg-bak" > "$SSHD_MAIN"
+        rm -f "$SSHD_DROPIN"
+        echo "STOP: sshd -t не принял основной файл — он возвращён из копии, drop-in удалён, sshd не перезагружался."
+        exit 1
+      fi
+      BAD=$(ssh_bad)
+      if [ -n "$BAD" ]; then
+        cat "$SSHD_MAIN.agg-bak" > "$SSHD_MAIN"
+        rm -f "$SSHD_DROPIN"
+        echo "STOP: значения не те, что ожидались:$BAD — и после правки основного файла. Он возвращён из копии, drop-in удалён, sshd не перезагружался."
+        exit 1
+      fi
+    fi
+    ROLLBACK="rm -f $SSHD_DROPIN"
+    [ ! -e "$SSHD_MAIN.agg-bak" ] || ROLLBACK="$ROLLBACK; cat $SSHD_MAIN.agg-bak > $SSHD_MAIN"
+    ROLLBACK="$ROLLBACK; sshd -t && systemctl reload ssh"
+    if [ -n "$BAD" ]; then
+      echo "Откат: $ROLLBACK"
+      echo "STOP: значения не те, что ожидались:$BAD — другой файл настроек задаёт их раньше. Выполните откат или разберитесь, не закрывая консоль. sshd не перезагружался."
+      exit 1
+    fi
     systemctl reload ssh || systemctl restart ssh
     echo "Действующие значения sshd после изменения:"
-    BAD=""
-    for k in passwordauthentication kbdinteractiveauthentication; do
-      v=$(sshd_val "$k"); printf '  %s %s\n' "$k" "$v"
-      [ "$v" = no ] || BAD="$BAD $k"
-    done
-    v=$(sshd_val permitrootlogin); printf '  permitrootlogin %s\n' "$v"
-    # sshd -T печатает prohibit-password как without-password.
-    [ "$v" = prohibit-password ] || [ "$v" = without-password ] || BAD="$BAD permitrootlogin"
-    echo "Откат: rm -f $SSHD_DROPIN && sshd -t && systemctl reload ssh"
-    [ -z "$BAD" ] || { echo "STOP: значения не те, что ожидались:$BAD — другой файл настроек задаёт их раньше. Выполните откат или разберитесь, не закрывая консоль."; exit 1; }
+    for k in passwordauthentication kbdinteractiveauthentication permitrootlogin; do printf '  %s %s\n' "$k" "$(sshd_val "$k")"; done
+    echo "Откат: $ROLLBACK"
     echo "Не закрывая консоль: откройте новую сессию SSH по ключу и убедитесь, что вход по паролю отклонён."
     ;;
   tinyproxy)
