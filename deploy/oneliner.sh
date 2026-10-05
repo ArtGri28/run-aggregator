@@ -5,10 +5,12 @@
 #   deploy/oneliner.sh installed               — ожидаемые SHA256 установленных agg и lib
 #   [TAG=<тег>] [SSH_CONFIG=<файл>] deploy/oneliner.sh <ssh-алиас runagg>
 # Два вида команд:
-#   - root-консоль провайдера (разовая установка и изменения хоста): пакет из
-#     /home/runagg/agg-deploy копируется во временный каталог root, сверяется SHA256
-#     файла SHA256SUMS и по нему всех файлов; при несовпадении — «STOP: HASH MISMATCH»,
-#     ничего не запускается;
+#   - root-консоль провайдера (разовая установка и изменения хоста): во временный
+#     каталог root копируется SHA256SUMS из /home/runagg/agg-deploy, сверяется его
+#     SHA256, затем копируются только перечисленные в нём файлы и сверяются по
+#     списку; при несовпадении — «STOP: HASH MISMATCH», ничего не запускается;
+#     временный каталог удаляется при любом исходе. Режимы ufw и ssh принимает
+#     только веб-консоль провайдера, не сессия SSH;
 #   - Mac: ssh под runagg и «sudo -n /usr/local/sbin/agg <команда>»; вывод команд
 #     только чтения — в $HOME/run-agg-phase4/ (бэкап — в $HOME/run-agg-phase6/) вне репозитория.
 set -euo pipefail
@@ -57,8 +59,11 @@ fi
 H=$(sums | sha)
 # root <команда>: однострочник для root-консоли; if/else — сбой самого скрипта не выдаётся
 # за несовпадение хеша.
+# Имена файлов берутся из SHA256SUMS только после сверки его хеша; лишние файлы и
+# подкаталоги в каталоге runagg не копируются.
+COPY="cp -- \$(awk -v s=$STAGE '{print s \"/\" \$2}' SHA256SUMS) ."
 root() {
-  echo "T=\$(mktemp -d) && cp $STAGE/* \"\$T\"/ && cd \"\$T\" && if echo '$H  SHA256SUMS' | sha256sum -c --quiet - && sha256sum -c --quiet SHA256SUMS; then $*; else echo 'STOP: HASH MISMATCH'; fi"
+  echo "T=\$(mktemp -d) && cd \"\$T\" && { if cp -- $STAGE/SHA256SUMS . && echo '$H  SHA256SUMS' | sha256sum -c --quiet - && $COPY && sha256sum -c --quiet SHA256SUMS; then $*; else echo 'STOP: HASH MISMATCH'; fi; cd /; rm -rf -- \"\$T\"; }"
 }
 # ro <подкоманда> <имя лога> [каталог логов в $HOME]: без третьего аргумента лог идёт в
 # run-agg-phase4 (каталог создаёт ship.sh); заданный каталог строка создаёт сама (700).
@@ -82,13 +87,20 @@ $(root bash agg-install.sh)
 
 Если вставка в консоли не работает — две короткие команды; сверьте напечатанный хеш
 SHA256SUMS с строкой выше глазами, при «FILES OK» запустите вторую:
-T=\$(mktemp -d) && cp $STAGE/* "\$T"/ && cd "\$T" && sha256sum SHA256SUMS && sha256sum -c --quiet SHA256SUMS && echo FILES OK
-bash agg-install.sh
+T=\$(mktemp -d) && cd "\$T" && cp -- $STAGE/SHA256SUMS . && sha256sum SHA256SUMS && $COPY && sha256sum -c --quiet SHA256SUMS && echo FILES OK
+bash agg-install.sh; cd / && rm -rf -- "\$T"
 
 == Root-консоль: изменения хоста, только по решению владельца ==
 $(root bash host-apply.sh updates)
-systemctl reboot   # вручную, когда готовы
+$(root bash host-apply.sh reboot)    # слово REBOOT; до слова показывает, что вернётся после перезагрузки
 $(root bash host-apply.sh compose)
+$(root bash host-apply.sh swap)    # слово SWAP
+$(root bash host-apply.sh tinyproxy)    # слово TINYPROXY
+$(root bash host-apply.sh cleanup)    # слово CLEANUP
+
+== Веб-консоль провайдера (не SSH): фаервол и вход по SSH; из сессии SSH режимы не запустятся ==
+$(root bash host-apply.sh ufw)    # слово UFW
+$(root bash host-apply.sh ssh)    # слово SSH; до него вход root по ключу должен быть проверен
 
 == Root-консоль: бэкап, каждый шаг только по отдельному разрешению владельца; внешняя копия — временное хранилище в Telegram (D-17) ==
 $(root bash host-apply.sh age)

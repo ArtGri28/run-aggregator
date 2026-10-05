@@ -51,6 +51,27 @@ free -m
 timedatectl show -p NTP -p NTPSynchronized
 printf 'date -u на VPS: %s (сравните с Mac)\n' "$(date -u '+%Y-%m-%d %H:%M:%S')"
 
+sec "Порты и кандидаты на уборку"
+# Порт, протокол и процесс — без адресов.
+ss -H -tulnp 2>/dev/null | awk '{n = split($5, a, ":"); proc = "?"; if (match($0, /users:\(\("[^"]+"/)) proc = substr($0, RSTART + 9, RLENGTH - 10); print a[n] "/" $1 " " proc}' | sort -u
+if [ -e /etc/sudoers.d/run-agg ]; then echo "phase1_sudoers=present"; else echo "phase1_sudoers=absent"; fi
+# Ключи — только числа: всего, с комментарием Phase 1, с опцией restrict.
+kcount() { local n; n=$(grep -c"$1" -E "$2" "$3" 2>/dev/null) || true; echo "${n:-0}"; }
+AK=/home/runagg/.ssh/authorized_keys
+printf 'runagg_keys=%s phase1_keys=%s restrict_keys=%s\n' "$(kcount v '^[[:space:]]*(#|$)' "$AK")" "$(kcount '' 'run-agg-phase1' "$AK")" "$(kcount '' '^restrict[ ,]|,restrict[ ,]' "$AK")"
+printf 'root_keys=%s\n' "$(kcount v '^[[:space:]]*(#|$)' /root/.ssh/authorized_keys)"
+if [ -f /home/runagg/agg-deploy/postgres17.tar ]; then
+  printf 'postgres17_tar_bytes=%s\n' "$(stat -c %s /home/runagg/agg-deploy/postgres17.tar 2>/dev/null || echo '?')"
+else
+  echo "postgres17_tar_bytes=absent"
+fi
+N=0
+for d in /tmp/tmp.*; do
+  if [ -d "$d" ] && [ -f "$d/SHA256SUMS" ] && [ -f "$d/agg-install.sh" ]; then N=$((N + 1)); fi
+done
+printf 'tmp_packages=%s\n' "$N"
+printf 'load_dirs=%s\n' "$(find /var/tmp -maxdepth 1 -type d -name 'agg-load.*' -mtime +0 2>/dev/null | grep -c . || true)"
+
 sec "Проект"
 ls -ld /opt/aggregator 2>&1
 echo "тома проекта:"
