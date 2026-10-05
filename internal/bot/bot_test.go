@@ -149,8 +149,11 @@ func (c call) button(t *testing.T, textPrefix string) string {
 
 func newTestBot(t *testing.T, api *fakeAPI, s *store.Store) *Bot {
 	t.Helper()
-	b, err := New(Config{Token: "123:TEST"}, s,
-		tgbot.WithServerURL(api.srv.URL), tgbot.WithSkipGetMe(), tgbot.WithNotAsyncHandlers())
+	opts := []tgbot.Option{tgbot.WithServerURL(api.srv.URL), tgbot.WithSkipGetMe(), tgbot.WithNotAsyncHandlers()}
+	if forcedProfileStatus != "" { // непусто только внутри TestProfileNoLimits
+		opts = append(opts, tgbot.WithMiddlewares(forceProfileStatusMW(forcedProfileStatus)))
+	}
+	b, err := New(Config{Token: "123:TEST"}, s, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -355,7 +355,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 09-05-PLAN.md — Покрытие двух контрактов тестами, полный прогон, локальная приёмка эталонов владельцем
+- [x] 09-05-PLAN.md — Покрытие двух контрактов тестами, полный прогон, локальная приёмка эталонов владельцем; локальная приёмка пройдена владельцем 2026-10-05
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -376,4 +376,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | Complete    | 2026-10-05 |
 | 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
-| 9. Onboarding & User Profile | 4/6 | In Progress | - |
+| 9. Onboarding & User Profile | 5/6 | In Progress | - |

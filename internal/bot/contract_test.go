@@ -22,14 +22,13 @@ var (
 	scenarioSnapshotRE = regexp.MustCompile(`^s([0-9]{2})_.+\.txt$`)
 )
 
-// TestContractCoverage: каждый сценарий S-xx контрактов экранов, у которого уже
-// есть тест, имеет тест TestSxx… и хотя бы один эталон sxx_*; тестов и эталонов
-// сценариев, которых нет ни в одном контракте, нет. Сценарий Phase 9 без теста
-// пока не требуется: полное равенство включается, когда готовы S-23…S-25.
+// TestContractCoverage: множество сценариев S-xx двух контрактов экранов (Phase 8
+// и Phase 9) равно множеству тестов TestSxx…; у каждого сценария есть хотя бы один
+// эталон sxx_*, а тестов и эталонов сценариев, которых нет ни в одном контракте,
+// нет. Лишние и отсутствующие сценарии перечисляются в ошибке.
 func TestContractCoverage(t *testing.T) {
-	all := map[string]string{}  // номер сценария → имя теста по контрактам
-	second := map[string]bool{} // сценарии контракта Phase 9
-	nPhase8 := 0
+	all := map[string]string{} // номер сценария → имя теста по контрактам
+	nPhase8, nPhase9 := 0, 0
 	for i, path := range uxContracts {
 		doc, err := os.ReadFile(path)
 		if err != nil {
@@ -46,12 +45,12 @@ func TestContractCoverage(t *testing.T) {
 			if i == 0 {
 				nPhase8++
 			} else {
-				second[m[1]] = true
+				nPhase9++
 			}
 		}
 	}
-	if nPhase8 < 17 {
-		t.Fatalf("в контракте Phase 8 найдено сценариев: %d, want ≥ 17", nPhase8)
+	if nPhase8 < 17 || nPhase9 < 8 {
+		t.Fatalf("найдено сценариев: Phase 8 — %d (want ≥ 17), Phase 9 — %d (want ≥ 8)", nPhase8, nPhase9)
 	}
 
 	got := map[string]string{}
@@ -71,15 +70,8 @@ func TestContractCoverage(t *testing.T) {
 			got[m[2]] = m[1]
 		}
 	}
-	// Сценарий второго контракта без теста исключается из ожидаемого множества.
-	want := map[string]string{}
-	for n, name := range all {
-		if _, ok := got[n]; ok || !second[n] {
-			want[n] = name
-		}
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("тесты сценариев расходятся с контрактом:\nтесты    %v\nконтракт %v", sorted(got), sorted(want))
+	if !reflect.DeepEqual(got, all) {
+		t.Errorf("тесты сценариев расходятся с контрактами:\nтесты    %v\nконтракты %v", sorted(got), sorted(all))
 	}
 
 	snaps := map[string]bool{}
@@ -95,7 +87,7 @@ func TestContractCoverage(t *testing.T) {
 			}
 		}
 	}
-	for n := range want {
+	for n := range all {
 		if !snaps[n] {
 			t.Errorf("S-%s: нет эталона s%s_*", n, n)
 		}

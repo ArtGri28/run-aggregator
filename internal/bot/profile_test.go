@@ -4,11 +4,14 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/jackc/pgx/v5"
 
@@ -1109,5 +1112,132 @@ func TestProfileIndependence(t *testing.T) {
 	b.Now = func() time.Time { return fixtureNow }
 	if after := profilesState(t); after != before {
 		t.Errorf("текстовый поиск и город фильтра текстом изменили user_profiles:\n%s\n%s", before, after)
+	}
+}
+
+// forcedProfileStatus — статус анкеты, который newTestBot выставляет пользователю
+// после каждого /start. Непуст только внутри TestProfileNoLimits.
+var forcedProfileStatus string
+
+// Счётчики выставленных статусов и неудач (сверяет TestProfileNoLimits).
+var forcedSet, forcedFailed atomic.Int64
+
+// forceProfileStatusMW после обработки личного /start выставляет статус анкеты
+// отправителя прямым запросом к тестовой базе. Ответ бота уже отправлен, поэтому
+// экран, который видит пользователь на этом /start, не меняется. Неудача
+// (в том числе закрытая фикстура) считается, а не роняет тест.
+func forceProfileStatusMW(status string) tgbot.Middleware {
+	return func(next tgbot.HandlerFunc) tgbot.HandlerFunc {
+		return func(ctx context.Context, b *tgbot.Bot, u *models.Update) {
+			next(ctx, b, u)
+			m := u.Message
+			if m == nil || m.From == nil || m.Chat.Type != models.ChatTypePrivate || m.Text != "/start" {
+				return
+			}
+			conn, err := pgx.Connect(ctx, os.Getenv("TEST_DATABASE_URL"))
+			if err != nil {
+				forcedFailed.Add(1)
+				return
+			}
+			defer conn.Close(ctx)
+			tag, err := conn.Exec(ctx, `UPDATE user_profiles SET status = $2 WHERE tg_id = $1`, m.From.ID, status)
+			if err != nil || tag.RowsAffected() != 1 {
+				forcedFailed.Add(1)
+				return
+			}
+			forcedSet.Add(1)
+		}
+	}
+}
+
+// TestProfileNoLimits — PRF-03, D-01: сценарии S-01…S-17 Phase 8 проходят с теми
+// же эталонами, какой бы ни была анкета: отказ от неё ничего не ограничивает.
+// Статус `not_started` покрыт обычным запуском этих же сценариев.
+func TestProfileNoLimits(t *testing.T) {
+	scenarios := []struct {
+		name string
+		fn   func(*testing.T)
+	}{
+		{"S01", TestS01MainMenu}, {"S02", TestS02Search}, {"S03", TestS03Date}, {"S04", TestS04City},
+		{"S05", TestS05CityText}, {"S06", TestS06Distance}, {"S07", TestS07Type}, {"S08", TestS08Country},
+		{"S09", TestS09List}, {"S10", TestS10Card}, {"S11", TestS11Empty}, {"S12", TestS12Settings},
+		{"S13", TestS13Reset}, {"S14", TestS14StaleFilter}, {"S15", TestS15StaleNavigation},
+		{"S16", TestS16Unknown}, {"S17", TestS17InternalError},
+	}
+	for _, status := range []string{"skipped", "in_progress", "completed"} {
+		t.Run(status, func(t *testing.T) {
+			forcedProfileStatus = status
+			t.Cleanup(func() { forcedProfileStatus = "" })
+			set0 := forcedSet.Load()
+			for _, sc := range scenarios {
+				failed0 := forcedFailed.Load()
+				t.Run(sc.name, func(t *testing.T) {
+					sc.fn(t)
+					if n := forcedFailed.Load() - failed0; n != 0 {
+						t.Errorf("статус %q не выставлен после %d /start", status, n)
+					}
+				})
+			}
+			if forcedSet.Load() == set0 {
+				t.Errorf("статус %q ни разу не выставлен: проверка ничего не проверила", status)
+			}
+		})
+	}
+}
+
+// callbackCharsRE — допустимые знаки callback_data: свободного текста нет (D-09).
+var callbackCharsRE = regexp.MustCompile(`^[A-Za-z0-9:_*-]+$`)
+
+// TestProfileNoAnswersInLogs — PRF-09, D-09: ответы анкеты и текст города не
+// попадают в логи, а callback_data кнопок всех экранов профиля не несёт
+// свободного текста.
+func TestProfileNoAnswersInLogs(t *testing.T) {
+	_, api, b := countryFixture(t)
+	logs := captureLogs(t)
+	var screens []call
+	see := func(c call) call { screens = append(screens, c); return c }
+	press := func(c call, label string) call {
+		edit, _ := tap(t, b, api, 42, uData(t, c, label))
+		return see(edit)
+	}
+
+	// Анкета с приметными ответами; город — текстом.
+	q1 := press(see(startAs(t, b, api, 42)), "📝 Заполнить анкету")
+	q3 := press(press(q1, "Женский"), "45–54")
+	press(q3, "🇧🇾 Беларусь")
+	ack := see(sayText(t, b, api, 42, "Секретоград"))
+	q4 := press(ack, "Дальше")
+	q4 = press(q4, "🚴 Велоспорт")
+	q4 = press(q4, "🏊 Плавание")
+	press(q4, "✅ Готово")
+
+	// Редактирование: пол, возраст, спорт, страна и снова город текстом.
+	for _, f := range []struct{ open, pick string }{
+		{"🚻 Пол", "Мужской"}, {"🎂 Возраст", "25–34"}, {"🏅 Спорт", "🏃 Бег"},
+	} {
+		press(press(see(profileCmd(t, b, api, 42)), f.open), f.pick)
+	}
+	press(press(see(profileCmd(t, b, api, 42)), "🏠 Где живу"), "🇷🇺 Россия")
+	press(see(sayText(t, b, api, 42, "Секретоград")), "Дальше")
+	if p, _ := profileOf(t, b, 42); p.City != "Секретоград" || p.Gender != "m" {
+		t.Fatalf("цепочка не выполнилась: %+v", p)
+	}
+
+	// Устаревшая кнопка и кнопки вне грамматики: данные кнопки в лог не идут.
+	for _, data := range []string{"u:s:g:m:e:v1", "u:s:g:Женский:Секретоград:v1", "u:x:Секретоград"} {
+		raw(b, api, 42, data)
+	}
+
+	for _, leak := range []string{"Секретоград", "Женский", "45–54", "bike", "swim", "u:s:", "u:a:"} {
+		if strings.Contains(logs.String(), leak) {
+			t.Errorf("в логах есть %q:\n%s", leak, logs)
+		}
+	}
+	for _, c := range screens {
+		for _, bt := range c.buttons(t) {
+			if !callbackCharsRE.MatchString(bt.CallbackData) {
+				t.Errorf("callback_data %q экрана %q: свободный текст или недопустимые знаки", bt.CallbackData, c.Form["text"])
+			}
+		}
 	}
 }
