@@ -100,8 +100,8 @@ Phase 7 (приняты владельцем 2026-10-03, не выполнены
 
 - [x] **MON-01**: Состояние здоровья и ошибок источника фиксируется в `ingest_runs` и структурных логах (последний статус, число подряд идущих сбоев, причина); Telegram-алертов в этой фазе нет
 - [x] **MON-02**: Структурные логи через `log/slog` во всех подкомандах
-- [ ] **MON-03**: `bot` и `worker` пишут heartbeat раз в минуту, следят друг за другом (устарел больше 10 минут → алерт); подкоманда `healthcheck` и docker healthcheck работают
-- [ ] **MON-04**: Алерты при недоступной PostgreSQL и сбое бэкапа; недоступность Telegram API фиксируется в логе, отправка повторяется с backoff
+- [x] **MON-03**: `bot` и `worker` пишут heartbeat раз в минуту, следят друг за другом (устарел больше 10 минут → алерт); подкоманда `healthcheck` и docker healthcheck работают
+- [x] **MON-04**: Алерты при недоступной PostgreSQL и сбое бэкапа; недоступность Telegram API фиксируется в логе, отправка повторяется с backoff
 - [x] **MON-05**: Администратор (`ADMIN_TG_IDS`) получает алерт в Telegram при `failed` и `suspect` прогонах и всплеске ошибок парсера; один алерт на смену состояния, напоминание через 24 часа
 
 ### Production (развёртывание)
@@ -219,8 +219,8 @@ Phase 7 (приняты владельцем 2026-10-03, не выполнены
 | DDP-13 | Phase 7 | Complete |
 | DDP-14 | Phase 7 | Complete |
 | DDP-15 | Phase 7 | Complete |
-| MON-03 | Phase 6 | Pending |
-| MON-04 | Phase 6 | Pending |
+| MON-03 | Phase 6 | Complete |
+| MON-04 | Phase 6 | Complete |
 | PRD-01 | Phase 4 | Complete |
 | PRD-02 | Phase 6 | Pending |
 | PRD-03 | Phase 6 | Pending |

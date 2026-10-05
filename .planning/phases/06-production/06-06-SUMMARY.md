@@ -3,9 +3,9 @@ phase: 06-production
 plan: 06
 subsystem: monitoring
 tags: [heartbeat, alerts, healthcheck, deploy]
-status: deployed-awaiting-stop-test-decision
-progress: "задачи 1–8 выполнены 2026-10-05: решение log-only, локальная реализация (коммит 269b37c), пакет и INSTALL №2, образ 269b37cf9ec8, deploy, MONITORING DEPLOYED OK; задача 9 (проверка остановкой worker) — ждёт решения владельца"
-requirements-completed: []
+status: complete
+progress: "задачи 1–8 выполнены 2026-10-05: решение log-only, локальная реализация (коммит 269b37c), пакет и INSTALL №2, образ 269b37cf9ec8, deploy, MONITORING DEPLOYED OK; задача 9 — отказ владельца, проверка остановкой worker в production не выполнялась (STOP TEST SKIPPED)"
+requirements-completed: [MON-03, MON-04]
 requires: [06-05]
 key-files:
   created:
@@ -23,7 +23,7 @@ key-files:
 
 # Phase 6 Plan 06: мониторинг сервиса (MON-03, MON-04)
 
-Мониторинг выкачен в production 2026-10-05 (образ `269b37cf9ec8`). MON-03 и MON-04 в `REQUIREMENTS.md` не отмечены до решения по задаче 9.
+Мониторинг выкачен в production 2026-10-05 (образ `269b37cf9ec8`). План закрыт 2026-10-05; MON-03 и MON-04 отмечены выполненными с оговоркой задачи 9 (ниже).
 
 ## Задача 1 — решение владельца
 
@@ -94,6 +94,13 @@ POSTGRES CONTAINER: KEPT
 
 Сообщения бота после выката: ответ владельца дословно — «ПОка ничего не приходило» (ложных алертов нет).
 
+## Задача 9 — отказ владельца
+
+Ответ владельца дословно (2026-10-05): «отказ, закрывай 06-06 и начинай 06-09». Отказ дан до остановки `worker`; `<verify>` задачи печатает `STOP TEST SKIPPED` (лога `mon-verify-after-stop.log` нет).
+
+Проверка в production не выполнялась, приёмка по `TestInfraTracer` и `TestInfraLoop`. Следствие: доставка сообщений `worker_stale` и «Восстановлено» администратору в production не наблюдалась ни разу — работа пути «отметка → алерт → Telegram» на настоящем боте подтверждена только автотестами с фиктивным Bot API; отметки и healthcheck в production подтверждены (`bot` и `worker` — `healthy` по своим отметкам).
+
 ## Не сделано
 
-Задача 9 — проверка алерта остановкой `worker` дольше 10 минут и запуском обратно: ждёт решения владельца (разрешение или отказ). До неё алерты `worker_stale` и «Восстановлено» в production не наблюдались — только автотесты (`TestInfraTracer`, `TestInfraLoop`).
+- Алерты в production не наблюдались (см. задачу 9).
+- `bot_stale` — только запись в логе `worker` (решение `log-only`); активного уведомления о мёртвом боте нет до плана 06-08.
