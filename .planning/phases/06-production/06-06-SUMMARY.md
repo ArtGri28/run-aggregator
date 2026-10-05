@@ -3,8 +3,8 @@ phase: 06-production
 plan: 06
 subsystem: monitoring
 tags: [heartbeat, alerts, healthcheck, deploy]
-status: local-done-awaiting-rollout
-progress: "задачи 1–4 выполнены 2026-10-05 (решение log-only, отметки, алерты, healthcheck, закрепление образа postgres) — локально, не закоммичено; задачи 5–9 (пакет, INSTALL №2, образ, deploy, verify, проверка остановкой worker) — шаги владельца, не начаты"
+status: deployed-awaiting-stop-test-decision
+progress: "задачи 1–8 выполнены 2026-10-05: решение log-only, локальная реализация (коммит 269b37c), пакет и INSTALL №2, образ 269b37cf9ec8, deploy, MONITORING DEPLOYED OK; задача 9 (проверка остановкой worker) — ждёт решения владельца"
 requirements-completed: []
 requires: [06-05]
 key-files:
@@ -23,7 +23,7 @@ key-files:
 
 # Phase 6 Plan 06: мониторинг сервиса (MON-03, MON-04)
 
-Локальная часть готова; в production ничего не выкачено. MON-03 и MON-04 не отмечены до выката и проверки.
+Мониторинг выкачен в production 2026-10-05 (образ `269b37cf9ec8`). MON-03 и MON-04 в `REQUIREMENTS.md` не отмечены до решения по задаче 9.
 
 ## Задача 1 — решение владельца
 
@@ -74,6 +74,26 @@ key-files:
 - После `INSTALL` №2 и до выката `agg verify` ожидаемо даёт `compose-state: FAIL`: новый скрипт требует `healthy` у `worker`, а контейнер ещё прежний.
 - После `agg rollback` на прежний образ отметки `bot` и `worker` не пишутся: оба контейнера станут `unhealthy` по новому compose, алертов этого плана нет.
 
+## Задачи 5–8 — выкат (2026-10-05)
+
+Команды готовил исполнитель, выполнял владелец; логи — `$HOME/run-agg-phase6/mon-*.log` вне репозитория, адресов и токенов в них нет. Код — коммит владельца `269b37c`.
+
+| Задача | Шаг | Результат |
+|---|---|---|
+| 5 | `ship.sh`, первый запуск | `mon-ship-1.log`: `SMOKE OK`, ожидаемый `STOP` сверки, образ не передавался — `SHIP PACKAGE OK`; однострочник установки соответствует репозиторию (`ONELINER MATCHES REPO`, `SHA256SUMS` `8b1e4301…837c`) |
+| 6 | `INSTALL` №2 в root-консоли | ответ владельца дословно: «готово, AGG INSTALL DONE» |
+| 6а | `ship.sh`, второй запуск | `mon-ship-2.log`: `STOP` нет (установленные файлы совпали с репозиторием), `AGG LOAD OK: aggregator:269b37cf9ec8` — `IMAGE LOADED TAG=269b37cf9ec8` |
+| 7, шаг 1 | `agg verify` и `agg backup-status` до выката | `mon-pre-deploy.log`: `postgres_image id=sha256:d74eeac9…c46f tag=same repo_digest=sha256:d74eeac9…c46f` — `POSTGRES TAG: SAME`; `aggregator-postgres-1 … postgres:17 … 4 days ago, Up 4 days (healthy)`; `backup_copy_age_s=11538`, `latest=aggregator-2026-10-05.dump.age size=202474 usable=yes`; `compose-state: FAIL` — ожидаемо (прежний контейнер `worker` без healthcheck) — `DEPLOY TAG=269b37cf9ec8` |
+| 7, шаг 2 | `agg deploy 269b37cf9ec8`, слово `DEPLOY` | `mon-deploy.log`: `IMAGE_PREV=636deea312f7`, `postgres image: local, pull skipped`, контейнер `postgres` — `Healthy` без пересоздания, `DEPLOY APPLY DONE` (09:28 МСК) |
+| 8 | `agg verify` через 2,5 минуты (исполнитель, по разрешению владельца) | `mon-verify.log`: `DEPLOY VERIFY OK`, `rc=0`, `CHECK compose-state: OK`; `aggregator-bot-1 … aggregator:269b37cf9ec8 … Up 2 minutes (healthy)`, `aggregator-worker-1 … aggregator:269b37cf9ec8 … Up 2 minutes (healthy)`; `dedup_auto_merge_bot=false`, `dedup_auto_merge_worker=false`; `events_listed=522`, `events_merged=96`, `source_alerts=0` — `MONITORING DEPLOYED OK` |
+
+POSTGRES IMAGE: UNCHANGED
+POSTGRES CONTAINER: KEPT
+
+Образ `postgres` до и после — один идентификатор (`sha256:d74eeac9…c46f`); строка `aggregator-postgres-1` до и после — `4 days ago`, `Up 4 days (healthy)` (D-26).
+
+Сообщения бота после выката: ответ владельца дословно — «ПОка ничего не приходило» (ложных алертов нет).
+
 ## Не сделано
 
-Задачи 5–9 — шаги владельца, каждый по отдельному разрешению: коммит, `ship.sh` (ожидаемый STOP сверки), `INSTALL` №2, повторный `ship.sh`, `agg verify` и `agg backup-status` до выката (`tag=same`, свежая копия), `agg deploy`, `agg verify` после, необязательная проверка остановкой `worker`.
+Задача 9 — проверка алерта остановкой `worker` дольше 10 минут и запуском обратно: ждёт решения владельца (разрешение или отказ). До неё алерты `worker_stale` и «Восстановлено» в production не наблюдались — только автотесты (`TestInfraTracer`, `TestInfraLoop`).
