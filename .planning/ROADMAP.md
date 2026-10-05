@@ -343,7 +343,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 09-02-PLAN.md — Миграция `00006_user_profiles.sql` и `internal/store/profiles.go` (версия профиля под блокировкой строки); начинается после production-приёмки третьей редакции Phase 8 и утверждения схемы
+- [x] 09-02-PLAN.md — Миграция `00006_user_profiles.sql` и `internal/store/profiles.go` (версия профиля под блокировкой строки); начинается после production-приёмки третьей редакции Phase 8 и утверждения схемы; схема утверждена владельцем 2026-10-05, выполнен локально (на production миграция — только в 09-06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -376,4 +376,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | Complete    | 2026-10-05 |
 | 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
-| 9. Onboarding & User Profile | 1/6 | In Progress | - |
+| 9. Onboarding & User Profile | 2/6 | In Progress | - |
