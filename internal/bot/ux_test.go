@@ -15,12 +15,14 @@ import (
 // и «О боте» нет, пока нет этих сценариев.
 func TestStartScreen(t *testing.T) {
 	_, api, b := countryFixture(t)
+	b.api.ProcessUpdate(context.Background(), startUpdate(42)) // первый /start — предложение анкеты
+	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	s := api.of("sendMessage")
 	if len(s) != 1 || !strings.HasPrefix(s[0].Form["text"], "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\nСобрали беговые старты") {
 		t.Fatalf("приветствие: %+v", s)
 	}
-	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:s", "s:o"}) || s[0].button(t, "🔎 Найти забег") != "f:s" {
+	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:s", "s:o", "u:o"}) || s[0].button(t, "🔎 Найти забег") != "f:s" {
 		t.Errorf("кнопки: %v", got)
 	}
 }

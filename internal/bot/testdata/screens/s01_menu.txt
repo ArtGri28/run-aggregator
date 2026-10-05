@@ -8,6 +8,7 @@ parse_mode: HTML
 ---
 [🔎 Найти забег] → f:s:v2
 [⚙️ Мои настройки] → s:o:v2
+[👤 Мой профиль] → u:o
 method: answerCallbackQuery
 text: 
 show_alert: 

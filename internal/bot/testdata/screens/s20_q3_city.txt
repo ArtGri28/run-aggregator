@@ -1,0 +1,14 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Вопрос 3 из 4</b>
+Страна: 🇧🇾 Беларусь
+
+Выберите город или напишите его название сообщением
+---
+[Любань] → u:s:c:lyuban:w:v5 | [Минск] → u:s:c:minsk:w:v5
+[Пропустить вопрос] → u:a:s:w:v5
+[⬅️ Назад] → u:a:k:w:v5
+method: answerCallbackQuery
+text: 
+show_alert: 

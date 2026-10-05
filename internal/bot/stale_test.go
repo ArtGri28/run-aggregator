@@ -33,13 +33,15 @@ func dbScalar(t *testing.T, q string, args ...any) string {
 	return out
 }
 
-// dbState — таблицы users и events целиком (все колонки, включая
-// last_seen_at): любое изменение меняет строку.
+// dbState — таблицы users, events и user_profiles целиком (все колонки,
+// включая last_seen_at, profile_v и отметку ожидания города): любое
+// изменение меняет строку.
 func dbState(t *testing.T) string {
 	t.Helper()
 	return dbScalar(t, `SELECT jsonb_build_object(
 		'users', (SELECT jsonb_agg(to_jsonb(u) ORDER BY u.tg_id) FROM users u),
-		'events', (SELECT jsonb_agg(to_jsonb(e) ORDER BY e.id) FROM events e))::text`)
+		'events', (SELECT jsonb_agg(to_jsonb(e) ORDER BY e.id) FROM events e),
+		'user_profiles', (SELECT jsonb_agg(to_jsonb(p) ORDER BY p.tg_id) FROM user_profiles p))::text`)
 }
 
 // raw нажимает кнопку как есть (без подстановки версии) и возвращает все

@@ -21,6 +21,8 @@ func TestCallbackRoundTrip(t *testing.T) {
 		"g:5:v1", "g:9223372036854775807:v2147483647", "g:b:v0", "g:b:v7",
 		"r:a:5", "r:y:5", "r:n:5",
 		"d:o", "d:m:5", "d:y:5", "d:n:5", "d:x:5", "d:s:9223372036854775807",
+		"u:o", "u:b:v1", "u:n:v1", "u:z:v1", "u:b:v0", "u:z:v2147483647",
+		"u:s:c:minsk:w:v2147483647", "u:s:c:nizhniy-novgorod:e:v12",
 	} {
 		c, err := parseCallback(s)
 		if err != nil {
@@ -30,6 +32,36 @@ func TestCallbackRoundTrip(t *testing.T) {
 		if err != nil || got != s || c.Legacy {
 			t.Fatalf("encode(parse(%q)) = %q, %v (legacy %v); want the same", s, got, err, c.Legacy)
 		}
+	}
+}
+
+// Все допустимые кнопки анкеты (D-14): u:a для каждого поля и режима, u:s для
+// каждого значения справочников D-04 в обоих режимах.
+func TestCallbackProfileRoundTrip(t *testing.T) {
+	values := map[string][]profileOption{
+		"g": profileGenders, "a": profileAges, "k": profileCountries, "s": profileSports,
+		"c": {{Code: "minsk"}, {Code: "nizhniy-novgorod"}},
+	}
+	for _, mode := range []string{"w", "e"} {
+		for field, opts := range values {
+			var all []string
+			all = append(all, "u:a:"+field+":"+mode+":v7")
+			for _, o := range opts {
+				all = append(all, "u:s:"+field+":"+o.Code+":"+mode+":v7")
+			}
+			for _, s := range all {
+				c, err := parseCallback(s)
+				if err != nil {
+					t.Fatalf("parseCallback(%q): %v", s, err)
+				}
+				if got, err := c.encode(); err != nil || got != s {
+					t.Fatalf("encode(parse(%q)) = %q, %v; want the same", s, got, err)
+				}
+			}
+		}
+	}
+	if len(profileGenders) != 2 || len(profileAges) != 6 || len(profileCountries) != 4 || len(profileSports) != 8 {
+		t.Errorf("справочники D-04: %d/%d/%d/%d значений, want 2/6/4/8", len(profileGenders), len(profileAges), len(profileCountries), len(profileSports))
 	}
 }
 
@@ -85,6 +117,13 @@ func TestCallbackReject(t *testing.T) {
 		"f:s:", "f:d:", "F:s", "f:d:A", " f:s", "p:1:v1:", "p:1:v2147483648", "p:99999999999999999999:v1",
 		"e:9223372036854775808:1:v1", "r:a:-1",
 		"d:", "d:o:1", "d:m", "d:m:0", "d:m:01", "d:q:5", "d:m:-1", "d:m:5:1", "d:x:9223372036854775808",
+		// анкета (u:): значение вне D-04, ключ города 50 байт, нет версии, лишние и неизвестные части
+		"u:", "u", "u:o:v1", "u:o:", "u:x:v1", "u:q:v1", "u:b", "u:n", "u:z", "u:b:v01", "u:z:v-1", "u:b:v1:v1", "u:z:1",
+		"u:s:g:x:w:v1", "u:s:g:M:w:v1", "u:s:a:6:w:v1", "u:s:a:05:w:v1", "u:s:a:-1:w:v1", "u:s:k:PL:w:v1", "u:s:k:ru:w:v1", "u:s:k:RUS:w:v1",
+		"u:s:s:other:w:v1", "u:s:s:Run:w:v1", "u:s:s::w:v1", "u:s:c::w:v1", "u:s:c:Minsk:w:v1", "u:s:c:a--b:w:v1",
+		"u:s:c:" + strings.Repeat("a", 50) + ":w:v1",
+		"u:s:g:m:x:v1", "u:s:g:m::v1", "u:s:g:m:v1", "u:s:g:m:w", "u:s:g:m:w:1", "u:s:x:m:w:v1", "u:s:gg:m:w:v1", "u:s:g:m:w:v1:v1",
+		"u:a:g:w", "u:a:g:v1", "u:a:x:w:v1", "u:a:g:x:v1", "u:a:g:w:e:v1", "u:a::w:v1", "u:a:gg:w:v1",
 	} {
 		if c, err := parseCallback(s); err == nil {
 			t.Errorf("parseCallback(%q) = %+v, want error", s, c)
@@ -93,7 +132,7 @@ func TestCallbackReject(t *testing.T) {
 }
 
 func TestCbPrefix(t *testing.T) {
-	for data, want := range map[string]string{"d:x:1": "d", "r:y:1": "r", "z:1": "?", "d": "?"} {
+	for data, want := range map[string]string{"d:x:1": "d", "r:y:1": "r", "z:1": "?", "d": "?", "u:o": "u", "u:s:g:m:w:v1": "u", "u": "?"} {
 		if got := cbPrefix(data); got != want {
 			t.Errorf("cbPrefix(%q) = %q, want %q", data, got, want)
 		}
@@ -119,6 +158,30 @@ func TestCallbackLength(t *testing.T) {
 	}
 	if got, err := (callback{Kind: cbCity, Value: key61}).encode(); err == nil {
 		t.Fatalf("encode(city 61) = %q, want error", got)
+	}
+
+	// Кнопка города анкеты делит 64 байта с версией: u:s:c:<ключ>:<w|e>:v<P> —
+	// ключ в 49 байт помещается при версии до 99999 и не кодируется с шестизначной.
+	key49 := strings.Repeat("a", 49)
+	for _, mode := range []string{"w", "e"} {
+		if got, err := (callback{Kind: cbProfSave, Field: "c", Value: key49, Mode: mode, V: 99999}).encode(); err != nil || len(got) != 64 {
+			t.Fatalf("encode(profile city 49, v99999, %s) = %q (%d), %v; want 64 bytes", mode, got, len(got), err)
+		}
+		if got, err := (callback{Kind: cbProfSave, Field: "c", Value: key49, Mode: mode, V: 100000}).encode(); err == nil {
+			t.Fatalf("encode(profile city 49, v100000, %s) = %q, want error", mode, got)
+		}
+		if got, err := (callback{Kind: cbProfSave, Field: "c", Value: key49 + "a", Mode: mode, V: 1}).encode(); err == nil {
+			t.Fatalf("encode(profile city 50) = %q, want error", got)
+		}
+	}
+	for _, c := range []callback{
+		{Kind: cbProfSave, Field: "s", Value: "trail", Mode: "e", V: math.MaxInt32},
+		{Kind: cbProfAsk, Field: "c", Mode: "w", V: math.MaxInt32},
+		{Kind: cbProfDone, V: math.MaxInt32},
+	} {
+		if got, err := c.encode(); err != nil || len(got) > 64 {
+			t.Errorf("encode(%+v) = %q, %v", c, got, err)
+		}
 	}
 
 	// Все кнопки экранов на крайних значениях укладываются в 64 байта.

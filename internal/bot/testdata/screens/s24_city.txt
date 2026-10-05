@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Где вы живёте?</b>
+Страна: 🇷🇺 Россия
+
+Выберите город или напишите его название сообщением
+---
+[Любань] → u:s:c:lyuban:e:v7 | [Москва] → u:s:c:moscow:e:v7
+[⬅️ Назад] → u:a:k:e:v7
+method: answerCallbackQuery
+text: 
+show_alert: 

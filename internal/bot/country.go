@@ -7,7 +7,7 @@ package bot
 // allCountries — значение фильтра «все страны».
 const allCountries = "*"
 
-var countryNames = map[string]string{"RU": "Россия", "BY": "Беларусь", "PL": "Польша"}
+var countryNames = map[string]string{"RU": "Россия", "BY": "Беларусь", "KZ": "Казахстан", "PL": "Польша"}
 
 // countryName — название страны; "*" — «Все страны», неизвестный код — он сам.
 func countryName(code string) string {

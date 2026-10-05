@@ -109,7 +109,7 @@ func TestCountryMenu(t *testing.T) {
 	}
 	// Текущая страна остаётся в меню без событий.
 	setUserFilters(t, s, `{"country":"KZ"}`)
-	if got := buttonText(t, press(t, b, api, "f:k"), "f:k:KZ"); got != "✓ 🇰🇿 KZ (0)" {
+	if got := buttonText(t, press(t, b, api, "f:k"), "f:k:KZ"); got != "✓ 🇰🇿 Казахстан (0)" {
 		t.Errorf("страна без событий: %q", got)
 	}
 }
@@ -282,7 +282,8 @@ func TestSingleCountryUX(t *testing.T) {
 	if strings.Contains(card, "🌍") || !strings.Contains(card, "\n📍 Москва\n") {
 		t.Errorf("карточка:\n%s", card)
 	}
-	// Приветствие прежнее.
+	// Приветствие прежнее (первый /start — предложение анкеты, меню — второй).
+	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "Собрали беговые старты") {
@@ -310,6 +311,8 @@ func TestSingleCountryUX(t *testing.T) {
 // Приветствие при нескольких странах не называет Россию.
 func TestStartGreetingMultiCountry(t *testing.T) {
 	_, api, b := countryFixture(t)
+	b.api.ProcessUpdate(context.Background(), startUpdate(42)) // первый /start — предложение анкеты
+	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	s := api.of("sendMessage")
 	if len(s) != 1 || strings.Contains(s[0].Form["text"], "в России") || !strings.Contains(s[0].Form["text"], "Где старт?") {

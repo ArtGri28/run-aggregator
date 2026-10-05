@@ -1,0 +1,6 @@
+method: sendMessage
+parse_mode: HTML
+---
+🏠 Город проживания: Гродно
+---
+[Дальше] → u:a:s:w:v4 | [Изменить] → u:a:c:w:v4

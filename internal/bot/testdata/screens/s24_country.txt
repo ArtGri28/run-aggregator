@@ -1,0 +1,11 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Где вы живёте?</b>
+---
+[🇷🇺 Россия] → u:s:k:RU:e:v6 | [✓ 🇧🇾 Беларусь] → u:s:k:BY:e:v6
+[🇰🇿 Казахстан] → u:s:k:KZ:e:v6 | [🌍 Другая страна] → u:s:k:ZZ:e:v6
+[⬅️ Назад] → u:o
+method: answerCallbackQuery
+text: 
+show_alert: 

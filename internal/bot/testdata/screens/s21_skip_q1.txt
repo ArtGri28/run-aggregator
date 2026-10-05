@@ -1,0 +1,14 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Вопрос 2 из 4</b>
+Ваш возраст
+---
+[До 18] → u:s:a:0:w:v2 | [18–24] → u:s:a:1:w:v2
+[25–34] → u:s:a:2:w:v2 | [35–44] → u:s:a:3:w:v2
+[45–54] → u:s:a:4:w:v2 | [55+] → u:s:a:5:w:v2
+[Пропустить вопрос] → u:a:k:w:v2
+[⬅️ Назад] → u:a:g:w:v2
+method: answerCallbackQuery
+text: 
+show_alert: 

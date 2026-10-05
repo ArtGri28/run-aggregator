@@ -1,0 +1,15 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Вопрос 4 из 4</b>
+Какие виды спорта вам близки? (можно несколько)
+---
+[🏃 Бег] → u:s:s:run:w:v3 | [🏔 Трейлраннинг] → u:s:s:trail:w:v3
+[🧗 OCR · гонки с препятствиями] → u:s:s:ocr:w:v3 | [🚴 Велоспорт] → u:s:s:bike:w:v3
+[🏊 Плавание] → u:s:s:swim:w:v3 | [⛷ Лыжные гонки] → u:s:s:ski:w:v3
+[🏅 Триатлон] → u:s:s:tri:w:v3 | [🚣 Гребля] → u:s:s:row:w:v3
+[✅ Готово] → u:z:v3
+[⬅️ Назад] → u:a:k:w:v3
+method: answerCallbackQuery
+text: 
+show_alert: 

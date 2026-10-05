@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Вопрос 3 из 4</b>
+Где вы живёте?
+---
+[🇷🇺 Россия] → u:s:k:RU:w:v3 | [✓ 🇧🇾 Беларусь] → u:s:k:BY:w:v3
+[🇰🇿 Казахстан] → u:s:k:KZ:w:v3 | [🌍 Другая страна] → u:s:k:ZZ:w:v3
+[Пропустить вопрос] → u:a:s:w:v3
+[⬅️ Назад] → u:a:a:w:v3
+method: answerCallbackQuery
+text: 
+show_alert: 

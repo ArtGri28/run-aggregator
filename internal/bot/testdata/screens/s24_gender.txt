@@ -1,0 +1,10 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Ваш пол</b>
+---
+[Мужской] → u:s:g:m:e:v2 | [Женский] → u:s:g:f:e:v2
+[⬅️ Назад] → u:o
+method: answerCallbackQuery
+text: 
+show_alert: 

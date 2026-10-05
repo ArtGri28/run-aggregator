@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"testing"
 )
 
@@ -9,6 +10,7 @@ import (
 // TestS12Settings — S-12: просмотр настроек и переходы.
 func TestS12Settings(t *testing.T) {
 	s, api, b := countryFixture(t)
+	b.api.ProcessUpdate(context.Background(), startUpdate(42)) // первый /start — предложение анкеты
 	startSnap(t, b, api, "s12_menu")
 
 	// По умолчанию: все пять строк, страна показана всегда.

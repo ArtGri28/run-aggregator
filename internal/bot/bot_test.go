@@ -221,7 +221,10 @@ func TestTracerSearch(t *testing.T) {
 	b := newTestBot(t, api, s)
 	ctx := context.Background()
 
-	// /start: приветствие и кнопка «Найти забег».
+	// Первый /start — предложение анкеты; приветствие и кнопка «Найти забег» —
+	// на втором.
+	b.api.ProcessUpdate(ctx, startUpdate(42))
+	api.reset()
 	b.api.ProcessUpdate(ctx, startUpdate(42))
 	sends := api.of("sendMessage")
 	if len(sends) != 1 || sends[0].Form["chat_id"] != "42" {

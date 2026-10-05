@@ -1,0 +1,12 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Ваш возраст</b>
+---
+[До 18] → u:s:a:0:e:v3 | [18–24] → u:s:a:1:e:v3
+[25–34] → u:s:a:2:e:v3 | [35–44] → u:s:a:3:e:v3
+[45–54] → u:s:a:4:e:v3 | [55+] → u:s:a:5:e:v3
+[⬅️ Назад] → u:o
+method: answerCallbackQuery
+text: 
+show_alert: 

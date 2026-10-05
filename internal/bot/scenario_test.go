@@ -29,7 +29,8 @@ func startSnap(t *testing.T, b *Bot, api *fakeAPI, name string) {
 func TestS01MainMenu(t *testing.T) {
 	s, api, b := countryFixture(t)
 
-	// 1. Новый пользователь: меню новым сообщением, строка users создана.
+	// 1. Новый пользователь: вместо меню предложение анкеты новым сообщением
+	// (D-05), строка users создана.
 	startSnap(t, b, api, "s01_start")
 	if _, v := filtersV(t, b); v != 1 {
 		t.Fatalf("версия после первого /start = %d, want 1", v)

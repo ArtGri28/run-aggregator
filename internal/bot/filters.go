@@ -840,25 +840,34 @@ func stamp(sc screen, v int) screen {
 }
 
 // onStart: /start создаёт пользователя, но фильтры не сбрасывает (D-17).
+// Пользователю без строки профиля вместо главного меню приходит предложение
+// анкеты (D-05): строка профиля создаётся в той же транзакции до отправки, так
+// что предложение показывается один раз, а сорвавшаяся отправка его не
+// повторяет (D-06). Всем остальным — главное меню.
 func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	if u.Message == nil || u.Message.From == nil {
 		return
 	}
-	_, v, err := b.Store.Filters(ctx, u.Message.From.ID)
+	fv, pv, offered, err := b.Store.StartUser(ctx, u.Message.From.ID)
 	if err != nil {
 		b.logger().Error("start", "err", err)
 		return
 	}
-	if err := b.send(ctx, u.Message.Chat.ID, stamp(mainMenu(), v)); err != nil {
+	sc := stamp(mainMenu(), fv)
+	if offered {
+		sc = offerScreen(pv)
+	}
+	if err := b.send(ctx, u.Message.Chat.ID, sc); err != nil {
 		b.logger().Warn("send start", "err", err)
 	}
 }
 
-// mainMenu — главное меню: вход в поиск и в настройки.
+// mainMenu — главное меню: вход в поиск, в настройки и в профиль (D-13).
 func mainMenu() screen {
 	return screen{text: "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\n" +
 		"Собрали беговые старты из разных календарей в одном месте. Выбери город, даты и дистанцию — покажу, куда можно заявиться.",
-		kb: keyboard(btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}))}
+		kb: keyboard(btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}),
+			btn("👤 Мой профиль", callback{Kind: cbProfile}))}
 }
 
 // onMenu — «назад» в главное меню правкой сообщения. Экран от фильтров не
@@ -942,9 +951,12 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 const maxCityInput = 64
 
 // onText: любое текстовое сообщение не-команда в личном чате — запрос: город
-// или название забега (без состояния «жду ввод»). Точное название города
-// страны фильтров выбирает город, как раньше; иначе бот ищет события по
-// названию и городу и показывает их кнопками вместе с подсказками городов.
+// или название забега. Единственное состояние «жду ввод» — город проживания
+// профиля (D-10): при действующей отметке ожидания текст сохраняется в
+// профиль, в поиск и в фильтры не идёт; после истечения окна и без отметки
+// это запрос, как описано ниже. Точное название города страны фильтров
+// выбирает город, как раньше; иначе бот ищет события по названию и городу и
+// показывает их кнопками вместе с подсказками городов.
 // Поиск фильтры не меняет и идёт по всем будущим событиям страны фильтров
 // (при «всех странах» — по всем). Текст в лог не пишется (BOT-08).
 func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
@@ -965,6 +977,9 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	text := strings.Join(strings.Fields(m.Text), " ") // без переводов строк: запрос — одна строка сообщения
 	if text == "" || utf8.RuneCountInString(text) > maxCityInput || strings.HasPrefix(text, "/") {
 		say(screen{text: "Нажмите /start, чтобы найти забег", plain: true})
+		return
+	}
+	if b.residenceText(ctx, m, text) { // город проживания (D-10): в поиск и в фильтры не идёт
 		return
 	}
 	today := b.today()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -32,10 +33,15 @@ import (
 //	r:<a|y|n>:<runID>        админ: принятие прогона
 //	d:o                      админ: очередь дублей с начала
 //	d:<m|y|n|x|s>:<cid>      админ: слить (подтверждение) / да / отмена / разные / пропустить
+//	u:o                              мой профиль (без версии)
+//	u:<b|n|z>:v<P>                   анкета: начать / пропустить / готово
+//	u:a:<g|a|k|c|s>:<w|e>:v<P>       показать вопрос (w — анкета, e — правка ответа)
+//	u:s:<поле>:<значение>:<w|e>:v<P> сохранить ответ
 //
 // Версия — всегда последнее поле. f: без версии — формат до Phase 8 (кнопки
 // старых сообщений): разбирается с Legacy и считается устаревшим; encode его
-// не создаёт. N = 0 — пользователя нет в users.
+// не создаёт. N = 0 — пользователя нет в users. У u: версия — profile_v
+// (версия профиля, не фильтров); P = 0 — строки профиля нет.
 const maxCallbackBytes = 64
 
 type cbKind int
@@ -66,14 +72,24 @@ const (
 	cbPeriod
 	cbSearchCard
 	cbSearchBack
+	cbProfile   // u:o
+	cbProfStart // u:b
+	cbProfSkip  // u:n
+	cbProfAsk   // u:a
+	cbProfSave  // u:s
+	cbProfDone  // u:z
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
 // значение; для f:x — снимаемый фильтр; для сброса настроек — откуда пришли
-// ("o" — настройки, "f" — поиск). Legacy — f: без версии.
+// ("o" — настройки, "f" — поиск); для u:s — сохраняемое значение. Field и
+// Mode — поле анкеты (g, a, k, c, s) и режим экрана (w, e) у кнопок u:a и u:s.
+// Legacy — f: без версии.
 type callback struct {
 	Kind   cbKind
 	Value  string
+	Field  string
+	Mode   string
 	Page   int
 	ID     int64
 	V      int
@@ -88,6 +104,53 @@ var (
 )
 
 const maxCityKeyBytes = 60 // 64 − len("f:c:")
+
+// maxProfileCityKeyBytes — предел ключа города в кнопке анкеты: 64 − len("u:s:c:")
+// − len(":w:v") − 5 цифр версии. С версией от 100000 кнопка такого города не
+// помещается и не показывается — город вводят текстом.
+const maxProfileCityKeyBytes = 49
+
+// profileOption — допустимое значение поля анкеты (D-04) и подпись кнопки.
+type profileOption struct{ Code, Label string }
+
+// Справочники D-04: они же единственный источник допустимых значений кнопок
+// u:s; всё иное кодек отвергает. Порядок — порядок кнопок и видов спорта в
+// профиле.
+var (
+	profileGenders   = []profileOption{{"m", "Мужской"}, {"f", "Женский"}}
+	profileAges      = []profileOption{{"0", "До 18"}, {"1", "18–24"}, {"2", "25–34"}, {"3", "35–44"}, {"4", "45–54"}, {"5", "55+"}}
+	profileCountries = []profileOption{{"RU", "🇷🇺 Россия"}, {"BY", "🇧🇾 Беларусь"}, {"KZ", "🇰🇿 Казахстан"}, {"ZZ", "🌍 Другая страна"}}
+	profileSports    = []profileOption{
+		{"run", "🏃 Бег"}, {"trail", "🏔 Трейлраннинг"}, {"ocr", "🧗 OCR · гонки с препятствиями"}, {"bike", "🚴 Велоспорт"},
+		{"swim", "🏊 Плавание"}, {"ski", "⛷ Лыжные гонки"}, {"tri", "🏅 Триатлон"}, {"row", "🚣 Гребля"},
+	}
+)
+
+func hasOption(opts []profileOption, code string) bool {
+	return slices.ContainsFunc(opts, func(o profileOption) bool { return o.Code == code })
+}
+
+// validProfileValue проверяет значение u:s:<поле>:<значение>.
+func validProfileValue(field, v string) bool {
+	switch field {
+	case "g":
+		return hasOption(profileGenders, v)
+	case "a":
+		return hasOption(profileAges, v)
+	case "k":
+		return hasOption(profileCountries, v)
+	case "c":
+		return len(v) <= maxProfileCityKeyBytes && cityKeyRE.MatchString(v)
+	case "s":
+		return hasOption(profileSports, v)
+	}
+	return false
+}
+
+func validProfileField(f string) bool { return len(f) == 1 && strings.Contains("gakcs", f) }
+func validProfileMode(m string) bool  { return m == modeWizard || m == modeEdit }
+
+var profLetters = map[cbKind]string{cbProfStart: "b", cbProfSkip: "n", cbProfDone: "z"}
 
 // Корзины дистанций сменились: новые кнопки — f:n. Номер корзины в f:b из
 // старого сообщения значил бы другой диапазон, поэтому такая кнопка устарела.
@@ -283,6 +346,36 @@ func parseCallback(data string) (callback, error) {
 		}
 		id, err := num(p[2], 1, math.MaxInt64)
 		return callback{Kind: k, ID: id}, err
+	case "u":
+		return parseProfile(p)
+	}
+	return callback{}, errCallback
+}
+
+// parseProfile разбирает u:* по грамматике D-14: версия — последнее поле,
+// значения — только из справочников профиля, всё иное — errCallback.
+func parseProfile(p []string) (callback, error) {
+	if len(p) == 2 && p[1] == "o" {
+		return callback{Kind: cbProfile}, nil
+	}
+	if len(p) < 3 {
+		return callback{}, errCallback
+	}
+	v, err := version(p[len(p)-1])
+	if err != nil {
+		return callback{}, err
+	}
+	switch {
+	case len(p) == 3 && p[1] == "b":
+		return callback{Kind: cbProfStart, V: v}, nil
+	case len(p) == 3 && p[1] == "n":
+		return callback{Kind: cbProfSkip, V: v}, nil
+	case len(p) == 3 && p[1] == "z":
+		return callback{Kind: cbProfDone, V: v}, nil
+	case len(p) == 5 && p[1] == "a" && validProfileField(p[2]) && validProfileMode(p[3]):
+		return callback{Kind: cbProfAsk, Field: p[2], Mode: p[3], V: v}, nil
+	case len(p) == 6 && p[1] == "s" && validProfileField(p[2]) && validProfileValue(p[2], p[3]) && validProfileMode(p[4]):
+		return callback{Kind: cbProfSave, Field: p[2], Value: p[3], Mode: p[4], V: v}, nil
 	}
 	return callback{}, errCallback
 }
@@ -324,6 +417,14 @@ func (c callback) encode() (string, error) {
 		s = "d:o"
 	case cbDupeAsk, cbDupeYes, cbDupeNo, cbDupeRej, cbDupeSkip:
 		s = fmt.Sprintf("d:%s:%d", dLetters[c.Kind], c.ID)
+	case cbProfile:
+		s = "u:o"
+	case cbProfStart, cbProfSkip, cbProfDone:
+		s = fmt.Sprintf("u:%s:v%d", profLetters[c.Kind], c.V)
+	case cbProfAsk:
+		s = fmt.Sprintf("u:a:%s:%s:v%d", c.Field, c.Mode, c.V)
+	case cbProfSave:
+		s = fmt.Sprintf("u:s:%s:%s:%s:v%d", c.Field, c.Value, c.Mode, c.V)
 	default:
 		return "", errCallback
 	}

@@ -1,0 +1,6 @@
+method: sendMessage
+parse_mode: HTML
+---
+🏠 Город проживания: Витебск
+---
+[Дальше] → u:o | [Изменить] → u:a:c:e:v3

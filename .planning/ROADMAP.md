@@ -347,11 +347,11 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 09-03-PLAN.md — Кодек `u:`, предложение анкеты на `/start`, четыре вопроса, устаревшие кнопки профиля
+- [x] 09-03-PLAN.md — Кодек `u:`, предложение анкеты на `/start`, четыре вопроса, устаревшие кнопки профиля; выполнен локально 2026-10-05 (сценарии S-18…S-22, 32 новых эталона, изменены `start.txt` и `s01_start.txt`)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 09-04-PLAN.md — `/profile`, кнопка в главном меню, редактирование ответов, город текстом, тест независимости от настроек поиска
+- [x] 09-04-PLAN.md — `/profile`, кнопка в главном меню, редактирование ответов, город текстом, тест независимости от настроек поиска; выполнен локально 2026-10-05 (сценарии S-23…S-25, 26 новых эталонов, пять эталонов главного меню Phase 8 получили кнопку профиля)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -376,4 +376,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | Complete    | 2026-10-05 |
 | 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
-| 9. Onboarding & User Profile | 2/6 | In Progress | - |
+| 9. Onboarding & User Profile | 4/6 | In Progress | - |

@@ -1,0 +1,12 @@
+method: editMessageText
+parse_mode: HTML
+---
+<b>Вопрос 1 из 4</b>
+Ваш пол
+---
+[Мужской] → u:s:g:m:w:v2 | [Женский] → u:s:g:f:w:v2
+[Пропустить вопрос] → u:a:a:w:v2
+[⬅️ Назад] → m
+method: answerCallbackQuery
+text: 
+show_alert: 
