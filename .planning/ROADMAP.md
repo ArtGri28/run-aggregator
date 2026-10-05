@@ -359,7 +359,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 09-06-PLAN.md — Выкат владельцем после проверенной копии, применение миграции, production-приёмка в Telegram
+- [x] 09-06-PLAN.md — Выкат владельцем после проверенной копии, применение миграции, production-приёмка в Telegram; выкат 2026-10-05 (образ `824ef877f1a3`, миграция 6, `DEPLOY VERIFY OK`), production-приёмка пройдена владельцем 2026-10-05; фаза не закрыта — закрытие по команде владельца
 
 ## Progress
 
@@ -376,4 +376,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | Complete    | 2026-10-05 |
 | 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
-| 9. Onboarding & User Profile | 5/6 | In Progress | - |
+| 9. Onboarding & User Profile | 6/6 | In Progress | - |
