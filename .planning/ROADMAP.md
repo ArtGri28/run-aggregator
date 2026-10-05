@@ -332,12 +332,12 @@ Plans:
   4. Действия с профилем не меняют `users.filters`, действия с фильтрами не меняют профиль; город проживания, введённый текстом, не попадает в поиск
   5. Владелец прошёл приёмку в Telegram по чек-листу сценариев
 
-**Plans**: 0/6 plans executed
+**Plans**: 1/6 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Контракт экранов анкеты и профиля (S-18…S-25), чек-лист приёмки, PRF-01…PRF-10 и новая формулировка BOT-08 в документах; утверждение владельцем (код не меняется)
+- [x] 09-01-PLAN.md — Контракт экранов анкеты и профиля (S-18…S-25), чек-лист приёмки, PRF-01…PRF-10 и новая формулировка BOT-08 в документах; утверждён владельцем 2026-10-05 (код не менялся)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -374,4 +374,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | In Progress | - |
 | 8. Telegram Bot UX | 9/9 | In Progress | - |
-| 9. Onboarding & User Profile | 0/6 | Not started | - |
+| 9. Onboarding & User Profile | 1/6 | In Progress | - |

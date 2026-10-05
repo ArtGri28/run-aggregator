@@ -13,7 +13,7 @@ progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 57
-  completed_plans: 42
+  completed_plans: 43
 ---
 
 # Project State
@@ -115,7 +115,7 @@ Recent decisions affecting current work:
 
 ### Roadmap Evolution
 
-- Phase 9 added (2026-10-04): Onboarding & User Profile — добровольная анкета и `/profile`; решения владельца в `.planning/phases/09-onboarding-user-profile/09-CONTEXT.md`; спланирована 2026-10-04 — планы 09-01…09-06 (шесть последовательных волн), проверка планов пройдена; не выполнялась, код не менялся
+- Phase 9 added (2026-10-04): Onboarding & User Profile — добровольная анкета и `/profile`; решения владельца в `.planning/phases/09-onboarding-user-profile/09-CONTEXT.md`; спланирована 2026-10-04 — планы 09-01…09-06 (шесть последовательных волн), проверка планов пройдена; 09-01 выполнен 2026-10-05 — контракт экранов анкеты и профиля утверждён владельцем («утверждаю контракт, по PROJECT.md и MVP §19 — да»), PRF-01…PRF-10 внесены (Pending), формулировки о данных пользователей обновлены; рабочие деревья отключены (`workflow.use_worktrees=false`), коммиты делает владелец; 09-02 ждёт отметок production-приёмки третьей редакции Phase 8; код не менялся
 
 ### Pending Todos
 
