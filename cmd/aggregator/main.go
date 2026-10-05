@@ -23,6 +23,7 @@ import (
 	"aggregator/internal/alert"
 	"aggregator/internal/bot"
 	"aggregator/internal/dedup"
+	"aggregator/internal/heartbeat"
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/heroleague"
 	"aggregator/internal/ingest/sources/marathonec"
@@ -32,9 +33,19 @@ import (
 )
 
 const (
-	usage        = "usage: aggregator <bot|worker|migrate|healthcheck|unmerge>\n       " + workerUsage + "\n       " + unmergeUsage
+	usage        = "usage: aggregator <bot|worker|migrate|healthcheck [bot|worker]|unmerge>\n       " + workerUsage + "\n       " + unmergeUsage
 	workerUsage  = "usage: aggregator worker [run-once|accept-baseline|sanity-report] --source <код> [--run <id>]"
 	unmergeUsage = "usage: aggregator unmerge [-apply -by <tg_id>] <id слитого события>"
+)
+
+const (
+	// beatEvery — период отметки bot и worker в heartbeats (MON-03).
+	beatEvery = time.Minute
+	// healthMaxAge — отметка компоненты старше — healthcheck не проходит.
+	healthMaxAge = 5 * time.Minute
+	// handlersWait — сколько bot ждёт выполняющиеся обработчики при остановке
+	// (меньше stop_grace_period в docker-compose.yml).
+	handlersWait = 15 * time.Second
 )
 
 // errUsage — неверные аргументы: код выхода 2.
@@ -68,7 +79,7 @@ func main() {
 	case "migrate":
 		err = runMigrate(ctx)
 	case "healthcheck":
-		err = runHealthcheck(ctx)
+		err = runHealthcheck(ctx, os.Args[2:])
 	case "bot":
 		err = runBot(ctx)
 	case "worker":
@@ -81,9 +92,12 @@ func main() {
 	}
 
 	if errors.Is(err, errUsage) {
-		if subcommand == "unmerge" {
+		switch subcommand {
+		case "unmerge":
 			fmt.Fprintln(os.Stderr, unmergeUsage)
-		} else {
+		case "healthcheck":
+			fmt.Fprintln(os.Stderr, usage)
+		default:
 			fmt.Fprintln(os.Stderr, workerUsage)
 		}
 		os.Exit(2)
@@ -118,7 +132,12 @@ func runMigrate(ctx context.Context) error {
 	return s.Migrate(ctx)
 }
 
-func runHealthcheck(ctx context.Context) error {
+// runHealthcheck: без аргумента — только БД; bot или worker — БД и отметка
+// компоненты не старше healthMaxAge (docker healthcheck сервиса).
+func runHealthcheck(ctx context.Context, args []string) error {
+	if len(args) > 1 || (len(args) == 1 && args[0] != "bot" && args[0] != "worker") {
+		return errUsage
+	}
 	dsn, err := databaseURL()
 	if err != nil {
 		return err
@@ -131,7 +150,26 @@ func runHealthcheck(ctx context.Context) error {
 		return err
 	}
 	defer s.Close()
-	return s.Healthcheck(ctx)
+	if err := s.Healthcheck(ctx); err != nil || len(args) == 0 {
+		return err
+	}
+	ages, err := s.HeartbeatAges(ctx)
+	if err != nil {
+		return err
+	}
+	return heartbeatFresh(ages, args[0], healthMaxAge)
+}
+
+// heartbeatFresh — отметка component есть и не старше max.
+func heartbeatFresh(ages map[string]time.Duration, component string, max time.Duration) error {
+	age, ok := ages[component]
+	switch {
+	case !ok:
+		return fmt.Errorf("healthcheck: нет отметки %s", component)
+	case age > max:
+		return fmt.Errorf("healthcheck: отметка %s старше %s", component, max)
+	}
+	return nil
 }
 
 // openStore подключается к БД и проверяет её за 5 с.
@@ -214,11 +252,21 @@ func runBot(ctx context.Context) error {
 	}
 	loop := &alert.Loop{Store: s, Admins: cfg.Admins, Send: b.SendAlert, Loc: b.Loc(), Log: slog.Default()}
 	digest := &dedup.DigestLoop{Store: s, Admins: cfg.Admins, Send: b.SendDupesDigest, Loc: b.Loc(), At: dcfg.DigestAt, Log: slog.Default()}
+	// MON-03, MON-04: отметка бота (только пока он работает с Telegram) и
+	// инфраструктурные алерты — worker, резервные копии, БД.
+	infra := &alert.InfraLoop{Ages: s.HeartbeatAges, Watch: alert.BotWatch(), DBKey: alert.KeyPostgresDown, Admins: cfg.Admins, Send: b.SendAlert}
 	var wg sync.WaitGroup
 	wg.Go(func() { loop.Run(ctx) })
 	wg.Go(func() { digest.Run(ctx) })
+	wg.Go(func() { infra.Run(ctx) })
+	wg.Go(func() {
+		heartbeat.Run(ctx, func(ctx context.Context) error { return s.Beat(ctx, "bot") }, beatEvery, func() bool { return b.Healthy(ctx) })
+	})
 	b.Start(ctx)
 	slog.Info("stopping", "subcommand", "bot")
+	if !b.Wait(handlersWait) {
+		slog.Warn("обработчики не завершились за отведённое время", "wait", handlersWait.String())
+	}
 	wg.Wait() // store закрывается только после циклов алертов и сводки
 	return nil
 }
@@ -278,7 +326,17 @@ func runWorker(ctx context.Context, args []string) error {
 	switch cmd {
 	case "":
 		slog.Info("started", "subcommand", "worker", "sources", codes, "dedup_auto_merge", dcfg.AutoMerge)
+		// MON-03: отметка worker — отдельной горутиной, прогон её не
+		// задерживает; за ботом worker следит без токена Telegram: bot_stale
+		// только в лог (решение владельца log-only).
+		infra := &alert.InfraLoop{Ages: s.HeartbeatAges, Watch: alert.WorkerWatch()}
+		var wg sync.WaitGroup
+		wg.Go(func() { infra.Run(ctx) })
+		wg.Go(func() {
+			heartbeat.Run(ctx, func(ctx context.Context) error { return s.Beat(ctx, "worker") }, beatEvery, nil)
+		})
 		runner.Loop(ctx, sources, ingest.Schedule{Interval: cfg.Interval, Jitter: cfg.Jitter})
+		wg.Wait() // store закрывается только после отметок и слежения
 		slog.Info("stopping", "subcommand", "worker")
 		return nil
 	case "run-once":

@@ -1,31 +1,20 @@
 ---
 phase: 07-deduplication-transparency
-verified: 2026-10-03
-status: human_needed
+verified: 2026-10-05
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 gaps: []
-human_verification:
-  - test: "После RESTORE GATE Phase 6 и выката Phase 7 (по отдельному разрешению) выполнить agg verify"
-    expected: "Строки dedup_would_auto=pending:<n> и dedup_pass_last=would_auto:…|hidden:…|shown:…|decided:… (после первого прохода worker), dedup_auto_merge_bot=false, dedup_auto_merge_worker=false, events_merged не вырос сам по себе"
-    why_human: "Phase 7 на production не выкачена; пакет agg на VPS устарел (SHA256SUMS 4c2f486f…f183 локально), нужен ship.sh по разрешению владельца"
-  - test: "От имени администратора открыть /dupes на production после выката"
-    expected: "У пар с would_auto строка «Автослияние слило бы эту пару (сейчас выключено)»; слияний без подтверждения нет"
-    why_human: "Экран проверен только автотестами с фейковым Bot API"
-  - test: "Read-only инвентаризация 86 прошлых production-слияний запросом из 07-UNMERGE.md (отдельным разрешением)"
-    expected: "Распределение по классам A/B/C известно; ручное слияние не считается классом A"
-    why_human: "Production-база не читалась; без этого неизвестно, какие из прошлых слияний отменяемы"
-  - test: "Владелец принимает результат L1–L5: L1 — l1-not-reproduced, L4 — defer-l4"
-    expected: "Явное принятие при закрытии фазы; L4 остаётся в блокерах STATE до отдельного плана"
-    why_human: "Решения владельца записаны в 07-03-SUMMARY.md; закрытие фазы — только командой владельца"
+re_verification: true
+human_verification: []
 ---
 
 # Phase 7: Deduplication Transparency — Verification Report
 
 **Phase Goal:** Владелец видит, какие пары слило бы автослияние, и может отменить ошибочное слияние; автослияние остаётся выключенным.
 **Verified:** 2026-10-03
-**Status:** human_needed
+**Status:** passed (повторная проверка 2026-10-05 — раздел «Повторная проверка 2026-10-05» в конце; текст ниже — отчёт прежней проверки, сохранён как история)
 **HEAD при проверке:** `b165c10` (рабочее дерево чистое, совпадает с `origin/main`)
 
 ## Итог
@@ -65,3 +54,22 @@ human_verification:
 ## Anti-Patterns
 
 Не найдено: в изменённых файлах Phase 7 нет TODO/заглушек; `gofmt`, `go vet` чисто.
+
+## Повторная проверка 2026-10-05
+
+**Status:** passed. **Score:** 5/5.
+
+Проверки этого прогона (HEAD `2d2ebba`; код совпадает с `f1aa1c6` — после него менялись только документы): `gofmt -l .` — пусто; `go vet ./...` — чисто; `go test -p 1 -count=1 -v ./...` с `TEST_DATABASE_URL` — 530 PASS, 0 FAIL, 0 SKIP, все 14 пакетов `ok`. Production — только чтением, по разрешениям владельца: `agg verify` 2026-10-05 08:38 МСК (`run-agg-phase4/p14-verify.log`): `DEPLOY VERIFY OK`, образ `aggregator:636deea312f7`, `events_merged=96`, `dedup_candidates=pending:0|confirmed:96|rejected:8|fresh:0`, `dedup_auto_merge_bot=false`, `dedup_auto_merge_worker=false`, `dedup_would_auto=pending:0`.
+
+Ответ владельца дословно (2026-10-05) на вопросы 1–5 и два пункта без наблюдения: «1–5 да, оба пункта снимаю, закрывай фазы».
+
+Phase 7 выкачена на production 2026-10-04 (образ `fbdca0f5eecb`, миграция `00005` применена; далее `11d6d4bd8ee0`, `5d81e5a2ba00`, `f1aa1c6dfc2d`, `636deea312f7` — см. `08-08-SUMMARY.md`). Ключевые тесты на текущем коде: `TestMigration00005`, `TestUnmergeInventory`, `TestUnmergeRoundTrip`, `TestUnmergeRefuses`, `TestUnmergeAtomic`, `TestCalibration` — PASS.
+
+| Пункт прежней проверки | Итог | Основание |
+|---|---|---|
+| `agg verify` после выката | VERIFIED с оговоркой | `dedup_would_auto=pending:0`, автослияние выключено у бота и воркера, `events_merged` вырос с 89 до 96 только ручными подтверждениями (проход 2026-10-04: `pairs 7, merged 0, would_auto 4`). Оговорка: строка `dedup_pass_last` во всех проверках 2026-10-04…05 — `unknown`; ожидаемые счётчики прохода в `agg verify` не наблюдались (проход 2026-10-04 шёл в боте при принятии базы Tristyle), причина не разбиралась |
+| Строка «Автослияние слило бы эту пару (сейчас выключено)» в `/dupes` | VERIFIED | вопрос 3 — «да»: у 4 из 7 пар Tristyle (`would_auto_shown: 4` в логе бота) |
+| Инвентаризация прошлых production-слияний по классам A/B/C | снят владельцем | production-база не читалась, распределение по классам обратимости неизвестно. Владелец: «оба пункта снимаю» |
+| Принятие итога L1–L5 | VERIFIED решением владельца | вопрос 5 — «да»: L1 — не воспроизведён, L4 — отложен и остаётся в блокерах STATE |
+
+Не проверено и остаётся известным ограничением: классы обратимости прошлых ручных слияний (на 2026-10-05 их 96) неизвестны; `dedup_pass_last` в `agg verify` не показал счётчики прохода.

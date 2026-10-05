@@ -1,10 +1,26 @@
 ---
 phase: 05-multiple-sources-deduplication
-verified: 2026-10-01
-status: human_needed
-score: 14/16 must-haves verified
+verified: 2026-10-05
+status: passed
+score: 16/16 must-haves verified
 covered_files:
   - ".planning/REQUIREMENTS.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-01-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-01-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-02-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-02-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-03-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-03-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-04-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-04-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-05-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-05-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-06-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-06-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-07-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-07-SUMMARY.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-08-PLAN.md"
+  - ".planning/phases/05-multiple-sources-deduplication/05-08-SUMMARY.md"
   - "cmd/aggregator/main.go"
   - "deploy/README.md"
   - "deploy/vps/deploy-verify.sh"
@@ -31,33 +47,19 @@ covered_files:
   - "internal/store/events.go"
   - "internal/store/listing.go"
   - "migrations/00004_dedup.sql"
-covered_digest: "v1:sha256:ec6f095a6709096659c2bf6cc556b85432ffabc1a9bef410137799e6517febe7"
+covered_digest: "v1:sha256:9b1c9b1d974a5631e51bb6e121aaf35641075d92485d6a21b1173fdf51a282a1"
 behavior_unverified: 0
 overrides_applied: 0
 gaps: []
-human_verification:
-  - test: "Открыть в production-боте карточку события, слитого через /dupes (например, пара из строк merged= в agg verify), и сравнить с карточками обоих исходных событий"
-    expected: "Одна карточка корневого события: объединённые дистанции (допуск 100 м), все источники со ссылками; старая кнопка слитого (проигравшего) события открывает карточку корня; проигравшее не видно в выдаче"
-    why_human: "Карточка слитого события в production никем не наблюдалась; в логах только счётчики (events_merged=86, events_listed 538 -> 452). Код и автотесты (TestMergedCardOpensRoot, TestTracerPass) проверяют это только с фейковым Bot API"
-  - test: "От имени администратора пройти /dupes: экран кандидата (два события рядом, оценка, сигналы), [Слить] -> «Да, слить» / [Отмена], [Разные], [Пропустить], конец очереди"
-    expected: "Тексты и кнопки соответствуют D-09/D-10, слияние требует подтверждения, [Разные] не требует; обычный текст без parse_mode; не-администратор /dupes не видит"
-    why_human: "Экраны /dupes и кнопка сводки верификатором в production не наблюдались; есть только автотесты с фейковым Bot API и строки лога dupe decided / digest sent"
-  - test: "Дождаться ежедневной сводки 10:00 МСК при наличии новых кандидатов и нажать [Открыть /dupes]"
-    expected: "Одна сводка в сутки, только при новых кандидатах (fresh > 0), кнопка открывает очередь"
-    why_human: "Единственная наблюдённая отправка (digest sent, pending 104, fresh 104) произошла при старте бота после слота 10:00, а не по расписанию; суточная периодичность проверена только TestDigestDue/TestDigestTick"
-  - test: "Владелец подтверждает решение по DDP-03: автоматическая связь при высокой уверенности реализована и откалибрована, но в релизе выключена (DEDUP_AUTO_MERGE=false, D-23)"
-    expected: "Явное принятие: DDP-03 считается выполненным «в коде и конфигурации», автослияние включается позже и только после D-21; либо DDP-03 в REQUIREMENTS.md помечается частично выполненным до Phase 6"
-    why_human: "Требование DDP-03 дословно говорит «высокая уверенность -> автоматическая связь»; в production такой путь не работает и никогда не включался. Решение о том, считать ли это выполнением, принадлежит владельцу"
-  - test: "Выяснить текущий тег образа на VPS (agg verify) и при необходимости сопоставить с коммитом"
-    expected: "Известен фактически развёрнутый образ; коммит 6d9efa3 не считается развёрнутым, пока тег не подтверждён"
-    why_human: "Последний сохранённый лог (13:55) показывает образ e8005e8f2940; что работает на VPS после этого, из репозитория и локальных логов не видно; верификатор к VPS не подключается"
+re_verification: true
+human_verification: []
 ---
 
 # Phase 5: Multiple Sources & Deduplication — Verification Report
 
 **Phase Goal:** Несколько источников дают единый каталог без дублей и без ложных слияний.
 **Verified:** 2026-10-01
-**Status:** human_needed
+**Status:** passed (повторная проверка 2026-10-05 — раздел «Повторная проверка 2026-10-05» в конце; текст ниже — отчёт прежней проверки, сохранён как история)
 **Re-verification:** No — initial verification
 **HEAD при проверке:** `6d9efa3` (рабочее дерево: изменены только `.planning/*` и `deploy/README.md`, в `heroleague/testdata/README.md` добавлен новый файл; Go-код рабочего дерева совпадает с HEAD)
 
@@ -254,3 +256,23 @@ _Verified: 2026-10-01_
 ## Решение владельца после верификации (2026-10-01)
 
 DDP-03 принят как выполненный в состоянии «реализовано, откалибровано, выключено» (D-25 в `05-CONTEXT.md`). Остальные пункты раздела проверки человеком (слитая карточка, экраны `/dupes`, сводка по расписанию, фактический тег образа) остаются открытыми; статус отчёта не менялся.
+
+## Повторная проверка 2026-10-05
+
+**Status:** passed. **Score:** 16/16.
+
+Проверки этого прогона (HEAD `2d2ebba`; код совпадает с `f1aa1c6` — после него менялись только документы): `gofmt -l .` — пусто; `go vet ./...` — чисто; `go test -p 1 -count=1 -v ./...` с `TEST_DATABASE_URL` — 530 PASS, 0 FAIL, 0 SKIP, все 14 пакетов `ok`. Production — только чтением, по разрешениям владельца: `agg verify` 2026-10-05 08:38 МСК (`run-agg-phase4/p14-verify.log`): `DEPLOY VERIFY OK`, образ `aggregator:636deea312f7`, `events_merged=96`, `dedup_candidates=pending:0|confirmed:96|rejected:8|fresh:0`, `dedup_auto_merge_bot=false`, `dedup_auto_merge_worker=false`, `dedup_would_auto=pending:0`.
+
+Ответ владельца дословно (2026-10-05) на вопросы 1–5 и два пункта без наблюдения: «1–5 да, оба пункта снимаю, закрывай фазы».
+
+Ключевые тесты фазы на текущем коде: `TestCalibration` — `CALIBRATION pairs=81 confirmed=81 proposed=0 false_auto=0 missed=0 high=0.70 low=0.30`; `TestMergedCardOpensRoot`, `TestTracerPass`, `TestPassRejected`, `TestDupesNonAdmin`, `TestDigestDue`, `TestDigestTick`, `TestFoldDistances` — PASS. Интерфейс `ingest.Source` (4 метода) не менялся: четвёртый источник `tristyle` подключён 2026-10-04 одной строкой регистрации — критерий 1 подтверждён ещё раз на практике.
+
+| Пункт прежней проверки | Итог | Основание |
+|---|---|---|
+| Критерий 2 (PARTIAL): карточка слитого события в production | VERIFIED | вопрос 1 — «да»: владелец слил 7 пар Tristyle с ПроБЕГом через `/dupes` 2026-10-04…05 и подтвердил карточку слитого события (одна карточка, объединённые дистанции, оба источника) |
+| DDP-03 (PARTIAL): автослияние реализовано, в релизе выключено | VERIFIED решением владельца | вопрос 4 — «да»: требование считается выполненным «в коде и конфигурации»; `DEDUP_AUTO_MERGE=false` не менялся, включение — отдельным решением после D-21 |
+| Экран `/dupes` в production | VERIFIED | вопрос 2 — «да»; в логе бота 2026-10-04 — семь строк `dupe decided … action: merge`, слияний без подтверждения нет (`merged: 0` в проходе) |
+| Ежедневная сводка по расписанию 10:00 МСК | снят владельцем | в production наблюдались только отправки вне слота (сразу после прохода); суточная периодичность проверена `TestDigestDue`, `TestDigestTick`. Владелец: «оба пункта снимаю» |
+| Тег образа на VPS | VERIFIED | `agg verify`: `aggregator:636deea312f7` |
+
+Не проверено и остаётся известным ограничением: сводка дублей строго по расписанию в production не наблюдалась (пункт снят решением владельца, не наблюдением).

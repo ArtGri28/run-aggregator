@@ -465,7 +465,7 @@ func TestCallbackPanicAnswered(t *testing.T) {
 	b := newTestBot(t, api, s)
 	captureLogs(t)
 
-	h := recoverMW(b.cb(func(context.Context, *models.CallbackQuery, callback) string { panic("boom") }))
+	h := b.recoverMW(b.cb(func(context.Context, *models.CallbackQuery, callback) string { panic("boom") }))
 	h(context.Background(), b.api, cbUpdate(42, 7, "p:1:v1"))
 	if n := len(api.of("answerCallbackQuery")); n != 1 {
 		t.Fatalf("answerCallbackQuery = %d, want 1", n)

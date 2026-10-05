@@ -6,6 +6,10 @@
 # Раздел «Дедупликация» (Phase 5): прогоны по источникам, заполненность fields,
 # очередь кандидатов, слияния и режим автослияния из строки started каждого сервиса;
 # потенциальные автослияния (Phase 7): dedup_would_auto, dedup_pass_last.
+# compose-state требует healthy у postgres, bot и worker (у bot и worker — по
+# отметке компоненты в heartbeats). Строка postgres_image — образ работающего
+# контейнера БД: id, совпадает ли с ним тег postgres:17 на хосте (tag=same|differs)
+# и дайджест реестра; на итог проверки не влияет.
 set -u
 export LC_ALL=C
 
@@ -25,11 +29,26 @@ if [ -z "$STATES" ]; then
 else
   echo "$STATES" | awk '$1=="postgres" && $2=="running" && $3=="healthy" {a=1}
                         $1=="bot" && $2=="running" && $3=="healthy" {b=1}
-                        $1=="worker" && $2=="running" {w=1}
+                        $1=="worker" && $2=="running" && $3=="healthy" {w=1}
                         $1=="migrate" && $2=="exited" && $NF==0 {m=1}
                         END {exit !(a && b && w && m)}'
   res compose-state $?
 fi
+# tag=same выставляется только после успешного сравнения; контейнера нет — id=none.
+PGI=none PGT=differs PGD=none
+PGC=$(docker compose -f "$F" ps -q postgres 2>/dev/null | head -1)
+if [ -n "$PGC" ]; then
+  I=$(docker container inspect --format '{{.Image}}' "$PGC" 2>/dev/null) || I=""
+  if [[ $I =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    PGI=$I
+    TI=$(docker image inspect --format '{{.Id}}' postgres:17 2>/dev/null) || TI=""
+    [ "$TI" = "$PGI" ] && PGT=same
+    R=$(docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' "$PGI" 2>/dev/null) || R=""
+    R=${R##*@}
+    [[ $R =~ ^sha256:[0-9a-f]{64}$ ]] && PGD=$R
+  fi
+fi
+echo "postgres_image id=$PGI tag=$PGT repo_digest=$PGD"
 
 sec "Порт PostgreSQL"
 PUB=$(docker compose -f "$F" port postgres 5432 2>/dev/null)

@@ -6,7 +6,8 @@
 # только соседним контейнерам по внутренней сети проекта.
 # Каждому сервису передаются только нужные ему переменные (общий файл
 # переменных не подключается): токен бота есть только у bot, контакт владельца
-# только у worker. Необязательные OBSERVE_* и QUALITY_* при необходимости
+# только у worker. healthcheck bot и worker — по отметке компоненты в таблице
+# heartbeats (не старше 5 минут); бот ставит свою, только пока отвечает getMe. Необязательные OBSERVE_* и QUALITY_* при необходимости
 # добавляются одинаково в bot и worker (Pitfall 11: принятие прогона ботом
 # должно наблюдать так же, как worker).
 # DEDUP_* объявлены в якоре x-app-env, общем для bot и worker: проход
@@ -97,8 +98,10 @@ services:
       <<: *app-env
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?задайте TELEGRAM_BOT_TOKEN в .env}
       ADMIN_TG_IDS: ${ADMIN_TG_IDS:?задайте ADMIN_TG_IDS в .env}
+    # Больше 15 с, которые бот ждёт выполняющиеся обработчики при остановке.
+    stop_grace_period: 20s
     healthcheck:
-      test: ["CMD", "/aggregator", "healthcheck"]
+      test: ["CMD", "/aggregator", "healthcheck", "bot"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -108,6 +111,12 @@ services:
     <<: *app
     command: ["worker"]
     stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "/aggregator", "healthcheck", "worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     volumes:
       - raw:/data/raw
     environment:

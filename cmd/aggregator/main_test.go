@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -84,5 +85,29 @@ func TestUnmergeArgs(t *testing.T) {
 		if c.ok != (err == nil) || (c.ok && (id != 12 || apply != c.apply)) {
 			t.Errorf("%v: id=%d apply=%v err=%v", c.args, id, apply, err)
 		}
+	}
+}
+
+// MON-03: healthcheck компоненты — отметка есть и не старше предела.
+func TestHeartbeatFresh(t *testing.T) {
+	ages := map[string]time.Duration{"bot": 5 * time.Minute, "worker": 5*time.Minute + time.Second}
+	if err := heartbeatFresh(ages, "bot", healthMaxAge); err != nil {
+		t.Fatalf("ровно 5 минут: %v, want nil", err)
+	}
+	if err := heartbeatFresh(ages, "worker", healthMaxAge); err == nil || !strings.Contains(err.Error(), "worker") {
+		t.Fatalf("старше 5 минут: %v, want ошибка с именем компоненты", err)
+	}
+	if err := heartbeatFresh(map[string]time.Duration{"bot": time.Second}, "worker", healthMaxAge); err == nil || !strings.Contains(err.Error(), "worker") {
+		t.Fatalf("строки нет: %v, want ошибка с именем компоненты", err)
+	}
+	// Неверный аргумент — usage до обращения к БД.
+	t.Setenv("DATABASE_URL", "")
+	for _, args := range [][]string{{"postgres"}, {"bot", "worker"}} {
+		if err := runHealthcheck(context.Background(), args); !errors.Is(err, errUsage) {
+			t.Fatalf("healthcheck %v: %v, want errUsage", args, err)
+		}
+	}
+	if err := runHealthcheck(context.Background(), []string{"bot"}); err == nil || errors.Is(err, errUsage) {
+		t.Fatalf("healthcheck bot без DATABASE_URL: %v, want ошибка окружения", err)
 	}
 }

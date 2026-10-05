@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -73,6 +74,12 @@ func MergeEvent(t testing.TB, id, into int64) {
 func SetStatus(t testing.TB, id int64, status event.Status) {
 	t.Helper()
 	exec(t, "UPDATE events SET status = $1 WHERE id = $2", string(status), id)
+}
+
+// AgeHeartbeat сдвигает отметку компоненты назад на age.
+func AgeHeartbeat(t testing.TB, component string, age time.Duration) {
+	t.Helper()
+	exec(t, "UPDATE heartbeats SET beat_at = now() - make_interval(secs => $2) WHERE component = $1", component, age.Seconds())
 }
 
 // exec выполняет запрос отдельным соединением с той же проверкой базы,

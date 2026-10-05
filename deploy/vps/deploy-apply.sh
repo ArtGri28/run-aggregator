@@ -5,6 +5,9 @@
 # IMAGE_TAG/IMAGE_PREV в .env (сам .env создаёт agg env-init), затем postgres -> migrate,
 # bot, worker. Всё в /opt/aggregator — root:root, runagg туда не пишет и не читает.
 # Тома проекта не удаляются никогда.
+# Имеющийся на хосте образ postgres:17 выкат не обновляет (pull только когда образа
+# нет): новый образ под тем же тегом пересоздал бы контейнер БД. Смена образа
+# postgres — отдельная процедура runbook.
 set -euo pipefail
 umask 077
 export LC_ALL=C
@@ -53,13 +56,11 @@ echo "Обновлены IMAGE_TAG=$TAG и IMAGE_PREV=${PREV:-(нет)}."
 # start — запуск с текущим .env; внутри «if !» set -e не действует, поэтому каждый шаг явно.
 start() {
   docker compose -f "$F" config -q || return 1
-  if ! docker compose -f "$F" pull postgres; then
-    if docker image inspect --format '{{.Id}}' postgres:17 >/dev/null 2>&1; then
-      echo "pull не удался, но postgres:17 уже есть на хосте — продолжаем."
-    else
-      echo "Не удалось получить postgres:17. Запасной путь — перенос образа с Mac, см. deploy/README.md."
-      return 1
-    fi
+  if docker image inspect --format '{{.Id}}' postgres:17 >/dev/null 2>&1; then
+    echo "postgres image: local, pull skipped"
+  elif ! docker compose -f "$F" pull postgres; then
+    echo "Не удалось получить postgres:17. Запасной путь — перенос образа с Mac, см. deploy/README.md."
+    return 1
   fi
   docker compose -f "$F" up -d --wait postgres && docker compose -f "$F" up -d
 }

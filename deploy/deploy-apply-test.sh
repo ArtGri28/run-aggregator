@@ -5,6 +5,8 @@
 # Раздел «Дедупликация» deploy-verify.sh (Phase 7): строки dedup_would_auto и
 # dedup_pass_last на заглушке docker (psql и логи); сам SQL dedup_would_auto
 # выполняет TestVerifyWouldAuto (internal/store) на тестовой базе.
+# Образ postgres (D-26): deploy-apply.sh не выполняет pull имеющегося образа;
+# deploy-verify.sh печатает строку postgres_image.
 # Хост не меняется. Запуск на Mac или Linux: deploy/deploy-apply-test.sh -> DEPLOY APPLY OK.
 set -euo pipefail
 export LC_ALL=C
@@ -24,6 +26,7 @@ cat > "$T/bin/docker" <<EOF
 #!/usr/bin/env bash
 echo "docker \$*" >> "$T/docker.log"
 case "\$*" in
+  image\ inspect*postgres:17) [ -e "$T/nopg" ] && exit 1; echo sha256:x ;;
   image\ inspect*) echo linux/amd64 ;;
   compose*up\ -d) grep -q '^IMAGE_TAG=bad' "$ENVF" && exit 1 # падает приложение, postgres поднялся
     grep -q '^IMAGE_TAG=hup' "$ENVF" && kill -HUP "\$PPID" ;; # обрыв ssh во время запуска
@@ -50,6 +53,19 @@ printf 'POSTGRES_PASSWORD=x\nIMAGE_TAG=good1\n' > "$ENVF"
 chmod 600 "$ENVF"
 [ "$(run deploy-apply DEPLOY good2)" = 0 ] || { echo "FAIL deploy good2: $(cat "$T/out")"; FAILS=$((FAILS + 1)); }
 expect "deploy good2" good2 good1
+if ! grep -q 'pull postgres' "$T/docker.log" && grep -qx 'postgres image: local, pull skipped' "$T/out"; then
+  echo "ok   pull skipped: образ postgres:17 есть на хосте"
+else echo "FAIL pull skipped: $(cat "$T/docker.log")"; FAILS=$((FAILS + 1)); fi
+
+# Образа postgres:17 нет — pull ровно один; повтор уже развёрнутого тега.
+touch "$T/nopg"
+: > "$T/docker.log"
+[ "$(run deploy-apply DEPLOY good2)" = 0 ] || { echo "FAIL deploy good2 без образа postgres: $(cat "$T/out")"; FAILS=$((FAILS + 1)); }
+rm -f "$T/nopg"
+if [ "$(grep -c 'pull postgres' "$T/docker.log")" = 1 ] && ! grep -q 'pull skipped' "$T/out"; then
+  echo "ok   pull on missing image: один вызов pull postgres"
+else echo "FAIL pull on missing image: $(cat "$T/docker.log")"; FAILS=$((FAILS + 1)); fi
+expect "повтор deploy good2" good2 good1
 
 : > "$T/docker.log"
 rc=$(run deploy-apply DEPLOY bad3)
@@ -78,9 +94,14 @@ left=$(find "$T/opt" -name '.env.*' | wc -l | tr -d ' ')
 # deploy-verify.sh: только чтение, запускается как есть; docker отвечает на запросы
 # раздела «Дедупликация» и отдаёт логи из $T/<сервис>.log.
 mkdir -p "$T/vbin"
+PA=$(printf 'a%.0s' $(seq 64)) PB=$(printf 'b%.0s' $(seq 64))
 cat > "$T/vbin/docker" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
+  compose*ps\ -q\ postgres) [ -e "$T/nopgc" ] || echo c0ffee ;;
+  container\ inspect*) echo sha256:$PA ;;
+  image\ inspect*postgres:17) [ -e "$T/pgtag" ] && cat "$T/pgtag" || echo sha256:$PA ;;
+  image\ inspect*RepoDigests*) [ -e "$T/nodigest" ] || echo registry.example/library/postgres@sha256:$PB ;;
   *psql*"'dedup_would_auto=pending:'"*"state = 'pending'"*"reasons->>'would_auto' = 'true'"*) echo dedup_would_auto=pending:2 ;;
   *psql*"'dedup_candidates=pending:'"*) echo 'dedup_candidates=pending:4|confirmed:1|rejected:0|fresh:0' ;;
   *psql*"'events_merged='"*) echo events_merged=1 ;;
@@ -107,4 +128,13 @@ echo "$started" > "$T/worker.log"
 verify "нет строки dedup pass" 'dedup_pass_last=unknown'
 { echo "$started"; echo '{"time":"t","level":"INFO","msg":"dedup pass","pairs":9,"would_auto":3}'; } > "$T/worker.log"
 verify "строка без счётчиков would_auto_*" 'dedup_pass_last=unknown'
+# Строка postgres_image: образ контейнера, сравнение с тегом postgres:17, дайджест.
+verify "образ postgres" "postgres_image id=sha256:$PA tag=same repo_digest=sha256:$PB"
+echo "sha256:$PB" > "$T/pgtag"; touch "$T/nodigest"
+verify "тег postgres:17 сдвинут" "postgres_image id=sha256:$PA tag=differs repo_digest=none"
+: > "$T/pgtag"
+verify "тега postgres:17 нет" "postgres_image id=sha256:$PA tag=differs repo_digest=none"
+rm -f "$T/pgtag" "$T/nodigest"; touch "$T/nopgc"
+verify "контейнера postgres нет" 'postgres_image id=none tag=differs repo_digest=none'
+! grep -qE 'registry\.example' "$T/vout" || { echo "FAIL verify: имя реестра в выводе"; FAILS=$((FAILS + 1)); }
 [ "$FAILS" -eq 0 ] && echo "DEPLOY APPLY OK" || { echo "DEPLOY APPLY FAIL: $FAILS"; exit 1; }

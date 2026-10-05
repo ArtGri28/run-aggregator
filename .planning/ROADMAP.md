@@ -17,10 +17,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Foundation** - Модуль Go, схема PostgreSQL 17, домен, `store`, `normalize`, тестовая инфраструктура (completed 2026-09-29)
 - [x] **Phase 3: First Source** - Сбор данных из первого источника: Fetch/Parse/Validate, `ingest_runs`, контроль качества, алерты (completed 2026-09-30)
 - [x] **Phase 4: Telegram Search** - Бот на long polling: фильтры, список, карточка, пагинация, админ-доступ (completed 2026-09-30)
-- [ ] **Phase 5: Multiple Sources & Deduplication** - Источники 2–3, кандидаты в дубли, `/dupes`, калибровка порогов
+- [x] **Phase 5: Multiple Sources & Deduplication** - Источники 2–3, кандидаты в дубли, `/dupes`, калибровка порогов (completed 2026-10-05)
 - [ ] **Phase 6: Production** - Docker Compose на VPS, бэкапы и проверка восстановления, heartbeat, runbook
-- [ ] **Phase 7: Deduplication Transparency** - Видимость потенциальных автослияний, полнота калибровки, замечания ревью L1–L5, отмена слияния; автослияние остаётся выключенным
-- [ ] **Phase 8: Telegram Bot UX** - Аудит интерфейса, контракт экранов и сценариев, реализация, приёмка в Telegram; только существующие функции бота
+- [x] **Phase 7: Deduplication Transparency** - Видимость потенциальных автослияний, полнота калибровки, замечания ревью L1–L5, отмена слияния; автослияние остаётся выключенным (completed 2026-10-05)
+- [x] **Phase 8: Telegram Bot UX** - Аудит интерфейса, контракт экранов и сценариев, реализация, приёмка в Telegram; только существующие функции бота (completed 2026-10-05)
 - [ ] **Phase 9: Onboarding & User Profile** - Добровольная анкета из четырёх вопросов и `/profile` с редактированием; профиль независим от настроек поиска
 
 ## Phase Details
@@ -224,6 +224,8 @@ Plans:
 
 **Progress (2026-10-04)**: 06-04 — пакет `agg` доставлен и установлен, часы синхронизированы по фактическому состоянию (`NTPSynchronized=yes`, `clock-apply.sh` не применялся), `age` 1.1.1 установлен, каталоги бэкапа созданы (`backup-apply.sh dirs`), Telegram-конфигурация записана, локальная копия и её внешняя копия в закрытом канале созданы (190905 байт, `rc=0`), расписание cron на 03:00 UTC записано (`STATUS OK`); чтение наутро не выполнено. 06-05 — копия из канала восстановлена владельцем на Mac, RESTORE GATE пройден 2026-10-04 (ответ владельца «восстановление подтверждено»); независимой второй копии нет, 06-06…06-09 не начаты, ни один план фазы не завершён
 
+**Progress (2026-10-05)**: план 06-04 закрыт по команде владельца — ночная копия по расписанию создана (`copies=2`, `STATUS OK`), ворота восстановления пройдены (06-05). Фаза не закрыта: планы 06-06…06-09 не выполнялись, требования MON-03, MON-04, PRD-02…PRD-07 не отмечены
+
 ### Phase 7: Deduplication Transparency
 
 **Goal**: Владелец видит, какие пары слило бы автослияние, и может отменить ошибочное слияние; автослияние остаётся выключенным
@@ -370,8 +372,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Foundation | 2/2 | Complete    | 2026-09-29 |
 | 3. First Source | 7/7 | Complete    | 2026-09-30 |
 | 4. Telegram Search | 8/8 | Complete    | 2026-09-30 |
-| 5. Multiple Sources & Deduplication | 8/8 | In Progress | - |
+| 5. Multiple Sources & Deduplication | 8/8 | Complete    | 2026-10-05 |
 | 6. Production | 0/TBD | In Progress | - |
-| 7. Deduplication Transparency | 5/5 | In Progress | - |
-| 8. Telegram Bot UX | 9/9 | In Progress | - |
+| 7. Deduplication Transparency | 5/5 | Complete    | 2026-10-05 |
+| 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
 | 9. Onboarding & User Profile | 1/6 | In Progress | - |

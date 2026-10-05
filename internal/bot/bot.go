@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -30,7 +31,19 @@ type Bot struct {
 	loc    *time.Location
 	log    *slog.Logger
 	token  string // только для маскирования в логах (redactHandler)
+
+	// lastErr — время последней ошибки библиотеки Telegram (UnixNano; 0 — не
+	// было); active — число выполняющихся обработчиков.
+	lastErr atomic.Int64
+	active  atomic.Int64
 }
+
+const (
+	// errQuiet — столько без ошибок библиотеки, чтобы бот считался здоровым.
+	errQuiet = 2 * time.Minute
+	// getMeTimeout — предел проверки getMe в Healthy.
+	getMeTimeout = 10 * time.Second
+)
 
 // New собирает бота. Дополнительные opts добавляются последними (тесты
 // подменяют адрес API). Отладочный режим библиотеки не включается: он
@@ -47,9 +60,12 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 
 	all := []tgbot.Option{
 		tgbot.WithCheckInitTimeout(15 * time.Second),
-		tgbot.WithErrorsHandler(func(err error) { b.logger().Error("telegram", "err", err) }),
+		tgbot.WithErrorsHandler(func(err error) {
+			b.lastErr.Store(b.now().UnixNano())
+			b.logger().Error("telegram", "err", err)
+		}),
 		tgbot.WithDefaultHandler(b.onDefault),
-		tgbot.WithMiddlewares(recoverMW, b.privateOnlyMW),
+		tgbot.WithMiddlewares(b.recoverMW, b.privateOnlyMW),
 		tgbot.WithAllowedUpdates(tgbot.AllowedUpdates{"message", "callback_query"}),
 		tgbot.WithMessageTextHandler("start", tgbot.MatchTypeCommandStartOnly, b.onStart),
 		tgbot.WithMessageTextHandler("runs", tgbot.MatchTypeCommandStartOnly, b.onRuns),
@@ -75,6 +91,32 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 
 // Start принимает апдейты (long polling) до отмены ctx.
 func (b *Bot) Start(ctx context.Context) { b.api.Start(ctx) }
+
+// Healthy — бот работает с Telegram (LO-06): за последние errQuiet не было
+// ошибок библиотеки (её обработчик вызывается на каждой ошибке getUpdates) и
+// getMe отвечает. По этому признаку бот ставит свою отметку heartbeats.
+func (b *Bot) Healthy(ctx context.Context) bool {
+	if last := b.lastErr.Load(); last != 0 && b.now().Sub(time.Unix(0, last)) < errQuiet {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, getMeTimeout)
+	defer cancel()
+	_, err := b.api.GetMe(ctx)
+	return err == nil
+}
+
+// Wait ждёт завершения выполняющихся обработчиков не дольше timeout (IN-07);
+// true — все завершились. Вызывается после Start при остановке процесса.
+func (b *Bot) Wait(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for b.active.Load() > 0 {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
 
 func (b *Bot) isAdmin(id int64) bool { return b.admins[id] }
 
@@ -158,8 +200,16 @@ func (b *Bot) today() time.Time {
 // recoverMW ловит панику обработчика (библиотека запускает его в горутине
 // без recover — панику не поймать иначе, процесс упал бы). В лог идёт
 // только стек, без данных апдейта.
-func recoverMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
+//
+// IN-07: обработчик считается выполняющимся (счётчик, а не WaitGroup:
+// библиотека запускает обработчики в своих горутинах, и Add одновременно с
+// Wait при нуле — ошибка использования) и получает ctx без отмены от SIGTERM:
+// иначе начатый ответ ушёл бы с отменённым ctx. Остановку ограничивает Wait.
+func (b *Bot) recoverMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 	return func(ctx context.Context, api *tgbot.Bot, u *models.Update) {
+		b.active.Add(1)
+		defer b.active.Add(-1)
+		ctx = context.WithoutCancel(ctx)
 		defer func() {
 			if p := recover(); p != nil {
 				slog.Error("handler panic", "panic", fmt.Sprint(p), "stack", string(debug.Stack()))
