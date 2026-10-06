@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Telegram Bot UX** - Аудит интерфейса, контракт экранов и сценариев, реализация, приёмка в Telegram; только существующие функции бота (completed 2026-10-05)
 - [x] **Phase 9: Onboarding & User Profile** - Добровольная анкета из четырёх вопросов и `/profile` с редактированием; профиль независим от настроек поиска (completed 2026-10-06)
 - [ ] **Phase 10: Opt-in Notifications** - Уведомления о забегах по городу проживания и видам спорта профиля — только тем, кто явно согласился; не спланирована
-- [ ] **Phase 11: Support Chat** - Обращения в поддержку через бота: пользователь пишет боту, администратор отвечает ответом на пересланное сообщение; не спланирована
+- [x] **Phase 11: Support Chat** - Обращения в поддержку через бота: пользователь пишет боту, участник закрытой группы отвечает на сообщение бота, только текст (completed 2026-10-06)
 
 ## Phase Details
 
@@ -407,4 +407,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
 | 9. Onboarding & User Profile | 6/6 | Complete    | 2026-10-06 |
 | 10. Opt-in Notifications | 0/0 | Not planned | - |
-| 11. Support Chat | 6/6 | In Progress | - |
+| 11. Support Chat | 6/6 | Complete    | 2026-10-06 |
