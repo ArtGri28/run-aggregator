@@ -51,7 +51,7 @@ var (
 func offerScreen(pv int) screen {
 	return screen{
 		text: "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\n" +
-			"Можно ответить на 4 коротких вопроса о себе — так мы поймём, кто пользуется ботом, и что добавлять в каталог. " +
+			"Можно ответить на 4 коротких вопроса о себе. " +
 			"Анкета добровольная: любой вопрос можно пропустить, а ответы — изменить в /profile. Поиск работает и без неё.",
 		kb: keyboard(
 			btn("📝 Заполнить анкету", callback{Kind: cbProfStart, V: pv}),
@@ -273,7 +273,7 @@ func profileScreen(p store.Profile, pv int) screen {
 	r2.add("🏅 Спорт", ask("s"))
 	return screen{
 		text: "👤 <b>Мой профиль</b>\n\n🚻 Пол: " + gender + "\n🎂 Возраст: " + age + "\n🏠 Живу: " + home +
-			"\n🏅 Спорт: " + sports + "\n\nДанные видны только вам и используются в обезличенной статистике.",
+			"\n🏅 Спорт: " + sports,
 		kb: keyboard(r1, r2, btn(backLabel, callback{Kind: cbMenu})),
 	}
 }
