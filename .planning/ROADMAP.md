@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6: Production** - Docker Compose на VPS, бэкапы и проверка восстановления, heartbeat, runbook
 - [x] **Phase 7: Deduplication Transparency** - Видимость потенциальных автослияний, полнота калибровки, замечания ревью L1–L5, отмена слияния; автослияние остаётся выключенным (completed 2026-10-05)
 - [x] **Phase 8: Telegram Bot UX** - Аудит интерфейса, контракт экранов и сценариев, реализация, приёмка в Telegram; только существующие функции бота (completed 2026-10-05)
-- [ ] **Phase 9: Onboarding & User Profile** - Добровольная анкета из четырёх вопросов и `/profile` с редактированием; профиль независим от настроек поиска
+- [x] **Phase 9: Onboarding & User Profile** - Добровольная анкета из четырёх вопросов и `/profile` с редактированием; профиль независим от настроек поиска (completed 2026-10-06)
 - [ ] **Phase 10: Opt-in Notifications** - Уведомления о забегах по городу проживания и видам спорта профиля — только тем, кто явно согласился; не спланирована
 
 ## Phase Details
@@ -335,7 +335,7 @@ Plans:
   4. Действия с профилем не меняют `users.filters`, действия с фильтрами не меняют профиль; город проживания, введённый текстом, не попадает в поиск
   5. Владелец прошёл приёмку в Telegram по чек-листу сценариев
 
-**Plans**: 1/6 plans executed
+**Plans**: 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -386,5 +386,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Production | 0/TBD | In Progress | - |
 | 7. Deduplication Transparency | 5/5 | Complete    | 2026-10-05 |
 | 8. Telegram Bot UX | 9/9 | Complete    | 2026-10-05 |
-| 9. Onboarding & User Profile | 6/6 | In Progress | - |
+| 9. Onboarding & User Profile | 6/6 | Complete    | 2026-10-06 |
 | 10. Opt-in Notifications | 0/0 | Not planned | - |
