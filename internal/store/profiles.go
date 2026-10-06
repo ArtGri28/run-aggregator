@@ -64,7 +64,8 @@ func scanProfile(row pgx.Row) (p Profile, v int, err error) {
 // last_seen_at), затем создаётся строка профиля. Строка профиля появляется
 // здесь, до отправки экрана, чтобы «предложить анкету» случилось ровно один
 // раз на пользователя: offered = true только у вызова, который создал строку
-// (D-06). Повторный /start снимает отметку ожидания города (D-10).
+// (D-06). Повторный /start снимает отметку ожидания города (D-10), а любой
+// /start — отметку «жду обращение» в поддержку (D-09, D-10).
 // Это единственное место, где одна транзакция касается и users, и
 // user_profiles; filters_v возвращается для главного меню, фильтры не меняются.
 func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV int, offered bool, err error) {
@@ -79,7 +80,7 @@ func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV i
 		err := tx.db.QueryRow(ctx, ins, tgID).Scan(&profileV)
 		if err == nil {
 			offered = true
-			return nil
+			return tx.dropSupportAwaiting(ctx, tgID, "start user")
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("start user: create profile: %w", err)
@@ -90,12 +91,23 @@ func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV i
 		if err := tx.db.QueryRow(ctx, clear, tgID).Scan(&profileV); err != nil {
 			return fmt.Errorf("start user: clear awaiting: %w", err)
 		}
-		return nil
+		return tx.dropSupportAwaiting(ctx, tgID, "start user")
 	})
 	if err != nil {
 		return 0, 0, false, err
 	}
 	return filtersV, profileV, offered, nil
+}
+
+// dropSupportAwaiting снимает отметку «жду обращение» (D-10): StartUser и
+// UpdateProfileAt зовут её в своей транзакции, чтобы режимы «жду город» и
+// «жду обращение» не действовали одновременно. Нет отметки — не ошибка; op —
+// имя вызывающей операции для текста ошибки.
+func (s *Store) dropSupportAwaiting(ctx context.Context, tgID int64, op string) error {
+	if _, err := s.db.Exec(ctx, `DELETE FROM support_awaiting WHERE tg_id = $1`, tgID); err != nil {
+		return fmt.Errorf("%s: clear support awaiting: %w", op, err)
+	}
+	return nil
 }
 
 // PeekProfile читает профиль и его версию без единой записи: ни users, ни
@@ -122,6 +134,9 @@ func (s *Store) PeekProfile(ctx context.Context, tgID int64) (p Profile, v int, 
 // меняют, иначе кнопка, показанная до ввода города, устарела бы от самого
 // ввода. started_at и completed_at ставятся один раз по метке now.
 // Переходы статусов хранилище не решает — их задаёт бот через fn.
+// Итоговый профиль с отметкой города снимает отметку «жду обращение» в
+// поддержку в той же транзакции, даже если запись профиля не понадобилась
+// (D-10); при ErrStaleProfile и ошибке fn отметка поддержки остаётся.
 func (s *Store) UpdateProfileAt(ctx context.Context, tgID int64, wantV int, now time.Time, fn func(Profile) (Profile, error)) (Profile, int, error) {
 	var out Profile
 	var v int
@@ -138,6 +153,11 @@ func (s *Store) UpdateProfileAt(ctx context.Context, tgID int64, wantV int, now 
 			return err
 		}
 		out, v = cur, curV
+		if !next.AwaitingCityUntil.IsZero() {
+			if err := tx.dropSupportAwaiting(ctx, tgID, "update profile"); err != nil {
+				return err
+			}
+		}
 		answers := cur.Status != next.Status || cur.Gender != next.Gender || cur.AgeGroup != next.AgeGroup ||
 			cur.Country != next.Country || cur.City != next.City || cur.CityKey != next.CityKey ||
 			!slices.Equal(cur.Sports, next.Sports)
