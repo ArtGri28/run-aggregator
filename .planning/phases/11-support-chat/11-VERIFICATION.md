@@ -17,7 +17,7 @@ covered_files:
   - ".planning/phases/11-support-chat/11-05-SUMMARY.md"
   - ".planning/phases/11-support-chat/11-06-PLAN.md"
   - ".planning/phases/11-support-chat/11-06-SUMMARY.md"
-covered_digest: "v1:sha256:599811cd02d74907cb969ae738caac21d878bda0bd8b3da1fa5df81aaaf67edd"
+covered_digest: "v1:sha256:984ed0db80641a893a379043b40f1e9d8350f9146203c7b3b589704a252c7749"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification: false

@@ -24,7 +24,7 @@ covered_files:
   - "internal/bot/stats.go"
   - "internal/store/profiles.go"
   - "migrations/00006_user_profiles.sql"
-covered_digest: "v1:sha256:60d27eaa193ada6370a637d9fb1b8e23a4356754e3c5928f0945282a34bbfd9d"
+covered_digest: "v1:sha256:6ac30dfe3fd3f5d2aa4db49f637f6d29b0f1909a0e59dfaa0807add87f5710af"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification: false
@@ -101,7 +101,7 @@ gaps: []
 
 ### Anti-patterns
 
-В файлах фазы нет `TBD`/`FIXME`/`XXX`; пустых реализаций нет. Единственный маркер `ponytail:` — в `stats.go` (вне фазы, см. ниже).
+В файлах фазы нет `TBD`/`FIXME`/`XXX`; пустых реализаций нет. Единственный маркер `Упрощение:` — в `stats.go` (вне фазы, см. ниже).
 
 ## Коммит `6f02fbc` (`/stats`) — вне фазы, влияние на гарантии
 

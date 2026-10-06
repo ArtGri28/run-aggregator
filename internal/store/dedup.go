@@ -348,7 +348,7 @@ func (s *Store) resolve(ctx context.Context, c *candidateRow) (bool, error) {
 // корни; кандидаты, чьи стороны уже в одном корне, пропускаются. Очередь
 // пуста — ErrNotFound.
 func (s *Store) NextCandidate(ctx context.Context, afterID int64) (Candidate, error) {
-	// ponytail: читает весь хвост очереди; LIMIT с дочиткой — если очередь вырастет до тысяч
+	// Упрощение: читает весь хвост очереди; LIMIT с дочиткой — если очередь вырастет до тысяч
 	list, err := s.candidateRows(ctx, "dc.state = 'pending' AND dc.id > $1", afterID)
 	if err != nil {
 		return Candidate{}, fmt.Errorf("next candidate: %w", err)

@@ -342,7 +342,7 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 func (r *Runner) write(ctx context.Context, tx *store.Store, sourceID, runID int64, recs []SourceEvent, prepared []Prepared, now time.Time, res *Result) error {
 	// Запись прогонов всех источников, проход дедупликации и слияния идут
 	// под одной блокировкой: без тупиков и гонки за поля общего события.
-	// ponytail: источники пишутся по очереди (секунды на прогон);
+	// Упрощение: источники пишутся по очереди (секунды на прогон);
 	// блокировки по событиям — если это станет узким местом.
 	if err := tx.LockDedup(ctx); err != nil {
 		return fmt.Errorf("запись: %w", err)
