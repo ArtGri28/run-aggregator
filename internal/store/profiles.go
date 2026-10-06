@@ -177,3 +177,40 @@ func (s *Store) UpdateProfileAt(ctx context.Context, tgID int64, wantV int, now 
 	}
 	return out, v, nil
 }
+
+// ProfileCounts — счётчики для сводки анкеты: разрез → значение → число
+// пользователей. Разрезы: "users" (ключ ""), "status", "gender", "age",
+// "country", "sport"; ключ "" — вопрос без ответа (для "sport" — не отмечен ни
+// один вид). Только агрегаты по одному признаку: tg_id, город и сочетания
+// признаков не читаются.
+func (s *Store) ProfileCounts(ctx context.Context) (map[string]map[string]int, error) {
+	const q = `
+		SELECT 'users', '', count(*) FROM users
+		UNION ALL SELECT 'status', status, count(*) FROM user_profiles GROUP BY status
+		UNION ALL SELECT 'gender', COALESCE(gender, ''), count(*) FROM user_profiles GROUP BY gender
+		UNION ALL SELECT 'age', COALESCE(age_group::text, ''), count(*) FROM user_profiles GROUP BY age_group
+		UNION ALL SELECT 'country', COALESCE(residence_country_code, ''), count(*) FROM user_profiles GROUP BY residence_country_code
+		UNION ALL SELECT 'sport', sport, count(*) FROM user_profiles, unnest(sports) AS sport GROUP BY sport
+		UNION ALL SELECT 'sport', '', count(*) FROM user_profiles WHERE sports = '{}'`
+	rows, err := s.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("profile counts: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]map[string]int{}
+	for rows.Next() {
+		var dim, key string
+		var n int
+		if err := rows.Scan(&dim, &key, &n); err != nil {
+			return nil, fmt.Errorf("profile counts: %w", err)
+		}
+		if out[dim] == nil {
+			out[dim] = map[string]int{}
+		}
+		out[dim][key] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("profile counts: %w", err)
+	}
+	return out, nil
+}

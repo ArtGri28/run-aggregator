@@ -361,3 +361,39 @@ func TestProfileChecks(t *testing.T) {
 		}
 	}
 }
+
+// TestProfileCounts: сводка считает пользователей, статусы и ответы по одному
+// признаку; пользователь без строки профиля входит только в "users".
+func TestProfileCounts(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	for _, id := range []int64{70, 71} {
+		if _, _, _, err := s.StartUser(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := s.Filters(ctx, 72); err != nil { // пользователь без профиля
+		t.Fatal(err)
+	}
+	if _, _, err := s.UpdateProfileAt(ctx, 70, 1, time.Now(), func(p Profile) (Profile, error) {
+		p.Status, p.Gender, p.AgeGroup, p.Country, p.Sports = ProfileCompleted, "f", 2, "BY", []string{"run", "bike"}
+		return p, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ProfileCounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]map[string]int{
+		"users":   {"": 3},
+		"status":  {ProfileCompleted: 1, ProfileNotStarted: 1},
+		"gender":  {"f": 1, "": 1},
+		"age":     {"2": 1, "": 1},
+		"country": {"BY": 1, "": 1},
+		"sport":   {"run": 1, "bike": 1, "": 1},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ProfileCounts:\n got %v\nwant %v", got, want)
+	}
+}
