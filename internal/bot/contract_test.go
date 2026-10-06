@@ -30,12 +30,8 @@ var (
 // Phase 9 и Phase 11) равно множеству тестов TestSxx…; у каждого сценария есть
 // хотя бы один эталон sxx_*, а тестов и эталонов сценариев, которых нет ни в
 // одном контракте, нет. Лишние и отсутствующие сценарии перечисляются в ошибке.
-// Исключение до плана 11-05: сценарий контракта Phase 11, у которого ещё нет
-// теста (S-32…S-34), в ожидаемое множество не входит — ни тест, ни эталон от него
-// не требуются; появившийся тест или эталон такого сценария сверяется как обычно.
 func TestContractCoverage(t *testing.T) {
 	all := map[string]string{} // номер сценария → имя теста по контрактам
-	phase11 := map[string]bool{}
 	counts := make([]int, len(uxContracts))
 	for i, path := range uxContracts {
 		doc, err := os.ReadFile(path)
@@ -51,9 +47,6 @@ func TestContractCoverage(t *testing.T) {
 			}
 			all[m[1]] = m[2]
 			counts[i]++
-			if i == 2 {
-				phase11[m[1]] = true
-			}
 		}
 	}
 	for i, min := range minScenarios {
@@ -79,14 +72,8 @@ func TestContractCoverage(t *testing.T) {
 			got[m[2]] = m[1]
 		}
 	}
-	want := map[string]string{} // ожидаемые тесты: все сценарии, кроме ещё не написанных сценариев Phase 11
-	for n, name := range all {
-		if _, has := got[n]; has || !phase11[n] {
-			want[n] = name
-		}
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("тесты сценариев расходятся с контрактами:\nтесты    %v\nконтракты %v", sorted(got), sorted(want))
+	if !reflect.DeepEqual(got, all) {
+		t.Errorf("тесты сценариев расходятся с контрактами:\nтесты    %v\nконтракты %v", sorted(got), sorted(all))
 	}
 
 	snaps := map[string]bool{}
@@ -102,7 +89,7 @@ func TestContractCoverage(t *testing.T) {
 			}
 		}
 	}
-	for n := range want {
+	for n := range all {
 		if !snaps[n] {
 			t.Errorf("S-%s: нет эталона s%s_*", n, n)
 		}
