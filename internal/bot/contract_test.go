@@ -9,12 +9,16 @@ import (
 	"testing"
 )
 
-// uxContracts — контракты экранов: Phase 8 и Phase 9 (D-16). Сценарии обоих
-// сливаются в одно множество; номера не повторяются.
+// uxContracts — контракты экранов: Phase 8, Phase 9 (D-16) и Phase 11. Сценарии
+// всех сливаются в одно множество; номера не повторяются. minScenarios — порог
+// числа сценариев каждого контракта: пустой разбор не должен пройти молча.
 var uxContracts = []string{
 	"../../.planning/phases/08-telegram-bot-ux/08-UX-CONTRACT.md",
 	"../../.planning/phases/09-onboarding-user-profile/09-UX-CONTRACT.md",
+	"../../.planning/phases/11-support-chat/11-UX-CONTRACT.md",
 }
+
+var minScenarios = []int{17, 8, 10}
 
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")
@@ -22,13 +26,17 @@ var (
 	scenarioSnapshotRE = regexp.MustCompile(`^s([0-9]{2})_.+\.txt$`)
 )
 
-// TestContractCoverage: множество сценариев S-xx двух контрактов экранов (Phase 8
-// и Phase 9) равно множеству тестов TestSxx…; у каждого сценария есть хотя бы один
-// эталон sxx_*, а тестов и эталонов сценариев, которых нет ни в одном контракте,
-// нет. Лишние и отсутствующие сценарии перечисляются в ошибке.
+// TestContractCoverage: множество сценариев S-xx трёх контрактов экранов (Phase 8,
+// Phase 9 и Phase 11) равно множеству тестов TestSxx…; у каждого сценария есть
+// хотя бы один эталон sxx_*, а тестов и эталонов сценариев, которых нет ни в
+// одном контракте, нет. Лишние и отсутствующие сценарии перечисляются в ошибке.
+// Исключение до плана 11-05: сценарий контракта Phase 11, у которого ещё нет
+// теста (S-32…S-34), в ожидаемое множество не входит — ни тест, ни эталон от него
+// не требуются; появившийся тест или эталон такого сценария сверяется как обычно.
 func TestContractCoverage(t *testing.T) {
 	all := map[string]string{} // номер сценария → имя теста по контрактам
-	nPhase8, nPhase9 := 0, 0
+	phase11 := map[string]bool{}
+	counts := make([]int, len(uxContracts))
 	for i, path := range uxContracts {
 		doc, err := os.ReadFile(path)
 		if err != nil {
@@ -42,15 +50,16 @@ func TestContractCoverage(t *testing.T) {
 				t.Errorf("S-%s: сценарий есть в двух контрактах или дважды — %s и %s", m[1], prev, m[2])
 			}
 			all[m[1]] = m[2]
-			if i == 0 {
-				nPhase8++
-			} else {
-				nPhase9++
+			counts[i]++
+			if i == 2 {
+				phase11[m[1]] = true
 			}
 		}
 	}
-	if nPhase8 < 17 || nPhase9 < 8 {
-		t.Fatalf("найдено сценариев: Phase 8 — %d (want ≥ 17), Phase 9 — %d (want ≥ 8)", nPhase8, nPhase9)
+	for i, min := range minScenarios {
+		if counts[i] < min {
+			t.Fatalf("найдено сценариев в %s: %d (want ≥ %d)", uxContracts[i], counts[i], min)
+		}
 	}
 
 	got := map[string]string{}
@@ -70,8 +79,14 @@ func TestContractCoverage(t *testing.T) {
 			got[m[2]] = m[1]
 		}
 	}
-	if !reflect.DeepEqual(got, all) {
-		t.Errorf("тесты сценариев расходятся с контрактами:\nтесты    %v\nконтракты %v", sorted(got), sorted(all))
+	want := map[string]string{} // ожидаемые тесты: все сценарии, кроме ещё не написанных сценариев Phase 11
+	for n, name := range all {
+		if _, has := got[n]; has || !phase11[n] {
+			want[n] = name
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("тесты сценариев расходятся с контрактами:\nтесты    %v\nконтракты %v", sorted(got), sorted(want))
 	}
 
 	snaps := map[string]bool{}
@@ -87,7 +102,7 @@ func TestContractCoverage(t *testing.T) {
 			}
 		}
 	}
-	for n := range all {
+	for n := range want {
 		if !snaps[n] {
 			t.Errorf("S-%s: нет эталона s%s_*", n, n)
 		}

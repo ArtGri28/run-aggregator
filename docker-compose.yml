@@ -98,6 +98,8 @@ services:
       <<: *app-env
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?задайте TELEGRAM_BOT_TOKEN в .env}
       ADMIN_TG_IDS: ${ADMIN_TG_IDS:?задайте ADMIN_TG_IDS в .env}
+      # необязательная: пусто — поддержка выключена
+      SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
     # Больше 15 с, которые бот ждёт выполняющиеся обработчики при остановке.
     stop_grace_period: 20s
     healthcheck:

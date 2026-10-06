@@ -1,0 +1,10 @@
+method: sendMessage
+parse_mode: HTML
+---
+💬 <b>Обращение</b>
+От: Анна Петрова · @anna_p · id <code>1001</code>
+
+&lt;b&gt;X&lt;/b&gt; &amp; &#34;Y&#34;
+
+вторая строка
+---

@@ -76,7 +76,7 @@ cp docker-compose.yml "$T/docker-compose.yml"
   printf 'OWNER_CONTACT=smoke@example.invalid\n'
 } > "$T/.env"
 # Переменные оболочки с теми же именами снимаются: иначе compose подставил бы чужие значения.
-DC=(env -u TELEGRAM_BOT_TOKEN -u ADMIN_TG_IDS -u POSTGRES_PASSWORD -u OWNER_CONTACT
+DC=(env -u TELEGRAM_BOT_TOKEN -u ADMIN_TG_IDS -u SUPPORT_CHAT_ID -u POSTGRES_PASSWORD -u OWNER_CONTACT
   -u IMAGE_TAG -u DATABASE_URL -u PGPASSWORD -u LOG_FORMAT
   -u DEDUP_HIGH -u DEDUP_LOW -u DEDUP_AUTO_MERGE -u DEDUP_LINK_BONUS
   -u DEDUP_MAX_PER_EVENT -u DEDUP_DISTANCE_TOL_M -u DEDUP_SOURCE_PRIORITY -u DEDUP_DIGEST_AT

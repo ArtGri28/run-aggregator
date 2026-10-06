@@ -23,6 +23,7 @@ func TestCallbackRoundTrip(t *testing.T) {
 		"d:o", "d:m:5", "d:y:5", "d:n:5", "d:x:5", "d:s:9223372036854775807",
 		"u:o", "u:b:v1", "u:n:v1", "u:z:v1", "u:b:v0", "u:z:v2147483647",
 		"u:s:c:minsk:w:v2147483647", "u:s:c:nizhniy-novgorod:e:v12",
+		"h:o", "h:r", "h:x",
 	} {
 		c, err := parseCallback(s)
 		if err != nil {
@@ -124,6 +125,8 @@ func TestCallbackReject(t *testing.T) {
 		"u:s:c:" + strings.Repeat("a", 50) + ":w:v1",
 		"u:s:g:m:x:v1", "u:s:g:m::v1", "u:s:g:m:v1", "u:s:g:m:w", "u:s:g:m:w:1", "u:s:x:m:w:v1", "u:s:gg:m:w:v1", "u:s:g:m:w:v1:v1",
 		"u:a:g:w", "u:a:g:v1", "u:a:x:w:v1", "u:a:g:x:v1", "u:a:g:w:e:v1", "u:a::w:v1", "u:a:gg:w:v1",
+		// поддержка (h:): ровно три вида, без версии и лишних частей
+		"h", "h:", "h:q", "h:z", "h:o:v1", "h:o:", "h:x:1", "h:r:r", "h:oo", "h:O", "H:o", "h::o", "h:o:o",
 	} {
 		if c, err := parseCallback(s); err == nil {
 			t.Errorf("parseCallback(%q) = %+v, want error", s, c)
@@ -132,7 +135,7 @@ func TestCallbackReject(t *testing.T) {
 }
 
 func TestCbPrefix(t *testing.T) {
-	for data, want := range map[string]string{"d:x:1": "d", "r:y:1": "r", "z:1": "?", "d": "?", "u:o": "u", "u:s:g:m:w:v1": "u", "u": "?"} {
+	for data, want := range map[string]string{"d:x:1": "d", "r:y:1": "r", "z:1": "?", "d": "?", "u:o": "u", "u:s:g:m:w:v1": "u", "u": "?", "h:o": "h", "h:x": "h", "h": "?"} {
 		if got := cbPrefix(data); got != want {
 			t.Errorf("cbPrefix(%q) = %q, want %q", data, got, want)
 		}

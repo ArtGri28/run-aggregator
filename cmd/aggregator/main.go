@@ -246,7 +246,7 @@ func runBot(ctx context.Context) error {
 	}
 	b.Runner, b.Sources = newRunner(s, icfg, dcfg), newSources(nil)
 
-	slog.Info("started", "subcommand", "bot", "admins", len(cfg.Admins), "dedup_auto_merge", dcfg.AutoMerge)
+	slog.Info("started", "subcommand", "bot", "admins", len(cfg.Admins), "support", cfg.SupportChatID != 0, "dedup_auto_merge", dcfg.AutoMerge)
 	if len(cfg.Admins) == 0 {
 		slog.Warn("ADMIN_TG_IDS пуст: админ-функции, алерты и сводка дублей отключены")
 	}

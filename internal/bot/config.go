@@ -11,16 +11,21 @@ import (
 	"strings"
 )
 
-// Config — настройки бота из окружения.
+// Config — настройки бота из окружения. SupportChatID — идентификатор группы
+// поддержки; 0 — поддержка выключена целиком (D-03).
 type Config struct {
-	Token  string
-	Admins []int64
+	Token         string
+	Admins        []int64
+	SupportChatID int64
 }
 
 var tokenRE = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9_-]+$`)
 
-// LoadConfig читает TELEGRAM_BOT_TOKEN (обязателен) и ADMIN_TG_IDS
-// (необязателен). Ошибка называет переменную, но не повторяет её значение.
+// LoadConfig читает TELEGRAM_BOT_TOKEN (обязателен), ADMIN_TG_IDS и
+// SUPPORT_CHAT_ID (необязательны). SUPPORT_CHAT_ID — целое строго меньше нуля
+// (идентификатор группы); пусто — поддержка выключена. Положительное число —
+// идентификатор человека: обращения ушли бы в его личный чат, поэтому это
+// ошибка старта. Ошибка называет переменную, но не повторяет её значение.
 func LoadConfig() (Config, error) {
 	tok := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if strings.TrimSpace(tok) == "" {
@@ -39,6 +44,13 @@ func LoadConfig() (Config, error) {
 			}
 			c.Admins = append(c.Admins, id)
 		}
+	}
+	if v := strings.TrimSpace(os.Getenv("SUPPORT_CHAT_ID")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id >= 0 {
+			return Config{}, errors.New("SUPPORT_CHAT_ID: неверное значение")
+		}
+		c.SupportChatID = id
 	}
 	return c, nil
 }

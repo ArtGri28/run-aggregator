@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var configVars = []string{"TELEGRAM_BOT_TOKEN", "ADMIN_TG_IDS"}
+var configVars = []string{"TELEGRAM_BOT_TOKEN", "ADMIN_TG_IDS", "SUPPORT_CHAT_ID"}
 
 // setEnv очищает переменные бота и выставляет заданные.
 func setEnv(t *testing.T, kv map[string]string) {
@@ -34,6 +34,33 @@ func TestLoadConfig(t *testing.T) {
 	setEnv(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123456:ABC-def_1", "ADMIN_TG_IDS": ""})
 	if cfg, err = LoadConfig(); err != nil || len(cfg.Admins) != 0 {
 		t.Fatalf("пустой ADMIN_TG_IDS: %+v, %v; want пустой список без ошибки", cfg, err)
+	}
+
+	// SUPPORT_CHAT_ID необязательна: пусто или не задана — поддержка выключена (0).
+	for _, tc := range []struct {
+		val  string
+		want int64
+	}{{"", 0}, {"   ", 0}, {"-1001234567890", -1001234567890}, {"  -1001234567890\t", -1001234567890}, {"-5", -5}} {
+		setEnv(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123456:ABC-def_1", "SUPPORT_CHAT_ID": tc.val})
+		if cfg, err = LoadConfig(); err != nil || cfg.SupportChatID != tc.want {
+			t.Fatalf("SUPPORT_CHAT_ID=%q: %+v, %v; want %d", tc.val, cfg, err, tc.want)
+		}
+	}
+	setEnv(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123456:ABC-def_1"})
+	if cfg, err = LoadConfig(); err != nil || cfg.SupportChatID != 0 {
+		t.Fatalf("без SUPPORT_CHAT_ID: %+v, %v; want 0 без ошибки", cfg, err)
+	}
+	// Ноль и положительное число (идентификатор человека — обращения ушли бы в
+	// личный чат), не число и дробь — ошибка старта без повтора значения.
+	for _, v := range []string{"0", "-0", "424242", "+424242", "bad7value", "-100.5", "-", "1e3", "--5", "- 5", "-1001234567890123456789"} {
+		setEnv(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123456:ABC-def_1", "SUPPORT_CHAT_ID": v})
+		_, err := LoadConfig()
+		if err == nil || !strings.Contains(err.Error(), "SUPPORT_CHAT_ID") {
+			t.Fatalf("SUPPORT_CHAT_ID=%q: err = %v, want упоминание SUPPORT_CHAT_ID", v, err)
+		}
+		if len(v) > 2 && strings.Contains(err.Error(), v) {
+			t.Fatalf("SUPPORT_CHAT_ID=%q: err = %q повторяет значение", v, err)
+		}
 	}
 
 	bad := []struct {

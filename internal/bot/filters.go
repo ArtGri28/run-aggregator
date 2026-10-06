@@ -853,7 +853,7 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		b.logger().Error("start", "err", err)
 		return
 	}
-	sc := stamp(mainMenu(), fv)
+	sc := stamp(mainMenu(b.supportChat != 0), fv)
 	if offered {
 		sc = offerScreen(pv)
 	}
@@ -862,12 +862,18 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	}
 }
 
-// mainMenu — главное меню: вход в поиск, в настройки и в профиль (D-13).
-func mainMenu() screen {
+// mainMenu — главное меню: вход в поиск, в настройки и в профиль (D-13);
+// при включённой поддержке — четвёртая кнопка «💬 Поддержка». Без группы меню
+// побайтно прежнее (D-03).
+func mainMenu(support bool) screen {
+	rows := []row{btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}),
+		btn("👤 Мой профиль", callback{Kind: cbProfile})}
+	if support {
+		rows = append(rows, btn("💬 Поддержка", callback{Kind: cbSupport}))
+	}
 	return screen{text: "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\n" +
 		"Собрали беговые старты из разных календарей в одном месте. Выбери город, даты и дистанцию — покажу, куда можно заявиться.",
-		kb: keyboard(btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}),
-			btn("👤 Мой профиль", callback{Kind: cbProfile}))}
+		kb: keyboard(rows...)}
 }
 
 // onMenu — «назад» в главное меню правкой сообщения. Экран от фильтров не
@@ -878,7 +884,7 @@ func (b *Bot) onMenu(ctx context.Context, q *models.CallbackQuery, _ callback) s
 		b.logger().Error("menu", "err", err)
 		return errNotice
 	}
-	if err := b.show(ctx, q, stamp(mainMenu(), v)); err != nil {
+	if err := b.show(ctx, q, stamp(mainMenu(b.supportChat != 0), v)); err != nil {
 		b.logger().Warn("show menu", "err", err)
 	}
 	return ""
@@ -951,10 +957,14 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 const maxCityInput = 64
 
 // onText: любое текстовое сообщение не-команда в личном чате — запрос: город
-// или название забега. Единственное состояние «жду ввод» — город проживания
-// профиля (D-10): при действующей отметке ожидания текст сохраняется в
-// профиль, в поиск и в фильтры не идёт; после истечения окна и без отметки
-// это запрос, как описано ниже. Точное название города страны фильтров
+// или название забега. Состояний «жду ввод» два, и они не действуют
+// одновременно (D-10 Phase 11): обращение в поддержку и город проживания
+// профиля. Порядок такой: поддержка, город проживания, поиск. При действующей
+// отметке поддержки текст уходит в группу (первой проверкой, до приведения к
+// одной строке и до предела длины: обращение длиннее 64 символов и с переводами
+// строк — обычное), при отметке города — в профиль; в поиск и в фильтры он не
+// идёт. После истечения окна и без отметок это запрос, как описано ниже.
+// Точное название города страны фильтров
 // выбирает город, как раньше; иначе бот ищет события по названию и городу и
 // показывает их кнопками вместе с подсказками городов.
 // Поиск фильтры не меняет и идёт по всем будущим событиям страны фильтров
@@ -962,6 +972,9 @@ const maxCityInput = 64
 func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	m := u.Message
 	if m == nil || m.From == nil {
+		return
+	}
+	if b.supportText(ctx, m) { // обращение в поддержку (Phase 11): в город и в поиск не идёт
 		return
 	}
 	v := 0 // версия фильтров для кнопок ответа; известна после чтения фильтров

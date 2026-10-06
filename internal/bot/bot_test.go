@@ -147,13 +147,20 @@ func (c call) button(t *testing.T, textPrefix string) string {
 	return ""
 }
 
+// newTestBot — бот без группы поддержки: так собираются все тесты, кроме
+// сценариев поддержки (newSupportBot), и этим доказывается «выключено = как раньше».
 func newTestBot(t *testing.T, api *fakeAPI, s *store.Store) *Bot {
+	t.Helper()
+	return newBotWith(t, api, s, Config{Token: "123:TEST"})
+}
+
+func newBotWith(t *testing.T, api *fakeAPI, s *store.Store, cfg Config) *Bot {
 	t.Helper()
 	opts := []tgbot.Option{tgbot.WithServerURL(api.srv.URL), tgbot.WithSkipGetMe(), tgbot.WithNotAsyncHandlers()}
 	if forcedProfileStatus != "" { // непусто только внутри TestProfileNoLimits
 		opts = append(opts, tgbot.WithMiddlewares(forceProfileStatusMW(forcedProfileStatus)))
 	}
-	b, err := New(Config{Token: "123:TEST"}, s, opts...)
+	b, err := New(cfg, s, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}

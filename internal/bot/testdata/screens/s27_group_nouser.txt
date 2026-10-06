@@ -1,0 +1,8 @@
+method: sendMessage
+parse_mode: HTML
+---
+💬 <b>Обращение</b>
+От: Иван · id <code>1003</code>
+
+Привет
+---

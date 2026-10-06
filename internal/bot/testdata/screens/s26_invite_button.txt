@@ -1,0 +1,11 @@
+method: editMessageText
+parse_mode: HTML
+---
+💬 <b>Поддержка</b>
+
+Напишите вопрос или опишите проблему одним текстовым сообщением. Следующее сообщение в течение 10 минут уйдёт в поддержку.
+---
+[Отмена] → h:x
+method: answerCallbackQuery
+text: 
+show_alert: 

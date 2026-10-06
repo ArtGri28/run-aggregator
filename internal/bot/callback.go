@@ -37,6 +37,7 @@ import (
 //	u:<b|n|z>:v<P>                   анкета: начать / пропустить / готово
 //	u:a:<g|a|k|c|s>:<w|e>:v<P>       показать вопрос (w — анкета, e — правка ответа)
 //	u:s:<поле>:<значение>:<w|e>:v<P> сохранить ответ
+//	h:<o|r|x>                        поддержка: открыть из меню / ответить / отмена (без версии)
 //
 // Версия — всегда последнее поле. f: без версии — формат до Phase 8 (кнопки
 // старых сообщений): разбирается с Legacy и считается устаревшим; encode его
@@ -78,6 +79,10 @@ const (
 	cbProfAsk   // u:a
 	cbProfSave  // u:s
 	cbProfDone  // u:z
+
+	cbSupport       // h:o
+	cbSupportReply  // h:r
+	cbSupportCancel // h:x
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -156,6 +161,10 @@ var profLetters = map[cbKind]string{cbProfStart: "b", cbProfSkip: "n", cbProfDon
 // старого сообщения значил бы другой диапазон, поэтому такая кнопка устарела.
 var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "w": cbPeriod, "c": cbCity, "b": cbBucket, "n": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
 var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbPeriod: "w", cbCity: "c", cbBucket: "n", cbType: "t", cbCountry: "k", cbReset: "x"}
+
+// Кнопки поддержки не меняют ни профиль, ни фильтры, поэтому версии у них нет.
+var hKinds = map[string]cbKind{"o": cbSupport, "r": cbSupportReply, "x": cbSupportCancel}
+var hLetters = map[cbKind]string{cbSupport: "o", cbSupportReply: "r", cbSupportCancel: "x"}
 
 var dKinds = map[string]cbKind{"m": cbDupeAsk, "y": cbDupeYes, "n": cbDupeNo, "x": cbDupeRej, "s": cbDupeSkip}
 var dLetters = map[cbKind]string{cbDupeAsk: "m", cbDupeYes: "y", cbDupeNo: "n", cbDupeRej: "x", cbDupeSkip: "s"}
@@ -348,6 +357,13 @@ func parseCallback(data string) (callback, error) {
 		return callback{Kind: k, ID: id}, err
 	case "u":
 		return parseProfile(p)
+	case "h":
+		if len(p) == 2 {
+			if k, ok := hKinds[p[1]]; ok {
+				return callback{Kind: k}, nil
+			}
+		}
+		return callback{}, errCallback
 	}
 	return callback{}, errCallback
 }
@@ -425,6 +441,8 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("u:a:%s:%s:v%d", c.Field, c.Mode, c.V)
 	case cbProfSave:
 		s = fmt.Sprintf("u:s:%s:%s:%s:v%d", c.Field, c.Value, c.Mode, c.V)
+	case cbSupport, cbSupportReply, cbSupportCancel:
+		s = "h:" + hLetters[c.Kind]
 	default:
 		return "", errCallback
 	}

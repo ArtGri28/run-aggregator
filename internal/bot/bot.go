@@ -26,11 +26,12 @@ type Bot struct {
 	Runner  *ingest.Runner
 	Sources []ingest.Source
 
-	api    *tgbot.Bot
-	admins map[int64]bool
-	loc    *time.Location
-	log    *slog.Logger
-	token  string // только для маскирования в логах (redactHandler)
+	api         *tgbot.Bot
+	admins      map[int64]bool
+	loc         *time.Location
+	log         *slog.Logger
+	token       string // только для маскирования в логах (redactHandler)
+	supportChat int64  // группа поддержки; 0 — поддержка выключена целиком (D-03)
 
 	// lastErr — время последней ошибки библиотеки Telegram (UnixNano; 0 — не
 	// было); active — число выполняющихся обработчиков.
@@ -53,7 +54,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("часовой пояс Europe/Moscow: %w", err)
 	}
-	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc, token: cfg.Token}
+	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc, token: cfg.Token, supportChat: cfg.SupportChatID}
 	for _, id := range cfg.Admins {
 		b.admins[id] = true
 	}
@@ -81,6 +82,13 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithCallbackQueryDataHandler("g:", tgbot.MatchTypePrefix, b.cb(b.onSearch)),
 		tgbot.WithCallbackQueryDataHandler("r:", tgbot.MatchTypePrefix, b.cb(b.onRun)),
 		tgbot.WithCallbackQueryDataHandler("d:", tgbot.MatchTypePrefix, b.cb(b.onDupe)),
+	}
+	if b.supportChat != 0 {
+		// Без группы ничего не регистрируется: /support остаётся неизвестной командой,
+		// а кнопка h: из старого сообщения получает «Кнопка устарела» (onDefault).
+		all = append(all,
+			tgbot.WithMessageTextHandler("support", tgbot.MatchTypeCommandStartOnly, b.onSupportCmd),
+			tgbot.WithCallbackQueryDataHandler("h:", tgbot.MatchTypePrefix, b.cb(b.onSupport)))
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {
@@ -291,7 +299,7 @@ func cbPrefix(data string) string {
 	if data == "m" {
 		return "m"
 	}
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u') {
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h') {
 		return data[:1]
 	}
 	return "?"
@@ -305,5 +313,7 @@ func (b *Bot) onDefault(ctx context.Context, api *tgbot.Bot, u *models.Update) {
 		b.answer(ctx, u.CallbackQuery, staleNotice)
 	case u.Message != nil && u.Message.Text != "":
 		b.onText(ctx, api, u)
+	case u.Message != nil && b.supportChat != 0:
+		b.supportNonText(ctx, u.Message) // сообщение без текста: отказ только в режиме обращения
 	}
 }
