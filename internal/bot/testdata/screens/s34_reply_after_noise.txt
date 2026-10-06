@@ -1,0 +1,6 @@
+method: sendMessage
+parse_mode: 
+---
+Проверка
+---
+[💬 Ответить] → h:r

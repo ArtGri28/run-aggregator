@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -562,6 +563,27 @@ func TestS35SupportDisabled(t *testing.T) {
 		t.Errorf("кнопки h: изменили базу")
 	}
 
+	// 8. Сообщения из любой группы (текст, команда, reply) — игнорируются, как до фазы; на
+	// каждое одна запись Info с идентификатором и типом чата, без имён и текста (Q-7).
+	state = dbState(t)
+	before := strings.Count(logs.String(), "unconfigured group")
+	for i, u := range []*models.Update{
+		named(inChat(textUpdate(0, "Приметныйтекст9чужой"), strangerGroup, models.ChatTypeSupergroup, 2001, 830, 0), "Чужоеимя", "", "alien_user"),
+		inChat(commandUpdate(0, "/start"), strangerGroup, models.ChatTypeGroup, 2001, 831, 0),
+		inChat(textUpdate(0, "ответ"), supportGroup, models.ChatTypeSupergroup, 2001, 832, 101),
+	} {
+		if calls := feed(b, api, u); len(calls) != 0 {
+			t.Fatalf("сообщение %d из группы без поддержки: вызовы %+v, want 0", i+1, calls)
+		}
+	}
+	if got := strings.Count(logs.String(), "unconfigured group") - before; got != 3 {
+		t.Errorf("записей о сообщениях из групп %d, want 3:\n%s", got, logs)
+	}
+	noLeak(t, "логи", logs.String(), "Приметныйтекст9чужой", "Чужоеимя", "alien_user")
+	if dbState(t) != state {
+		t.Errorf("сообщения из групп изменили базу")
+	}
+
 	// Таблицы поддержки пусты на всех шагах.
 	if got := supportState(t); got != support {
 		t.Errorf("таблицы поддержки не пусты: %s", got)
@@ -811,4 +833,615 @@ func TestS31SupportSendFailure(t *testing.T) {
 		}
 	}
 	noLeak(t, "таблицы поддержки", supportState(t), secret, "Анна", "anna_p")
+}
+
+// --- Сторона группы (11-04): сценарии S-32…S-34 ---
+
+// strangerGroup — чужая группа, куда добавили бота: номера её сообщений могут
+// совпасть с номерами обращений в настоящей группе.
+const strangerGroup int64 = -1005550001111
+
+// inChat переносит сообщение-апдейт в групповой чат: from — отправитель (0 — без
+// From, как у анонимного администратора группы), id — номер сообщения, replyTo —
+// номер сообщения, на которое оно отвечает (0 — не reply).
+func inChat(u *models.Update, chatID int64, typ models.ChatType, from int64, id, replyTo int) *models.Update {
+	m := u.Message
+	m.Chat = models.Chat{ID: chatID, Type: typ}
+	m.ID = id
+	m.From, m.SenderChat = &models.User{ID: from}, nil
+	if from == 0 {
+		m.From, m.SenderChat = nil, &models.Chat{ID: chatID, Type: typ}
+	}
+	m.ReplyToMessage = nil
+	if replyTo != 0 {
+		m.ReplyToMessage = &models.Message{ID: replyTo, Chat: m.Chat}
+	}
+	return u
+}
+
+// groupReply — текстовый ответ участника группы поддержки на сообщение replyTo.
+func groupReply(from int64, id, replyTo int, text string) *models.Update {
+	return inChat(textUpdate(0, text), supportGroup, models.ChatTypeSupergroup, from, id, replyTo)
+}
+
+// groupMedia — ответ участника группы вложением указанного вида.
+func groupMedia(from int64, id, replyTo int, kind string) *models.Update {
+	return inChat(mediaUpdate(0, kind), supportGroup, models.ChatTypeSupergroup, from, id, replyTo)
+}
+
+// toUser — вызовы, ушедшие в личный чат пользователя 1001.
+func toUser(calls []call) (out []call) {
+	for _, c := range calls {
+		if c.Form["chat_id"] == "1001" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// onlyFields проверяет, что в запросе только перечисленные поля: пользователю
+// уходит текст ответа и кнопка, ничего другого (D-06, D-11).
+func onlyFields(t *testing.T, c call, fields ...string) {
+	t.Helper()
+	allowed := map[string]bool{}
+	for _, f := range fields {
+		allowed[f] = true
+	}
+	for k := range c.Form {
+		if !allowed[k] {
+			t.Errorf("%s: лишнее поле %q (%q)", c.Method, k, c.Form[k])
+		}
+	}
+}
+
+// replyParams разбирает reply_parameters вызова.
+func replyParams(t *testing.T, c call) models.ReplyParameters {
+	t.Helper()
+	var rp models.ReplyParameters
+	if err := json.Unmarshal([]byte(c.Form["reply_parameters"]), &rp); err != nil {
+		t.Fatalf("reply_parameters %q: %v", c.Form["reply_parameters"], err)
+	}
+	return rp
+}
+
+// userAPI — режим ответов фиктивного Bot API на отправку пользователю 1001:
+// "" и ok — успех, 403, 400, 500 — ошибка, 429once — первый вызов 429 с
+// retry_after 1, 429long — всегда 429 с retry_after больше предела ожидания.
+// В описании каждой ошибки — приметный текст для проверки логов.
+type userAPI struct {
+	mode atomic.Value
+	once atomic.Bool
+}
+
+func (u *userAPI) set(mode string) {
+	u.once.Store(false)
+	u.mode.Store(mode)
+}
+
+func (u *userAPI) script(c call, _ int) string {
+	if c.Method != "sendMessage" || c.Form["chat_id"] != "1001" {
+		return ""
+	}
+	mode, _ := u.mode.Load().(string)
+	switch mode {
+	case "403":
+		return apiErr(403, "Forbidden: bot was blocked by the user SECRET7", 0)
+	case "400":
+		return apiErr(400, "Bad Request: chat not found SECRET7", 0)
+	case "500":
+		return apiErr(500, "Internal Server Error: SECRET7", 0)
+	case "429once":
+		if !u.once.Swap(true) {
+			return apiErr(429, "Too Many Requests: retry after 1 SECRET7", 1)
+		}
+	case "429long":
+		return apiErr(429, "Too Many Requests: retry after 120 SECRET7", 120)
+	}
+	return ""
+}
+
+// groupBroken — ответ группы на каждую отправку в неё, пока в body непустая строка
+// (тело ответа Bot API); пусто — успех.
+func groupBroken(body *atomic.Value) script {
+	return func(c call, _ int) string {
+		if c.Method != "sendMessage" || c.Form["chat_id"] != strconv.FormatInt(supportGroup, 10) {
+			return ""
+		}
+		b, _ := body.Load().(string)
+		return b
+	}
+}
+
+// openRequest — обращение пользователя id в группу: возвращает номер сообщения
+// бота в группе (его связка ведёт к id).
+func openRequest(t *testing.T, b *Bot, api *fakeAPI, id int64, text string) int {
+	t.Helper()
+	feed(b, api, commandUpdate(id, "/support"))
+	feed(b, api, textUpdate(id, text))
+	n, err := strconv.Atoi(dbScalar(t, `SELECT message_id::text FROM support_messages WHERE tg_id = $1 ORDER BY message_id DESC LIMIT 1`, id))
+	if err != nil {
+		t.Fatalf("обращение %d не создало связку: %v", id, err)
+	}
+	return n
+}
+
+// replyEnv — бот с группой и администратором 3001; пользователь 1001 уже написал
+// обращение (сообщение M в группе). scripts идут раньше ответов группы.
+func replyEnv(t *testing.T, scripts ...script) (*fakeAPI, *Bot, int) {
+	t.Helper()
+	s := storetest.Open(t)
+	api := fakeTelegram(t, append(scripts, groupReplies())...)
+	b := newBotWith(t, api, s, Config{Token: "123:TEST", SupportChatID: supportGroup, Admins: []int64{3001}})
+	return api, b, openRequest(t, b, api, 1001, "Не открывается карточка забега")
+}
+
+// TestS32SupportReply — S-32: ответ участника группы доходит до автора обращения
+// новым сообщением бота с кнопкой «💬 Ответить» (D-04, D-06, D-11, D-16, T-11-19,
+// T-11-23, T-11-40).
+func TestS32SupportReply(t *testing.T) {
+	logs := captureLogs(t)
+	var user userAPI
+	api, b, m := replyEnv(t, user.script)
+	olga := func(u *models.Update) *models.Update { return named(u, "Ольга", "Сидорова", "olga_sup") }
+	const secret = "Приметный7ответ"
+	delivered := 0
+	// deliver: один вызов Bot API — сообщение автору обращения с текстом как есть, без
+	// разметки, с одной кнопкой; в группу ничего; таблицы не изменились.
+	deliver := func(u *models.Update, text string) call {
+		t.Helper()
+		state, support := dbState(t), supportState(t)
+		calls := feed(b, api, u)
+		if len(calls) != 1 || calls[0].Method != "sendMessage" || calls[0].Form["chat_id"] != "1001" || calls[0].Form["text"] != text {
+			t.Fatalf("ответ: вызовы %+v, want одно сообщение автору обращения с текстом ответа", calls)
+		}
+		onlyFields(t, calls[0], "chat_id", "text", "reply_markup", "link_preview_options")
+		if btns := calls[0].buttons(t); len(btns) != 1 || btns[0].Text != "💬 Ответить" || btns[0].CallbackData != "h:r" {
+			t.Fatalf("кнопки ответа: %+v, want одна «💬 Ответить» → h:r", btns)
+		}
+		formsLeak(t, calls, "Ольга", "Сидорова", "olga_sup", "2001", "3001")
+		if dbState(t) != state || supportState(t) != support {
+			t.Errorf("ответ изменил таблицы")
+		}
+		delivered++
+		return calls[0]
+	}
+
+	// 1. Текст с переводом строки доходит дословно.
+	text := "Здравствуйте!\nОткройте /start и попробуйте ещё раз."
+	reply := deliver(olga(groupReply(2001, 900, m, text)), text)
+	matchSnapshot(t, "s32_reply", renderCall(t, reply))
+
+	// 2. HTML-символы не разбираются как разметка: текст как введён, parse_mode пуст.
+	html := `<b>X</b> & "Y"`
+	matchSnapshot(t, "s32_reply_html", renderCall(t, deliver(olga(groupReply(2001, 901, m, html)), html)))
+
+	// 3. Второй ответ на то же обращение; ответ анонимного администратора (без From) и
+	// администратора из ADMIN_TG_IDS доставляются так же (D-04).
+	deliver(olga(groupReply(2002, 902, m, "второй ответ "+secret)), "второй ответ "+secret)
+	deliver(groupReply(0, 903, m, "от анонимного администратора"), "от анонимного администратора")
+	deliver(groupReply(3001, 904, m, "от администратора"), "от администратора")
+
+	// 4. «💬 Ответить»: приглашение новым сообщением, сообщение с ответом остаётся, отметка стоит.
+	calls := raw(b, api, 1001, reply.buttons(t)[0].CallbackData)
+	matchSnapshot(t, "s32_invite", renderAll(t, calls))
+	if len(calls) != 2 || calls[0].Method != "sendMessage" || calls[1].Method != "answerCallbackQuery" || calls[1].Form["text"] != "" {
+		t.Fatalf("«Ответить»: вызовы %+v, want приглашение новым сообщением и один пустой ответ на callback", calls)
+	}
+	if !awaitingUntil(t, 1001, fixtureNow.Add(awaitSupportFor)) {
+		t.Fatalf("после «Ответить» отметки нет: %s", supportState(t))
+	}
+
+	// 5. Следующий текст — новое обращение с новой связкой; режим снят.
+	group, rest := split(feed(b, api, textUpdate(1001, "Спасибо, ещё вопрос")))
+	if len(group) != 1 || len(rest) != 1 || rest[0].Form["text"] != supportConfirm || linkCount(t) != "2" || !noAwaiting(t, 1001) {
+		t.Fatalf("новое обращение: группа %d, прочее %+v, %s", len(group), rest, supportState(t))
+	}
+	if m2 := dbScalar(t, `SELECT max(message_id)::text FROM support_messages`); m2 == strconv.Itoa(m) {
+		t.Fatalf("новая связка с тем же номером %d", m)
+	}
+
+	// 6. Режима «чат» нет: текст без нажатия кнопки идёт в поиск, в группу не уходит.
+	calls = feed(b, api, textUpdate(1001, "марафон москва"))
+	if g, r := split(calls); len(g) != 0 || len(r) != 1 || r[0].Form["chat_id"] != "1001" {
+		t.Fatalf("текст без кнопки: вызовы %+v, want один ответ поиска", calls)
+	}
+
+	// 7. Ответ на старое обращение (30 суток спустя): связка бессрочна (Q-6).
+	setNow(b, 30*24*time.Hour)
+	deliver(olga(groupReply(2001, 905, m, "ответ через месяц")), "ответ через месяц")
+
+	// 8. Сбой доставки: пользователю ничего не доходит, в группу — одно сообщение ответом
+	// на сообщение отвечавшего (подробно — S-33).
+	user.set("500")
+	calls = feed(b, api, olga(groupReply(2001, 906, m, "не дойдёт")))
+	group, _ = split(calls)
+	if len(group) != 1 || replyParams(t, group[0]).MessageID != 906 {
+		t.Fatalf("сбой доставки: вызовы %+v, want одно сообщение в группу ответом на 906", calls)
+	}
+
+	// 9. D-15: в логах нет текста ответа, имени отвечавшего и Telegram ID; есть вид события.
+	noLeak(t, "логи", logs.String(), secret, "Ольга", "Сидорова", "olga_sup", "Не открывается", "ещё вопрос", "SECRET7")
+	for _, id := range []int64{1001, 2001, 2002, 3001} {
+		if idRE(id).MatchString(logs.String()) {
+			t.Errorf("в логах есть Telegram ID %d:\n%s", id, logs)
+		}
+	}
+	if n := strings.Count(logs.String(), `event="reply sent"`); n != delivered {
+		t.Errorf("записей о доставленном ответе %d, want %d:\n%s", n, delivered, logs)
+	}
+	t.Logf("TRACER reply=sent button=reply next=sent")
+}
+
+// TestS33ReplyNotDelivered — S-33: недоставленный и нетекстовый ответ не теряются
+// молча, а отмечаются в группе под сообщением отвечавшего (D-18, D-11, T-11-22,
+// T-11-24).
+func TestS33ReplyNotDelivered(t *testing.T) {
+	shortRetry(t)
+	logs := captureLogs(t)
+	var user userAPI
+	var groupBody atomic.Value // что отвечает группа на отправку сообщения о недоставке; пусто — успех
+	api, b, m := replyEnv(t, user.script, groupBroken(&groupBody))
+	const secret = "Приметный7ответ"
+	const caption = "приметная подпись"
+	olga := func(u *models.Update) *models.Update { return named(u, "Ольга", "Сидорова", "olga_sup") }
+	last := m // номер последнего сообщения бота в группе: каждое сообщение о недоставке получает следующий
+	// notice: ответ отвечавшего (номер id) не дошёл до пользователя; в группу ушло ровно
+	// одно сообщение ответом на сообщение отвечавшего, пользователю — attempts вызовов.
+	notice := func(u *models.Update, id, attempts int, want string) call {
+		t.Helper()
+		calls := feed(b, api, u)
+		group, _ := split(calls)
+		if len(group) != 1 || len(toUser(calls)) != attempts || len(calls) != 1+attempts {
+			t.Fatalf("недоставленный ответ: вызовы %+v, want %d к пользователю и одно сообщение в группу", calls, attempts)
+		}
+		last++
+		if rp := replyParams(t, group[0]); rp.MessageID != id || !rp.AllowSendingWithoutReply {
+			t.Fatalf("reply_parameters = %+v, want message_id %d (сообщение отвечавшего, не обращение %d) и разрешение отправки без ответа", rp, id, m)
+		}
+		if group[0].Form["text"] != want || group[0].Form["parse_mode"] != "" || group[0].Form["reply_markup"] != "" {
+			t.Fatalf("сообщение в группе: %+v, want обычный текст %q без клавиатуры", group[0].Form, want)
+		}
+		formsLeak(t, group, secret, caption, "Ольга", "olga_sup") // сообщение в группу не повторяет ни ответ, ни имя
+		if linkCount(t) != "1" {
+			t.Fatalf("связка пропала: %s", supportState(t))
+		}
+		return group[0]
+	}
+
+	// 1. 403: «пользователь заблокировал бота» — ответом на сообщение отвечавшего.
+	user.set("403")
+	matchSnapshot(t, "s33_blocked", renderCall(t, notice(olga(groupReply(2001, 900, m, secret)), 900, 1, groupBlocked)))
+	firstNotice := last
+
+	// 2. Иная ошибка Bot API (400, 500) — «ошибка отправки».
+	user.set("400")
+	matchSnapshot(t, "s33_error", renderCall(t, notice(olga(groupReply(2001, 901, m, secret)), 901, 1, groupFailed)))
+	user.set("500")
+	notice(olga(groupReply(2001, 902, m, secret)), 902, 1, groupFailed)
+
+	// 3. 429 с малым retry_after: один повтор, ответ доставлен, в группе ничего.
+	user.set("429once")
+	calls := feed(b, api, olga(groupReply(2001, 903, m, secret)))
+	if group, _ := split(calls); len(group) != 0 || len(toUser(calls)) != 2 || len(calls) != 2 {
+		t.Fatalf("429 и успешный повтор: вызовы %+v, want две попытки пользователю и ничего в группу", calls)
+	}
+
+	// 4. 429 с retry_after больше предела ожидания: без повтора, «ошибка отправки».
+	user.set("429long")
+	notice(olga(groupReply(2001, 904, m, secret)), 904, 1, groupFailed)
+
+	// 5. Нетекстовый ответ (любое вложение, в том числе с подписью): пользователю ни одного
+	// вызова, в группу — G-3 ответом на сообщение отвечавшего.
+	user.set("ok")
+	for i, kind := range []string{"photo+caption", "photo", "document", "sticker", "voice", "video"} {
+		u := inChat(mediaUpdate(0, kind), supportGroup, models.ChatTypeSupergroup, 2001, 910+i, m)
+		got := notice(named(u, "Ольга", "Сидорова", "olga_sup"), 910+i, 0, groupNotText)
+		if i == 0 {
+			matchSnapshot(t, "s33_nontext", renderCall(t, got))
+		}
+	}
+
+	// 6. Ответ на сообщение бота о недоставке и о нетекстовом ответе (связки у них нет) — ноль вызовов.
+	for i, id := range []int{firstNotice, last} {
+		if calls := feed(b, api, groupReply(2002, 920+i, id, "ответ на служебное сообщение")); len(calls) != 0 {
+			t.Fatalf("ответ на сообщение бота %d без связки: вызовы %+v, want 0", id, calls)
+		}
+	}
+
+	// 7. Если сообщение в группу не отправилось (500, 429): в лог только вид ошибки, без паники
+	// и без повторов; связка остаётся.
+	user.set("403")
+	for _, body := range []string{apiErr(500, "Internal Server Error: SECRET7", 0), apiErr(429, "Too Many Requests: retry after 1 SECRET7", 1)} {
+		groupBody.Store(body)
+		calls := feed(b, api, olga(groupReply(2001, 930, m, secret)))
+		if group, _ := split(calls); len(group) != 1 || len(calls) != 2 {
+			t.Fatalf("сбой сообщения в группу: вызовы %+v, want одна попытка в группу без повтора", calls)
+		}
+	}
+	groupBody.Store("")
+
+	// 8. Связка не удалена: пользователь разблокировал бота — следующий ответ на то же обращение доходит.
+	user.set("ok")
+	calls = feed(b, api, olga(groupReply(2001, 931, m, "после разблокировки")))
+	if len(calls) != 1 || calls[0].Form["chat_id"] != "1001" || calls[0].Form["text"] != "после разблокировки" {
+		t.Fatalf("ответ после разблокировки: вызовы %+v, want доставка пользователю", calls)
+	}
+
+	// D-15: в логах только вид события и вид ошибки.
+	noLeak(t, "логи", logs.String(), secret, caption, "Ольга", "Сидорова", "olga_sup", "SECRET7", "Не открывается", "после разблокировки")
+	for _, id := range []int64{1001, 2001, 2002} {
+		if idRE(id).MatchString(logs.String()) {
+			t.Errorf("в логах есть Telegram ID %d:\n%s", id, logs)
+		}
+	}
+	for _, want := range []string{`kind=blocked`, `kind=other`, `kind="rate limited"`, `event="reply not text"`, `msg="send group notice"`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("в логе нет %s:\n%s", want, logs)
+		}
+	}
+	noLeak(t, "таблицы поддержки", supportState(t), secret, "Ольга", "olga_sup")
+}
+
+// groupCallback — нажатие кнопки в чате группы поддержки (сообщение доступно).
+func groupCallback(from int64, data string) *models.Update {
+	u := cbUpdate(from, 7, data)
+	u.CallbackQuery.Message.Message.Chat = models.Chat{ID: supportGroup, Type: models.ChatTypeSupergroup}
+	return u
+}
+
+// TestS34GroupIgnored — S-34: в группе работает только ответ на обращение; команды,
+// поиск, кнопки, чужие и служебные сообщения игнорируются (D-01, D-05, T-11-20,
+// T-11-21, T-11-26, Q-7).
+func TestS34GroupIgnored(t *testing.T) {
+	api, b, m := replyEnv(t)
+	logs := captureLogs(t)
+	// Номера сообщений ниже не совпадают с обращением m, кроме тех шагов, где совпадение — суть проверки.
+	// quiet: ни одного вызова Bot API, ни users, ни профиль, ни таблицы поддержки не меняются.
+	quiet := func(what string, u *models.Update) {
+		t.Helper()
+		state, support := dbState(t), supportState(t)
+		if calls := feed(b, api, u); len(calls) != 0 {
+			t.Fatalf("%s: вызовы %+v, want 0", what, calls)
+		}
+		if dbState(t) != state || supportState(t) != support {
+			t.Fatalf("%s изменило базу:\n%s", what, supportState(t))
+		}
+	}
+	foreign := func() int { return strings.Count(logs.String(), "unconfigured group") }
+	members := []int64{2001, 3001} // участник и администратор из ADMIN_TG_IDS
+
+	// 1. Обычные сообщения, в том числе то, что в личном чате было бы поиском.
+	for _, from := range members {
+		quiet("обычное сообщение", inChat(textUpdate(0, "марафон москва"), supportGroup, models.ChatTypeSupergroup, from, 800, 0))
+	}
+
+	// 1а. Участник 2001 в личном чате ждёт обращения (режим ввода): в группе его текст не становится
+	// обращением, а сообщение без текста не получает отказ R-2 — тот только для личного чата.
+	feed(b, api, commandUpdate(2001, "/support"))
+	quiet("текст участника в режиме ввода", inChat(textUpdate(0, "Это не обращение"), supportGroup, models.ChatTypeSupergroup, 2001, 802, 0))
+	for _, kind := range []string{"photo", "photo+caption", "document", "sticker"} {
+		quiet("вложение в группе: "+kind, inChat(mediaUpdate(0, kind), supportGroup, models.ChatTypeSupergroup, 2001, 803, 0))
+	}
+	if !awaitingUntil(t, 2001, fixtureNow.Add(awaitSupportFor)) {
+		t.Fatalf("отметка участника 2001 изменилась: %s", supportState(t))
+	}
+
+	// 2. Команды — и у участника, и у администратора; в том числе вида /команда@имя_бота.
+	for _, cmd := range []string{"/start", "/support", "/profile", "/runs", "/stats", "/dupes", "/start@run_bot"} {
+		for _, from := range members {
+			quiet(cmd, inChat(commandUpdate(0, cmd), supportGroup, models.ChatTypeSupergroup, from, 801, 0))
+		}
+	}
+
+	// 3. Кнопки: ровно один пустой ответ на callback, обработчик не вызывается.
+	inaccessible := groupCallback(2001, "h:o")
+	inaccessible.CallbackQuery.Message = models.MaybeInaccessibleMessage{
+		Type: models.MaybeInaccessibleMessageTypeInaccessibleMessage,
+		InaccessibleMessage: &models.InaccessibleMessage{
+			Chat: models.Chat{ID: supportGroup, Type: models.ChatTypeSupergroup}, MessageID: 9},
+	}
+	for i, u := range []*models.Update{groupCallback(2001, "f:s:v1"), groupCallback(3001, "h:o"), groupCallback(3001, "r:1"), inaccessible} {
+		state, support := dbState(t), supportState(t)
+		toast := onlyToast(t, "кнопка в группе", feed(b, api, u))
+		if toast.Form["text"] != "" {
+			t.Fatalf("кнопка в группе: уведомление %q, want пустое", toast.Form["text"])
+		}
+		if i == 0 {
+			matchSnapshot(t, "s34_callback", renderCall(t, toast))
+		}
+		if dbState(t) != state || supportState(t) != support {
+			t.Fatalf("кнопка в группе изменила базу")
+		}
+	}
+
+	// 4. Ответ на сообщение участника, на сообщение бота без связки (номер за пределами связок).
+	quiet("ответ на сообщение участника", groupReply(2001, 810, 555, "согласен"))
+	quiet("ответ на сообщение бота без связки", groupReply(2001, 811, m+50, "ответ в пустоту"))
+
+	// 5. Служебные сообщения: закрепление (reply на обращение), вход и выход участников,
+	// смена названия и фото — ни вызовов, ни G-3 (дополнение А).
+	service := func(set func(m *models.Message)) *models.Update {
+		u := inChat(textUpdate(0, ""), supportGroup, models.ChatTypeSupergroup, 2001, 820, m)
+		set(u.Message)
+		return u
+	}
+	quiet("закрепление", service(func(m *models.Message) {
+		m.PinnedMessage = &models.MaybeInaccessibleMessage{Type: models.MaybeInaccessibleMessageTypeMessage, Message: &models.Message{ID: m.ReplyToMessage.ID}}
+	}))
+	quiet("вступление", service(func(m *models.Message) { m.NewChatMembers = []models.User{{ID: 5}} }))
+	quiet("выход", service(func(m *models.Message) { m.LeftChatMember = &models.User{ID: 5} }))
+	quiet("смена названия", service(func(m *models.Message) { m.NewChatTitle = "Новое название" }))
+	quiet("смена фото", service(func(m *models.Message) { m.NewChatPhoto = []models.PhotoSize{{FileID: "f"}} }))
+	quiet("удаление фото", service(func(m *models.Message) { m.DeleteChatPhoto = true }))
+
+	// 6. Перенос группы: ни вызовов, одна запись Error с новым идентификатором.
+	const migrateTo = int64(-1009876543210)
+	migrate := inChat(textUpdate(0, ""), supportGroup, models.ChatTypeSupergroup, 0, 821, 0)
+	migrate.Message.MigrateToChatID = migrateTo
+	quiet("перенос группы", migrate)
+	if n := strings.Count(logs.String(), "level=ERROR"); n != 1 || !strings.Contains(logs.String(), `msg="support group migrated" new_chat_id=`+strconv.FormatInt(migrateTo, 10)) {
+		t.Fatalf("перенос группы: ожидалась одна запись Error с новым идентификатором:\n%s", logs)
+	}
+	if foreign() != 0 {
+		t.Fatalf("сообщения из настроенной группы попали в лог о чужой группе:\n%s", logs)
+	}
+
+	// 7. Чужая группа (Q-7): текст, команда и reply на сообщение с тем же номером, что у обращения —
+	// ни вызовов, ни ответа пользователю; на каждое сообщение одна запись Info с идентификатором и
+	// типом чата, без имён и текста.
+	for _, typ := range []models.ChatType{models.ChatTypeSupergroup, models.ChatTypeGroup} {
+		before := foreign()
+		quiet("текст в чужой группе", named(inChat(textUpdate(0, "Приметныйтекст9чужой"), strangerGroup, typ, 2001, 830, 0), "Чужоеимя", "", "alien_user"))
+		quiet("команда в чужой группе", inChat(commandUpdate(0, "/support"), strangerGroup, typ, 3001, 831, 0))
+		quiet("ответ в чужой группе", named(inChat(textUpdate(0, "Приметныйтекст9чужой"), strangerGroup, typ, 2001, 832, m), "Чужоеимя", "", "alien_user"))
+		if got := foreign() - before; got != 3 {
+			t.Fatalf("чужая группа %s: записей лога %d, want 3 (по одной на сообщение):\n%s", typ, got, logs)
+		}
+		if want := "chat_id=" + strconv.FormatInt(strangerGroup, 10) + " chat_type=" + string(typ); strings.Count(logs.String(), want) < 3 {
+			t.Fatalf("в логе нет %q:\n%s", want, logs)
+		}
+	}
+	noLeak(t, "логи", logs.String(), "Приметныйтекст9чужой", "Чужоеимя", "alien_user", "марафон", "2001", "3001")
+	if strings.Count(logs.String(), "level=INFO") != foreign() {
+		t.Fatalf("в логе есть Info, кроме записей о чужой группе:\n%s", logs)
+	}
+
+	// 8. После всего перечисленного ответ участника на обращение доходит (H-4).
+	calls := feed(b, api, groupReply(2001, 840, m, "Проверка"))
+	if len(calls) != 1 || calls[0].Form["chat_id"] != "1001" {
+		t.Fatalf("ответ после шума: вызовы %+v, want одно сообщение пользователю 1001", calls)
+	}
+	matchSnapshot(t, "s34_reply_after_noise", renderCall(t, calls[0]))
+
+	// 9. Контроль: в личном чате те же команды и текст работают.
+	if calls := feed(b, api, commandUpdate(3001, "/runs")); len(calls) != 1 || calls[0].Form["chat_id"] != "3001" {
+		t.Fatalf("/runs администратора в личном чате: вызовы %+v, want ответ", calls)
+	}
+	if calls := feed(b, api, commandUpdate(1001, "/support")); len(calls) != 1 || calls[0].Form["text"] != inviteText {
+		t.Fatalf("/support в личном чате: вызовы %+v, want приглашение", calls)
+	}
+	if calls := feed(b, api, textUpdate(1002, "марафон москва")); len(calls) != 1 || calls[0].Form["chat_id"] != "1002" {
+		t.Fatalf("текст в личном чате: вызовы %+v, want ответ поиска", calls)
+	}
+	if calls := raw(b, api, 1001, "f:s"); len(calls) != 2 {
+		t.Fatalf("кнопка в личном чате: вызовы %+v, want правка и ответ", calls)
+	}
+}
+
+// supportDialog — полный диалог с приметными значениями: имя, фамилия, username и
+// Telegram ID пользователя, текст обращения, имя отвечавшего, текст ответа,
+// приметный текст в описаниях ошибок Bot API. Пройдены вход кнопкой и командой,
+// «Отмена», обращение текстом, отказы по длине и на нетекстовое сообщение, лимит,
+// сбой отправки в группу, доставленный и недоставленный ответ, нетекстовый ответ,
+// игнорируемые сообщения группы и кнопка h: вне грамматики. Возвращает логи.
+func supportDialog(t *testing.T) fmt.Stringer {
+	t.Helper()
+	shortRetry(t)
+	logs := captureLogs(t)
+	var user userAPI
+	var groupBody atomic.Value
+	s := storetest.Open(t)
+	api := fakeTelegram(t, user.script, groupBroken(&groupBody), groupReplies())
+	b := newBotWith(t, api, s, Config{Token: "123:TEST", SupportChatID: supportGroup, Admins: []int64{3001}})
+	anna := func(u *models.Update) *models.Update {
+		return named(u, "Секретимя", "Секретфамилия", "secret_user7")
+	}
+	resp := func(u *models.Update) *models.Update {
+		return named(u, "Ответчикимя", "Ответчикфамилия", "resp_user8")
+	}
+	seedSkipped(t, b, api, 1001) // строки users и профиля: проверка таблиц не пуста
+
+	// Вход кнопкой, отказы по длине и на нетекстовое сообщение, «Отмена».
+	raw(b, api, 1001, "h:o")
+	feed(b, api, anna(textUpdate(1001, strings.Repeat("Длинный7", 300))))
+	feed(b, api, anna(mediaUpdate(1001, "photo+caption")))
+	raw(b, api, 1001, "h:x")
+
+	// Вход командой и пять обращений; шестое — отказ по лимиту.
+	for i := 0; i < 6; i++ {
+		feed(b, api, anna(commandUpdate(1001, "/support")))
+		feed(b, api, anna(textUpdate(1001, "Приметныйтекст7обращения")))
+	}
+	if n := linkCount(t); n != "5" {
+		t.Fatalf("после лимита связок %s, want 5", n)
+	}
+	m, err := strconv.Atoi(dbScalar(t, `SELECT min(message_id)::text FROM support_messages`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Сбой отправки в группу (у другого пользователя: лимит 1001 исчерпан).
+	groupBody.Store(apiErr(500, "Internal Server Error: SECRET7", 0))
+	feed(b, api, commandUpdate(1002, "/support"))
+	feed(b, api, textUpdate(1002, "Приметныйтекст7обращения"))
+	groupBody.Store("")
+
+	// Ответы: доставленный, при блокировке бота, при иной ошибке, нетекстовый.
+	feed(b, api, resp(groupReply(2002, 900, m, "Приметныйтекст8ответа")))
+	user.set("403")
+	feed(b, api, resp(groupReply(2002, 901, m, "Приметныйтекст8ответа")))
+	user.set("500")
+	feed(b, api, resp(groupReply(2002, 902, m, "Приметныйтекст8ответа")))
+	user.set("ok")
+	feed(b, api, resp(groupMedia(2002, 903, m, "photo+caption")))
+
+	// Игнорируемое в группе: сообщение, команда, кнопка, ответ без связки, чужая группа, перенос.
+	feed(b, api, resp(inChat(textUpdate(0, "Приметныйтекст8ответа"), supportGroup, models.ChatTypeSupergroup, 2002, 910, 0)))
+	feed(b, api, resp(inChat(commandUpdate(0, "/support"), supportGroup, models.ChatTypeSupergroup, 2002, 911, 0)))
+	feed(b, api, groupCallback(2002, "h:o"))
+	feed(b, api, resp(groupReply(2002, 912, m+50, "Приметныйтекст8ответа")))
+	feed(b, api, resp(inChat(textUpdate(0, "Приметныйтекст8ответа"), strangerGroup, models.ChatTypeSupergroup, 2002, 913, m)))
+	migrate := inChat(textUpdate(0, ""), supportGroup, models.ChatTypeSupergroup, 0, 914, 0)
+	migrate.Message.MigrateToChatID = -1009876543210
+	feed(b, api, migrate)
+
+	// Кнопка h: вне грамматики.
+	raw(b, api, 1001, "h:z:secret_cb7")
+	return logs
+}
+
+// dialogLeaks — приметные значения supportDialog, которых не должно быть ни в логах,
+// ни в таблицах.
+var dialogLeaks = []string{"Секретимя", "Секретфамилия", "secret_user7", "Приметныйтекст7обращения", "Длинный7",
+	"Ответчикимя", "Ответчикфамилия", "resp_user8", "Приметныйтекст8ответа", "приметная подпись", "secret_cb7", "SECRET7"}
+
+// TestSupportNoTextInLogs — D-15, T-11-25: в логах полного диалога нет текста
+// обращений и ответов, имён, username, Telegram ID и описаний ошибок Bot API; есть
+// вид события и вид ошибки.
+func TestSupportNoTextInLogs(t *testing.T) {
+	logs := supportDialog(t).String()
+	noLeak(t, "логи", logs, dialogLeaks...)
+	for _, id := range []int64{1001, 1002, 2002, 3001} {
+		if idRE(id).MatchString(logs) {
+			t.Errorf("в логах есть Telegram ID %d:\n%s", id, logs)
+		}
+	}
+	for _, want := range []string{`event=sent`, `event=limited`, `event="reply sent"`, `event="reply not text"`,
+		`msg="support send failed" kind=other`, `kind=blocked`, `msg="support reply failed" kind=other`,
+		`msg="support group migrated"`, `msg="message from unconfigured group"`, `msg="callback stale" prefix=h`} {
+		if !strings.Contains(logs, want) {
+			t.Errorf("в логе нет записи %s:\n%s", want, logs)
+		}
+	}
+}
+
+// TestSupportStoresOnlyLinks — D-13, T-11-25: после полного диалога в таблицах
+// поддержки только идентификаторы и время, а ни в них, ни в users и профилях нет
+// текстов, имён и username.
+func TestSupportStoresOnlyLinks(t *testing.T) {
+	supportDialog(t)
+	if cols := dbScalar(t, `SELECT string_agg(column_name || ':' || data_type, ',' ORDER BY column_name) FROM information_schema.columns WHERE table_name = 'support_messages'`); cols !=
+		"chat_id:bigint,created_at:timestamp with time zone,message_id:integer,tg_id:bigint" {
+		t.Errorf("столбцы support_messages: %s, want только идентификаторы и время", cols)
+	}
+	if cols := dbScalar(t, `SELECT string_agg(column_name || ':' || data_type, ',' ORDER BY column_name) FROM information_schema.columns WHERE table_name = 'support_awaiting'`); cols !=
+		"expires_at:timestamp with time zone,tg_id:bigint" {
+		t.Errorf("столбцы support_awaiting: %s, want только идентификатор и время", cols)
+	}
+	if n := linkCount(t); n != "5" {
+		t.Errorf("связок %s, want 5 (сбой отправки и лимит связок не создают)", n)
+	}
+	for what, state := range map[string]string{"таблицы поддержки": supportState(t), "users": usersState(t), "user_profiles": profilesState(t), "всё": dbState(t)} {
+		noLeak(t, what, state, dialogLeaks...)
+	}
 }

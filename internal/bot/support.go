@@ -219,6 +219,96 @@ func (b *Bot) supportSay(ctx context.Context, m *models.Message, text string) {
 	}
 }
 
+// Сообщения бота в группе (G-2, G-3): обычный текст, ответом на сообщение
+// отвечавшего. Успешная доставка в группе ничего не показывает (D-18).
+const (
+	groupBlocked = "Ответ не доставлен: пользователь заблокировал бота."
+	groupFailed  = "Ответ не доставлен: ошибка отправки. Попробуйте ответить ещё раз."
+	groupNotText = "Ответ не отправлен: пользователю можно отправить только текст."
+)
+
+// onSupportGroup обрабатывает сообщение из группы поддержки; вызывается только
+// маршрутизатором chatMW, команды, поиск и кнопки сюда не доходят. Что-то делает
+// лишь ответ (reply) на сообщение бота, у которого есть связка: адресат — автор
+// обращения из связки (T-11-19), кто ответил — не проверяется (D-04, ADMIN_TG_IDS
+// не читается). Остальное — обычные сообщения, команды, ответы на чужие и
+// служебные сообщения бота — игнорируется без единого вызова и без записи.
+//
+// Пользователю уходит только текст ответа новым сообщением бота с кнопкой
+// «💬 Ответить» (D-16): без имени отвечавшего (D-06), без разметки — текст
+// отвечавшего не должен разбираться как HTML. В запрос попадает один текст, поэтому
+// вложения, пересылки и копии не уходят по построению (D-11). В лог — вид события и
+// вид ошибки, текст ответа и идентификаторы не пишутся (D-15).
+func (b *Bot) onSupportGroup(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
+	m := u.Message
+	if m == nil {
+		return
+	}
+	if m.MigrateToChatID != 0 {
+		// Группу перенесли в супергруппу: идентификатор сменился. Бот за ним не следует —
+		// новое значение SUPPORT_CHAT_ID задаёт владелец (D-22); идентификатор группы не
+		// данные пользователя.
+		b.logger().Error("support group migrated", "new_chat_id", m.MigrateToChatID)
+		return
+	}
+	if m.ReplyToMessage == nil || isServiceMessage(m) {
+		return
+	}
+	author, ok, err := b.Store.SupportAuthor(ctx, m.Chat.ID, m.ReplyToMessage.ID)
+	if err != nil {
+		b.logger().Error("support author", "err", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	if m.Text == "" { // фото (в том числе с подписью), файл, стикер, голосовое: пользователю ничего (D-11)
+		b.logger().Info("support", "event", "reply not text")
+		b.groupSay(ctx, m, groupNotText)
+		return
+	}
+	kb := keyboard(btn("💬 Ответить", callback{Kind: cbSupportReply}))
+	if err := b.send(ctx, author, screen{text: m.Text, kb: kb, plain: true}); err != nil {
+		b.logger().Warn("support reply failed", "kind", kindName(err))
+		if kind, _ := classify(err); kind == kindBlocked { // любой 403, в том числе удалённый аккаунт (дополнение Д)
+			b.groupSay(ctx, m, groupBlocked)
+		} else {
+			b.groupSay(ctx, m, groupFailed)
+		}
+		return
+	}
+	b.logger().Info("support", "event", "reply sent")
+}
+
+// isServiceMessage — служебное сообщение Telegram (закрепление, вступление и выход
+// участников, смена названия или фото, видеочат и т. п.). У закрепления есть reply
+// на закреплённое сообщение, а текста нет: без этой проверки оно было бы принято за
+// нетекстовый ответ и получило бы G-3 (дополнение А контракта).
+func isServiceMessage(m *models.Message) bool {
+	return m.PinnedMessage != nil || len(m.NewChatMembers) > 0 || m.LeftChatMember != nil ||
+		m.NewChatTitle != "" || len(m.NewChatPhoto) > 0 || m.DeleteChatPhoto ||
+		m.GroupChatCreated || m.SupergroupChatCreated || m.MessageAutoDeleteTimerChanged != nil ||
+		m.MigrateFromChatID != 0 || m.ChatBackgroundSet != nil || m.BoostAdded != nil ||
+		m.VideoChatScheduled != nil || m.VideoChatStarted != nil || m.VideoChatEnded != nil || m.VideoChatParticipantsInvited != nil ||
+		m.ForumTopicCreated != nil || m.ForumTopicEdited != nil || m.ForumTopicClosed != nil || m.ForumTopicReopened != nil ||
+		m.GeneralForumTopicHidden != nil || m.GeneralForumTopicUnhidden != nil
+}
+
+// groupSay отвечает в группе обычным текстом на сообщение m. Сбой самой отправки
+// только пишется в лог видом ошибки: повторов нет, а сообщение отвечавшего
+// остаётся недоставленным — больше сообщить о нём нечем.
+func (b *Bot) groupSay(ctx context.Context, m *models.Message, text string) {
+	_, err := b.api.SendMessage(ctx, &tgbot.SendMessageParams{
+		ChatID:             b.supportChat,
+		Text:               text,
+		ReplyParameters:    &models.ReplyParameters{MessageID: m.ID, AllowSendingWithoutReply: true},
+		LinkPreviewOptions: linkPreviewOff(),
+	})
+	if err != nil {
+		b.logger().Warn("send group notice", "kind", kindName(err))
+	}
+}
+
 // supportHeader — шапка G-1: имя, фамилия, username (если есть) и числовой id
 // автора из сообщения в момент отправки; нигде не сохраняется. Каждая часть
 // экранируется — разметка только у самой шапки.

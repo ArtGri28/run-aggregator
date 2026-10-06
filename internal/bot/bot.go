@@ -66,7 +66,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 			b.logger().Error("telegram", "err", err)
 		}),
 		tgbot.WithDefaultHandler(b.onDefault),
-		tgbot.WithMiddlewares(b.recoverMW, b.privateOnlyMW),
+		tgbot.WithMiddlewares(b.recoverMW, b.chatMW),
 		tgbot.WithAllowedUpdates(tgbot.AllowedUpdates{"message", "callback_query"}),
 		tgbot.WithMessageTextHandler("start", tgbot.MatchTypeCommandStartOnly, b.onStart),
 		tgbot.WithMessageTextHandler("profile", tgbot.MatchTypeCommandStartOnly, b.onProfileCmd),
@@ -230,18 +230,30 @@ func (b *Bot) recoverMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 	}
 }
 
-// privateOnlyMW пропускает только апдейты из личных чатов. Callback из
-// другого чата получает пустой answerCallbackQuery (IN-04), сообщения
-// отбрасываются молча; обработчик не вызывается, users не пишется.
-func (b *Bot) privateOnlyMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
+// chatMW — единственное место, где решается, чей это апдейт (библиотека
+// оборачивает middleware любой найденный обработчик, включая обработчик по
+// умолчанию, поэтому решение принимается здесь за всех). Личный чат идёт к
+// прежним обработчикам. Сообщение из группы поддержки идёт только в
+// onSupportGroup и не вызывает next: команды, поиск и админские функции в группе
+// не работают даже у администратора (D-01, D-05). Callback из любого не личного
+// чата получает пустой answerCallbackQuery (IN-04) без вызова обработчика;
+// сообщения из других групп отбрасываются с одной записью в лог (Q-7), прочие —
+// молча: users не пишется.
+func (b *Bot) chatMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 	return func(ctx context.Context, api *tgbot.Bot, u *models.Update) {
-		if !isPrivate(u) {
-			if u.CallbackQuery != nil {
-				b.answer(ctx, u.CallbackQuery, "")
-			}
-			return
+		switch {
+		case isPrivate(u):
+			next(ctx, api, u)
+		case u.CallbackQuery != nil:
+			b.answer(ctx, u.CallbackQuery, "")
+		case u.Message != nil && b.supportChat != 0 && u.Message.Chat.ID == b.supportChat:
+			b.onSupportGroup(ctx, api, u)
+		case u.Message != nil && (u.Message.Chat.Type == models.ChatTypeGroup || u.Message.Chat.Type == models.ChatTypeSupergroup):
+			// Q-7: по этой строке владелец узнаёт идентификатор своей группы, не вынося токен
+			// из процесса бота; пишется и при выключенной поддержке. Только идентификатор и тип
+			// чата — ни названия, ни отправителя, ни текста.
+			b.logger().Info("message from unconfigured group", "chat_id", u.Message.Chat.ID, "chat_type", string(u.Message.Chat.Type))
 		}
-		next(ctx, api, u)
 	}
 }
 
