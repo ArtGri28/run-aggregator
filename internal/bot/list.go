@@ -171,8 +171,8 @@ func listDate(d time.Time, year int) string {
 
 // onCard показывает карточку события (e:<id>:<стр>:v<N>). Слитое событие
 // открывает карточку корня (D-16, корень — только через store.RootEventID);
-// скрытое и несуществующее недоступно (BOT-06); отменённое и перенесённое
-// показывается с пометкой.
+// скрытое и несуществующее недоступно (BOT-06), событие выключенного вида
+// спорта — тоже (D-08); отменённое и перенесённое показывается с пометкой.
 func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) string {
 	if c.Kind != cbCard {
 		return staleNotice
@@ -207,6 +207,7 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 	if err == nil {
 		e, err = b.Store.GetEvent(ctx, root)
 	}
+	sport, _ := event.SportByCode(e.Sport) // нет в справочнике — как выключен
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return goneScreen(c.Page, v), v, true
@@ -214,7 +215,7 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 		b.logger().Error("get event", "err", err)
 		return screen{}, 0, false
 	// Слитый корень — страховка от гонки со слиянием между запросами.
-	case !e.IsListed || e.MergedIntoID != nil:
+	case !e.IsListed || e.MergedIntoID != nil || !sport.Enabled:
 		return goneScreen(c.Page, v), v, true
 	}
 	srcs, err := b.Store.EventSources(ctx, e.ID)

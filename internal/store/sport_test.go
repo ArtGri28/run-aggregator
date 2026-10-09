@@ -2,6 +2,9 @@ package store
 
 import (
 	"context"
+	"errors"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -198,6 +201,74 @@ func TestMergeSport(t *testing.T) {
 		}
 		if after := fields(rowW, rowL); after != before {
 			t.Errorf("%s: слияние изменило fields:\nдо    %s\nпосле %s", tc.name, before, after)
+		}
+	}
+}
+
+// TestSportVisibility — D-08: событие выключенного вида спорта не попадает ни
+// в один из восьми запросов выдачи, а после смены вида спорта на бег видно в
+// каждом; отбор — один фрагмент, собранный из справочника.
+func TestSportVisibility(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	from := mustDateFixed("2026-10-01")
+	all := event.Filter{From: from}
+
+	run := listEvent(t, s, "2026-10-02", "Раменское", "ramenskoe", event.TypeRoad, 10000)
+	probe := listEventIn(t, s, "BY", "2026-10-03", "Раубичи", "raubichi", event.TypeTrack, 5000)
+	const setSport = "UPDATE events SET sport = $2 WHERE id = $1"
+	exec(t, setSport, probe, "skiing")
+
+	city := func(cs []CityCount, key string) bool {
+		return slices.ContainsFunc(cs, func(c CityCount) bool { return c.Key == key })
+	}
+	// check — каждый запрос видит беговое событие, а пробное — только при visible.
+	check := func(step string, visible bool) {
+		t.Helper()
+		list, err1 := s.ListEvents(ctx, all, 100, 0)
+		search, err2 := s.SearchCandidates(ctx, "", from, 100)
+		count, err3 := s.CountEvents(ctx, all)
+		top, err4 := s.TopCities(ctx, all, 100)
+		byKey, err5 := s.SimilarCities(ctx, "", "ra", "", from, 100)
+		byName, err6 := s.SimilarCities(ctx, "", "", "Ра", from, 100)
+		_, runCity, err7 := s.CityName(ctx, "", "ramenskoe", from)
+		_, probeCity, err8 := s.CityName(ctx, "", "raubichi", from)
+		countries, err9 := s.Countries(ctx, all)
+		types, err10 := s.EventTypes(ctx, "", from)
+		if err := errors.Join(err1, err2, err3, err4, err5, err6, err7, err8, err9, err10); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+		country := func(code string) bool {
+			return slices.ContainsFunc(countries, func(c CountryCount) bool { return c.Code == code })
+		}
+		// Пара: видно беговое событие, видно пробное.
+		got := map[string][2]bool{
+			"ListEvents":                {slices.Contains(listIDs(list), run), slices.Contains(listIDs(list), probe)},
+			"SearchCandidates":          {slices.Contains(listIDs(search), run), slices.Contains(listIDs(search), probe)},
+			"CountEvents":               {count >= 1, count == 2},
+			"TopCities":                 {city(top, "ramenskoe"), city(top, "raubichi")},
+			"SimilarCities по ключу":    {city(byKey, "ramenskoe"), city(byKey, "raubichi")},
+			"SimilarCities по названию": {city(byName, "ramenskoe"), city(byName, "raubichi")},
+			"CityName":                  {runCity == 1, probeCity == 1},
+			"Countries":                 {country("RU"), country("BY")},
+			"EventTypes":                {slices.Contains(types, event.TypeRoad), slices.Contains(types, event.TypeTrack)},
+		}
+		for q, g := range got {
+			if !g[0] || g[1] != visible {
+				t.Errorf("%s, %s: беговое видно %v (want true), пробное видно %v (want %v)", step, q, g[0], g[1], visible)
+			}
+		}
+	}
+	check("skiing", false)
+	exec(t, setSport, probe, "running")
+	check("running", true)
+
+	if !regexp.MustCompile(`^ AND e\.sport IN \('[a-z_]+'(, '[a-z_]+')*\)$`).MatchString(sportVisible) {
+		t.Fatalf("sportVisible = %q", sportVisible)
+	}
+	for _, sp := range event.Sports {
+		if strings.Contains(sportVisible, "'"+string(sp.Code)+"'") != sp.Enabled {
+			t.Errorf("sportVisible = %q: вид спорта %s, включён %v", sportVisible, sp.Code, sp.Enabled)
 		}
 	}
 }

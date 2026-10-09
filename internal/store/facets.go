@@ -28,9 +28,9 @@ type CountryCount struct {
 // — разные города. Функции ниже принимают country (ISO alpha-2); пустая
 // строка — без ограничения по стране, ключи разных стран тогда объединяются.
 
-// futureListed — видимые события с датой не раньше $1.
-const futureListed = `
-	WHERE e.is_listed AND e.merged_into_id IS NULL AND e.start_date >= $1::date`
+// futureListed — видимые события включённых видов спорта с датой не раньше $1.
+var futureListed = `
+	WHERE e.is_listed AND e.merged_into_id IS NULL AND e.start_date >= $1::date` + sportVisible
 
 // similarRE — алфавит и длина ключа города для поиска по началу слова.
 // Метасимволов LIKE (% и _) в нём нет.
@@ -49,7 +49,7 @@ func scanCities(rows pgx.Rows) ([]CityCount, error) {
 // в пустую выдачу при выбранных дате, типе и дистанции. Name — самое
 // частое написание города.
 func (s *Store) TopCities(ctx context.Context, f event.Filter, limit int) ([]CityCount, error) {
-	const q = `
+	q := `
 		SELECT e.city_key, COALESCE(mode() WITHIN GROUP (ORDER BY e.city), e.city_key), count(*)
 		FROM events e` + listWhere + `
 		  AND e.city_key IS NOT NULL
@@ -83,7 +83,7 @@ func (s *Store) SimilarCities(ctx context.Context, country, prefix, name string,
 	}
 	// Название сравнивается через left(), не LIKE: метасимволы во вводе
 	// пользователя ничего не значат.
-	const q = `
+	q := `
 		SELECT e.city_key, COALESCE(mode() WITHIN GROUP (ORDER BY e.city), e.city_key), count(*)
 		FROM events e` + futureListed + `
 		  AND e.city_key IS NOT NULL
@@ -107,7 +107,7 @@ func (s *Store) SimilarCities(ctx context.Context, country, prefix, name string,
 // CityName возвращает написание города по ключу и число его событий
 // с датой не раньше from; n = 0 — города в выдаче нет (name — сам ключ).
 func (s *Store) CityName(ctx context.Context, country, key string, from time.Time) (name string, n int, err error) {
-	const q = `
+	q := `
 		SELECT COALESCE(mode() WITHIN GROUP (ORDER BY e.city), $2::text), count(*)
 		FROM events e` + futureListed + ` AND e.city_key = $2::text
 		  AND ($3::text = '' OR e.country_code = $3::text)`
@@ -120,7 +120,7 @@ func (s *Store) CityName(ctx context.Context, country, key string, from time.Tim
 // EventTypes возвращает отсортированные типы видимых событий страны country
 // с датой не раньше from.
 func (s *Store) EventTypes(ctx context.Context, country string, from time.Time) ([]event.Type, error) {
-	const q = `SELECT DISTINCT e.event_type FROM events e` + futureListed + `
+	q := `SELECT DISTINCT e.event_type FROM events e` + futureListed + `
 		  AND ($2::text = '' OR e.country_code = $2::text) ORDER BY 1`
 	rows, err := s.db.Query(ctx, q, from, country)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *Store) EventTypes(ctx context.Context, country string, from time.Time) 
 // числа, затем по коду. Сам фильтр страны не учитывается, чтобы кнопки
 // страны не вели в пустую выдачу при выбранных дате, типе и дистанции.
 func (s *Store) Countries(ctx context.Context, f event.Filter) ([]CountryCount, error) {
-	const q = `
+	q := `
 		SELECT e.country_code, count(*)
 		FROM events e` + listWhere + `
 		GROUP BY e.country_code

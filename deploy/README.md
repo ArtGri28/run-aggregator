@@ -114,6 +114,45 @@
 
 Откат образа — `agg rollback` (слово `ROLLBACK`). Таблицы поддержки остаются, прежний образ их не читает; `goose down` не делать.
 
+## Phase 12: вид спорта
+
+**Каждый шаг на production — только по отдельному разрешению владельца на этот шаг**; сам по себе документ ничего не разрешает. Каждая команда — одной строкой. Mac — из корня репозитория; root-консоль — консоль провайдера.
+
+Что изменилось: миграция `00008` добавляет колонку `events.sport` со значением по умолчанию `running`; таблица при этом не переписывается. Новый образ `bot` и `worker`: бот показывает только события включённых видов спорта, сейчас включён один бег, поэтому экраны и выдача прежние. `docker-compose.yml`, скрипты пакета и `.env` не менялись: `ship.sh` на сверке SHA256 не останавливается, переустановка пакета не нужна. Если `ship.sh` всё же остановился на сверке — ничего не устанавливать и сообщить.
+
+### Шаги
+
+1. **Копия базы.** Перед миграцией — свежая проверенная копия: `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg backup-status' 2>&1 | tee "$HOME/run-agg-phase4/p12-backup-status.log"`, ожидается `STATUS OK` и `usable=yes`.
+2. **Состояние до выката.** `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg verify' 2>&1 | tee "$HOME/run-agg-phase4/p12-before-verify.log"`. Запомнить `events_merged=` и строки `source_run=`. В root-консоли выполнить второй запрос проверки (см. ниже) и сохранить его вывод: это счётчики прогонов до выката.
+3. **Образ.** Закоммитить изменения фазы, затем `SSH_CONFIG=~/.ssh/run_agg.conf deploy/ship.sh run-agg-vps` → `AGG LOAD OK` и `IMAGE_TAG=<TAG>`.
+4. **Preflight.** `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg preflight <TAG>'`.
+5. **Deploy.** `printf 'DEPLOY\n' | ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg deploy <TAG>'` — слово `DEPLOY` передаётся на вход: без него команда остановится на вопросе. Миграция `00008` применяется при deploy.
+6. **Проверка после выката.** Через две минуты `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg verify' 2>&1 | tee "$HOME/run-agg-phase4/p12-deploy-verify.log"`: ожидается `DEPLOY VERIFY OK`, `dedup_auto_merge_bot=false`, `dedup_auto_merge_worker=false`, `events_merged=` как до выката. Затем оба запроса проверки.
+7. **После прогонов.** Когда каждый источник прошёл прогон (расписание — раз в шесть часов), снова `ssh -F ~/.ssh/run_agg.conf run-agg-vps 'sudo -n /usr/local/sbin/agg verify' 2>&1 | tee "$HOME/run-agg-phase4/p12-after-runs-verify.log"` и оба запроса проверки.
+
+### Запросы проверки
+
+Оба запроса только читают. Каждая строка блока — отдельный запрос:
+
+```sql
+SELECT 'sport=' || sport || '|' || count(*) FROM events GROUP BY sport ORDER BY sport;
+SELECT 'run_counts=' || s.code || '|' || r.id || '|' || r.status || '|created:' || COALESCE(r.metrics->>'created', '?') || '|changed:' || COALESCE(r.metrics->>'changed', '?') || '|unchanged:' || COALESCE(r.metrics->>'unchanged', '?') FROM ingest_runs r JOIN sources s ON s.id = r.source_id WHERE r.id IN (SELECT r2.id FROM ingest_runs r2 WHERE r2.source_id = r.source_id ORDER BY r2.id DESC LIMIT 3) ORDER BY s.code, r.id;
+```
+
+Root-консоль, строка блока целиком вместо `<запрос>` (в двойных кавычках): `docker compose -f /opt/aggregator/docker-compose.yml exec -T postgres psql -U aggregator -d aggregator -Atc "<запрос>"`
+
+Первый запрос — распределение событий по видам спорта, второй — три последних прогона каждого источника: номер, статус, число созданных, изменённых и неизменённых записей.
+
+Чего ждать:
+
+- `sport=running|<n>` — одной строкой, сразу после выката; `<n>` — число всех событий. Вторая строка `sport=` — нарушение.
+- В `run_counts=` у первого прогона каждого источника после выката — `changed:0` либо единицы, как у прогонов до выката (шаг 2).
+- Изменение почти всех записей источника — признак нарушения: новый код переписал прежние записи. Такой прогон не принимать за норму и решать об откате.
+
+### Откат
+
+`agg rollback` (слово `ROLLBACK`) возвращает прежний образ. Колонка `events.sport` остаётся: прежний образ её не читает и не пишет, новые строки получают `running`. `goose down` не делать.
+
 ## Хеши
 
 `SHA256SUMS` — хеши всех файлов пакета; его собственный хеш печатается в однострочнике для root-консоли. Однострочник работает только с копией пакета во временном каталоге root: файлы в `/home/runagg` после проверки уже не читаются. Если вставка в консоли не работает, `oneliner.sh` печатает вариант из двух коротких команд: сверить хеш `SHA256SUMS` глазами, затем `bash agg-install.sh`.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,7 +18,8 @@ import (
 // $4 event_type (пустая строка — любой), $5 lo и $6 hi — пары диапазонов дистанций
 // (пусто — любая дистанция), $7 country_code (пустая строка — любая страна),
 // $8 начало и $9 конец периодов дат (пусто — без ограничения периодами).
-const listWhere = `
+// Оканчивается sportVisible.
+var listWhere = `
 	WHERE e.is_listed AND e.merged_into_id IS NULL
 	  AND e.start_date >= $1::date AND e.start_date <= $2::date
 	  AND ($3::text = '' OR e.city_key = $3::text)
@@ -28,7 +30,22 @@ const listWhere = `
 	  AND ($7::text = '' OR e.country_code = $7::text)
 	  AND (COALESCE(cardinality($8::date[]), 0) = 0 OR EXISTS (
 	        SELECT 1 FROM unnest($8::date[], $9::date[]) AS p(lo, hi)
-	        WHERE e.start_date >= p.lo AND e.start_date <= p.hi))`
+	        WHERE e.start_date >= p.lo AND e.start_date <= p.hi))` + sportVisible
+
+// sportVisible — отбор по включённым видам спорта (D-08): один фрагмент на
+// все запросы выдачи, он стоит в конце listWhere и futureListed. Коды — только
+// константы справочника event.Sports, их формат закреплён тестом; ввод
+// пользователя сюда не попадает. Параметров фрагмент не добавляет: нумерация
+// $1…$9 в listWhere прежняя.
+var sportVisible = func() string {
+	var codes []string
+	for _, sp := range event.Sports {
+		if sp.Enabled {
+			codes = append(codes, "'"+string(sp.Code)+"'")
+		}
+	}
+	return " AND e.sport IN (" + strings.Join(codes, ", ") + ")"
+}()
 
 // ListItem — строка списка выдачи.
 type ListItem struct {
@@ -65,7 +82,7 @@ func filterArgs(f event.Filter) []any {
 
 // ListEvents возвращает страницу выдачи по фильтру в порядке start_date, id.
 func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset int) ([]ListItem, error) {
-	const q = `
+	q := `
 		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status,
 		       COALESCE((SELECT array_agg(d.distance_m ORDER BY d.distance_m)
 		                 FROM event_distances d WHERE d.event_id = e.id), '{}')
@@ -100,7 +117,7 @@ func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset in
 // по которому бот ищет текстовый запрос. Сравнение слов делает бот: так оно
 // не зависит от локали базы. Дистанции не заполняются. Только читает.
 func (s *Store) SearchCandidates(ctx context.Context, country string, from time.Time, limit int) ([]ListItem, error) {
-	const q = `
+	q := `
 		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status
 		FROM events e` + futureListed + `
 		  AND ($2::text = '' OR e.country_code = $2::text)
@@ -127,7 +144,7 @@ func (s *Store) SearchCandidates(ctx context.Context, country string, from time.
 
 // CountEvents возвращает число событий выдачи по фильтру.
 func (s *Store) CountEvents(ctx context.Context, f event.Filter) (int, error) {
-	const q = `SELECT count(*) FROM events e` + listWhere
+	q := `SELECT count(*) FROM events e` + listWhere
 	var n int
 	if err := s.db.QueryRow(ctx, q, filterArgs(f)...).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count events: %w", err)

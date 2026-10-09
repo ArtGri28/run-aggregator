@@ -77,6 +77,12 @@ func SetStatus(t testing.TB, id int64, status event.Status) {
 	exec(t, "UPDATE events SET status = $1 WHERE id = $2", string(status), id)
 }
 
+// SetSport меняет вид спорта события.
+func SetSport(t testing.TB, id int64, sport event.Sport) {
+	t.Helper()
+	exec(t, "UPDATE events SET sport = $1 WHERE id = $2", string(sport), id)
+}
+
 // AgeHeartbeat сдвигает отметку компоненты назад на age.
 func AgeHeartbeat(t testing.TB, component string, age time.Duration) {
 	t.Helper()

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,59 @@ func sportSnapshot(t *testing.T) string {
 		'event_merge_records', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.merge_id, r.source_event_id) FROM event_merge_records r),
 		'event_merge_chain', (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.merge_id, c.event_id) FROM event_merge_chain c),
 		'dedup_candidates', (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id) FROM dedup_candidates c))::text`)
+}
+
+const rolloutDoc, rolloutSection = "../../deploy/README.md", "## Phase 12: вид спорта\n"
+
+// rolloutSQL — запросы проверки из памятки выката (блок ```sql раздела
+// rolloutSection): тест выполняет ровно тот текст, что записан в документе.
+// Каждая непустая строка блока — запрос; он должен только читать.
+func rolloutSQL(t *testing.T) []string {
+	t.Helper()
+	doc, err := os.ReadFile(rolloutDoc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sec, ok := strings.Cut(string(doc), "\n"+rolloutSection)
+	sec, _, _ = strings.Cut(sec, "\n## ")
+	_, block, ok2 := strings.Cut(sec, "```sql\n")
+	block, _, ok3 := strings.Cut(block, "```")
+	if !ok || !ok2 || !ok3 {
+		t.Fatalf("%s: нет блока sql в разделе %q", rolloutDoc, rolloutSection)
+	}
+	var out []string
+	for _, q := range strings.Split(block, "\n") {
+		if q = strings.TrimSpace(q); q == "" {
+			continue
+		}
+		if !strings.HasPrefix(q, "SELECT ") {
+			t.Fatalf("%s: запрос проверки не SELECT: %s", rolloutDoc, q)
+		}
+		out = append(out, q)
+	}
+	return out
+}
+
+// queryLines — строки ответа запроса из одной текстовой колонки.
+func queryLines(t *testing.T, db *sql.DB, q string) []string {
+	t.Helper()
+	rows, err := db.Query(q)
+	if err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		out = append(out, line)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	return out
 }
 
 // TestSportBeforeAfter — D-06, D-11: каталог без колонки sport один и тот же
@@ -210,7 +264,32 @@ func TestSportBeforeAfter(t *testing.T) {
 	if events < 133 || merges < 1 || rejected < 1 || withKey != 0 {
 		t.Fatalf("events %d (want ≥ 133), merges %d (≥ 1), rejected %d (≥ 1), записей с ключом sport %d (0)", events, merges, rejected, withKey)
 	}
+
+	// Запросы проверки из памятки выката — на этой же копии, после первого
+	// прогона, следующего за миграцией.
+	qs := rolloutSQL(t)
+	if len(qs) != 2 {
+		t.Fatalf("запросов проверки в памятке %d, want 2", len(qs))
+	}
+	sports, runs := queryLines(t, db, qs[0]), queryLines(t, db, qs[1])
+	if want := fmt.Sprintf("sport=running|%d", events); len(sports) != 1 || sports[0] != want {
+		t.Errorf("запрос видов спорта = %q, want одну строку %q", sports, want)
+	}
+	last := map[string]string{} // последний прогон источника: строки идут по коду и номеру
+	for _, line := range runs {
+		code, rest, _ := strings.Cut(strings.TrimPrefix(line, "run_counts="), "|")
+		last[code] = rest
+	}
+	if len(last) != len(feeds) {
+		t.Errorf("источников в запросе прогонов %d, want %d: %q", len(last), len(feeds), runs)
+	}
+	for code, rest := range last {
+		if _, counts, _ := strings.Cut(rest, "|"); !strings.HasPrefix(counts, "ok|created:0|changed:0|unchanged:") {
+			t.Errorf("последний прогон %s = %q, want ok, created:0, changed:0", code, rest)
+		}
+	}
 	if !t.Failed() {
 		t.Logf("BEFORE-AFTER OK events=%d records=%d merges=%d candidates=%d", events, records, merges, candidates)
+		t.Logf("ROLLOUT SQL OK\n%s\n%s", strings.Join(sports, "\n"), strings.Join(runs, "\n"))
 	}
 }
