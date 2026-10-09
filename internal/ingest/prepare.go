@@ -17,6 +17,7 @@ const (
 	reasonNoTitle      = "нет названия"
 	reasonBadDate      = "дата не разобрана"
 	reasonDateRange    = "дата вне диапазона"
+	reasonUnknownSport = "неизвестный вид спорта"
 )
 
 // maxRejectExamples — сколько external_id хранить примером на причину.
@@ -217,6 +218,7 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 				CityKey:         cityKey,
 				Timezone:        timezone(cityKey, region, rec.Timezone),
 				Type:            normalize.Type(rec.TypeLabel),
+				Sport:           event.SportOf(rec.Sport),
 				Status:          event.StatusScheduled,
 				Description:     normalize.Description(rec.Description),
 				Address:         normalize.Region(rec.Address),
@@ -245,11 +247,16 @@ func timezone(cityKey, region, source string) string {
 // (вне каталога, но не отбраковка).
 func check(rec SourceEvent, now, minDate, maxDate time.Time) (date time.Time, reason string, expired bool) {
 	date, dateOK := normalize.Date(rec.Date, now)
+	// Запись источника — единственный вход кода вида спорта в систему:
+	// схема проверяет только его формат (D-04, D-05).
+	_, sportOK := event.SportByCode(event.SportOf(rec.Sport))
 	switch {
 	case rec.ExternalID == "":
 		return date, reasonNoExternalID, false
 	case strings.TrimSpace(rec.Title) == "":
 		return date, reasonNoTitle, false
+	case !sportOK:
+		return date, reasonUnknownSport, false
 	case !dateOK:
 		return date, reasonBadDate, false
 	case date.Before(minDate):

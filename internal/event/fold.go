@@ -25,9 +25,11 @@ type Part struct {
 // смешивать записи: заголовок (Title, TitleNorm), даты (StartDate, EndDate,
 // StartTime — время одного источника не цепляется к дате другого), место
 // (Region, City, CityKey, Timezone, Address — адрес не цепляется к чужому
-// городу). Type — первый не other. Дистанции — объединение: значение
-// другой части в пределах DistanceTolM от уже взятого отбрасывается, метка
-// от первого, сортировка по метрам; одна часть даёт ровно normalizeDistances.
+// городу). Type — первый не other. Sport — из первой части, где он задан:
+// виды спорта разных записей не смешиваются (D-07). Дистанции —
+// объединение: значение другой части в пределах DistanceTolM от уже взятого
+// отбрасывается, метка от первого, сортировка по метрам; одна часть даёт
+// ровно normalizeDistances.
 //
 // Результат детерминирован и не зависит от порядка частей с разными
 // известными кодами — иначе каждый прогон находил бы «изменения» (Pitfall 6).
@@ -99,6 +101,7 @@ func Fold(parts []Part, cfg FoldConfig) Event {
 	if out.Type == "" {
 		out.Type = Type(first(func(e Event) string { return string(e.Type) }))
 	}
+	out.Sport = Sport(first(func(e Event) string { return string(e.Sport) }))
 
 	tol := max(cfg.DistanceTolM, 0)
 	out.Distances = make([]Distance, 0)

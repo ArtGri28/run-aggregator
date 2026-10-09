@@ -83,7 +83,8 @@ func sameCanonical(a, b Event) bool {
 	return a.Title == b.Title && a.TitleNorm == b.TitleNorm && a.StartDate.Equal(b.StartDate) && endEq &&
 		a.StartTime == b.StartTime && a.Timezone == b.Timezone && a.CountryCode == b.CountryCode &&
 		a.Region == b.Region && a.City == b.City && a.CityKey == b.CityKey && a.Address == b.Address &&
-		a.Type == b.Type && a.Description == b.Description && a.RegistrationURL == b.RegistrationURL
+		a.Type == b.Type && a.Description == b.Description && a.RegistrationURL == b.RegistrationURL &&
+		a.Sport == b.Sport
 }
 
 // normalized — как store.normalizeDistances: точные повторы, метка первого, по метрам.
@@ -145,5 +146,24 @@ func TestFoldDeterministic(t *testing.T) {
 	*got.EndDate = day(1)
 	if !reflect.DeepEqual(parts, orig) {
 		t.Fatalf("изменение результата задело вход:\n%+v", parts)
+	}
+}
+
+// TestFoldSport — вид спорта слитого события берётся из первой части по
+// приоритету источников и не зависит от порядка частей (D-07).
+func TestFoldSport(t *testing.T) {
+	p := Part{"probeg", Event{Sport: SportSkiing}}
+	m := Part{"marathonec", Event{Sport: SportRunning}}
+	rev := FoldConfig{Priority: []string{"probeg", "marathonec"}}
+	for _, parts := range [][]Part{{p, m}, {m, p}} {
+		if got := Fold(parts, prio).Sport; got != SportRunning {
+			t.Errorf("приоритет marathonec: Sport = %q, want running", got)
+		}
+		if got := Fold(parts, rev).Sport; got != SportSkiing {
+			t.Errorf("приоритет probeg: Sport = %q, want skiing", got)
+		}
+	}
+	if got := Fold([]Part{{"probeg", Event{}}, {"marathonec", Event{}}}, prio).Sport; got != "" {
+		t.Errorf("части без вида спорта: Sport = %q, want пусто", got)
 	}
 }

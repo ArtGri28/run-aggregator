@@ -90,18 +90,18 @@ const selectEventCols = `
 	id, title, title_norm, start_date, end_date,
 	COALESCE(to_char(start_time, 'HH24:MI'), ''),
 	COALESCE(timezone, ''), country_code, COALESCE(region, ''), COALESCE(city, ''),
-	COALESCE(city_key, ''), COALESCE(address, ''), event_type, status,
+	COALESCE(city_key, ''), COALESCE(address, ''), event_type, status, sport,
 	COALESCE(description, ''), COALESCE(registration_url, ''),
 	is_listed, merged_into_id, created_at, updated_at`
 
 func scanEventRow(row pgx.Row) (event.Event, error) {
 	var e event.Event
-	var eventType, status string
+	var eventType, status, sport string
 	var mergedIntoID *int64
 	err := row.Scan(
 		&e.ID, &e.Title, &e.TitleNorm, &e.StartDate, &e.EndDate,
 		&e.StartTime, &e.Timezone, &e.CountryCode, &e.Region, &e.City,
-		&e.CityKey, &e.Address, &eventType, &status,
+		&e.CityKey, &e.Address, &eventType, &status, &sport,
 		&e.Description, &e.RegistrationURL,
 		&e.IsListed, &mergedIntoID, &e.CreatedAt, &e.UpdatedAt,
 	)
@@ -110,6 +110,7 @@ func scanEventRow(row pgx.Row) (event.Event, error) {
 	}
 	e.Type = event.Type(eventType)
 	e.Status = event.Status(status)
+	e.Sport = event.Sport(sport)
 	e.MergedIntoID = mergedIntoID
 	return e, nil
 }
@@ -219,6 +220,7 @@ func canonicalFieldsEqual(old, cur event.Event) bool {
 		old.CityKey == cur.CityKey &&
 		old.Address == cur.Address &&
 		old.Type == cur.Type &&
+		old.Sport == cur.Sport &&
 		old.Status == cur.Status &&
 		old.Description == cur.Description &&
 		old.RegistrationURL == cur.RegistrationURL
@@ -228,11 +230,11 @@ const insertEventSQL = `
 	INSERT INTO events (
 		title, title_norm, start_date, end_date, start_time, timezone,
 		country_code, region, city, city_key, address,
-		event_type, status, description, registration_url
+		event_type, status, description, registration_url, sport
 	) VALUES (
 		$1, $2, $3, $4, NULLIF($5, '')::time, NULLIF($6, ''),
 		$7, NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''),
-		$12, $13, NULLIF($14, ''), NULLIF($15, '')
+		$12, $13, NULLIF($14, ''), NULLIF($15, ''), $16
 	)
 	RETURNING id, created_at, updated_at`
 
@@ -243,7 +245,7 @@ const updateEventSQL = `
 		country_code = $8, region = NULLIF($9, ''), city = NULLIF($10, ''),
 		city_key = NULLIF($11, ''), address = NULLIF($12, ''),
 		event_type = $13, status = $14, description = NULLIF($15, ''),
-		registration_url = NULLIF($16, ''), updated_at = now()
+		registration_url = NULLIF($16, ''), sport = $17, updated_at = now()
 	WHERE id = $1
 	RETURNING updated_at`
 
@@ -252,13 +254,18 @@ func eventArgs(e *event.Event) []any {
 		e.Title, e.TitleNorm, e.StartDate, e.EndDate, e.StartTime, e.Timezone,
 		e.CountryCode, e.Region, e.City, e.CityKey, e.Address,
 		string(e.Type), string(e.Status), e.Description, e.RegistrationURL,
+		string(e.Sport),
 	}
 }
 
 // canonicalize brings e to the form the database returns, so a re-save of
 // the same data compares equal (ING-05): dates become midnight UTC of their
-// own calendar day (the day pgx stores), StartTime becomes "HH:MM".
+// own calendar day (the day pgx stores), StartTime becomes "HH:MM", an
+// empty Sport becomes running (D-05).
 func canonicalize(e *event.Event) error {
+	if e.Sport == "" {
+		e.Sport = event.SportRunning
+	}
 	e.StartDate = dateOnly(e.StartDate)
 	if e.EndDate != nil {
 		d := dateOnly(*e.EndDate)
@@ -371,6 +378,7 @@ func saveEventTx(ctx context.Context, tx pgx.Tx, e *event.Event) (bool, error) {
 // source_events.fields (D-19): свои snake_case-ключи, а не имена полей Go,
 // поэтому переименование в event.Event не обнуляет старые строки; status,
 // id и служебные поля не пишутся. Неизвестные ключи при чтении игнорируются.
+// У беговой записи ключа sport нет, поэтому прежние строки не меняются (D-06).
 type sourceFields struct {
 	Title           string          `json:"title"`
 	TitleNorm       string          `json:"title_norm"`
@@ -387,6 +395,7 @@ type sourceFields struct {
 	Description     string          `json:"description,omitempty"`
 	RegistrationURL string          `json:"registration_url,omitempty"`
 	Distances       []fieldDistance `json:"distances"`
+	Sport           string          `json:"sport,omitempty"`
 }
 
 type fieldDistance struct {
@@ -408,13 +417,16 @@ func marshalFields(e *event.Event) ([]byte, error) {
 	if e.EndDate != nil {
 		f.EndDate = e.EndDate.Format(fieldsDate)
 	}
+	if e.Sport != event.SportRunning {
+		f.Sport = string(e.Sport)
+	}
 	for _, d := range normalizeDistances(e.Distances) {
 		f.Distances = append(f.Distances, fieldDistance{M: d.Meters, Label: d.Label})
 	}
 	return json.Marshal(f)
 }
 
-// unmarshalFields — обратное marshalFields.
+// unmarshalFields — обратное marshalFields; запись без ключа sport — бег.
 func unmarshalFields(raw []byte) (event.Event, error) {
 	var f sourceFields
 	if err := json.Unmarshal(raw, &f); err != nil {
@@ -429,6 +441,7 @@ func unmarshalFields(raw []byte) (event.Event, error) {
 		StartTime: f.StartTime, Timezone: f.Timezone, CountryCode: f.CountryCode,
 		Region: f.Region, City: f.City, CityKey: f.CityKey, Address: f.Address,
 		Type: event.Type(f.EventType), Description: f.Description, RegistrationURL: f.RegistrationURL,
+		Sport: event.SportOf(f.Sport),
 	}
 	if f.EndDate != "" {
 		end, err := time.Parse(fieldsDate, f.EndDate)

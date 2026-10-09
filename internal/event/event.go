@@ -27,6 +27,56 @@ const (
 	TypeOther    Type = "other"
 )
 
+// Sport — код вида спорта события (колонка events.sport).
+type Sport string
+
+const (
+	SportRunning    Sport = "running"
+	SportSkiing     Sport = "skiing"
+	SportSwimming   Sport = "swimming"
+	SportCycling    Sport = "cycling"
+	SportMultisport Sport = "multisport"
+)
+
+// SportInfo — запись справочника видов спорта.
+type SportInfo struct {
+	Code  Sport
+	Title string
+	Emoji string
+	// Enabled — показывает ли бот события этого вида спорта.
+	Enabled bool
+}
+
+// Sports — справочник видов спорта, один на проект (D-01). Enabled решает,
+// показывает ли бот события вида спорта: пока включён только бег (D-02).
+// OCR и трейл — типы бегового события (Type), а не виды спорта (D-03).
+var Sports = [...]SportInfo{
+	{SportRunning, "Бег", "🏃", true},
+	{SportSkiing, "Лыжи", "⛷", false},
+	{SportSwimming, "Плавание", "🏊", false},
+	{SportCycling, "Велоспорт", "🚴", false},
+	{SportMultisport, "Мультиспорт", "🏅", false},
+}
+
+// SportOf — вид спорта по коду записи: пустой код означает бег (D-05),
+// любой другой возвращается как есть.
+func SportOf(code string) Sport {
+	if code == "" {
+		return SportRunning
+	}
+	return Sport(code)
+}
+
+// SportByCode — запись справочника по коду; false — кода в справочнике нет.
+func SportByCode(code Sport) (SportInfo, bool) {
+	for _, s := range Sports {
+		if s.Code == code {
+			return s, true
+		}
+	}
+	return SportInfo{}, false
+}
+
 // MatchState is source_events.match_state — how a source's raw record
 // relates to a canonical event (MVP.md §4.1).
 type MatchState string
@@ -59,13 +109,16 @@ type Event struct {
 	// StartTime is "HH:MM" local time, "" if the source gave none.
 	StartTime string
 	// Timezone is an IANA name (e.g. "Europe/Moscow"), "" if unknown.
-	Timezone        string
-	CountryCode     string
-	Region          string
-	City            string
-	CityKey         string
-	Address         string
-	Type            Type
+	Timezone    string
+	CountryCode string
+	Region      string
+	City        string
+	CityKey     string
+	Address     string
+	Type        Type
+	// Sport — код из справочника видов спорта; пустое значение на входе
+	// означает бег (D-05).
+	Sport           Sport
 	Status          Status
 	Description     string
 	RegistrationURL string

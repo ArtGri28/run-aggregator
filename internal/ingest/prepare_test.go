@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"aggregator/internal/event"
 	"aggregator/internal/normalize"
 )
 
@@ -285,6 +286,40 @@ func TestPayloadStable(t *testing.T) {
 	out, _ = Prepare([]SourceEvent{r}, now, ruOnly)
 	if got, want := string(out[0].Payload), base+`,"end_date":"16/11/2026","group_key":"series:x"}`; got != want {
 		t.Errorf("payload с новыми полями =\n%s\nwant\n%s", got, want)
+	}
+	// Вид спорта — последний ключ, после всех прежних (D-06).
+	r.Address, r.Timezone, r.Sport = "парк", "Europe/Moscow", "skiing"
+	out, _ = Prepare([]SourceEvent{r}, now, ruOnly)
+	if got, want := string(out[0].Payload), base+`,"end_date":"16/11/2026","group_key":"series:x","address":"парк","timezone":"Europe/Moscow","sport":"skiing"}`; got != want {
+		t.Errorf("payload с видом спорта =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// TestPrepareSport — вид спорта записи (D-05): пусто — бег, код из
+// справочника проходит, код вне справочника отбраковывается и не становится
+// победителем серии.
+func TestPrepareSport(t *testing.T) {
+	now := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	sport := func(r SourceEvent, code string) SourceEvent { r.Sport = code; return r }
+	out, st := Prepare([]SourceEvent{
+		rec("1", "15/11/2026"), sport(rec("2", "15/11/2026"), "skiing"), sport(rec("3", "15/11/2026"), "chess"),
+	}, now, ruOnly)
+	if len(out) != 2 || out[0].Event.Sport != event.SportRunning || out[1].Event.Sport != event.SportSkiing {
+		t.Fatalf("выход = %+v, want бег и лыжи", out)
+	}
+	if r := st.Rejects[reasonUnknownSport]; st.Rejected != 1 || r.Count != 1 || len(r.Examples) != 1 || r.Examples[0] != "3" {
+		t.Errorf("Rejected %d, Rejects = %+v", st.Rejected, st.Rejects)
+	}
+
+	// Серия: ближайшая запись с неизвестным кодом не победитель.
+	series := func(id, date, code string) SourceEvent {
+		r := sport(rec(id, date), code)
+		r.GroupKey = "S"
+		return r
+	}
+	out, st = Prepare([]SourceEvent{series("a", "06/10/2026", "chess"), series("b", "13/10/2026", "")}, now, ruOnly)
+	if len(out) != 1 || out[0].Source.ExternalID != "b" || st.Collapsed != 0 || st.Rejected != 1 {
+		t.Errorf("серия: out %+v, Stats %+v; want запись b, Collapsed 0, Rejected 1", out, st)
 	}
 }
 

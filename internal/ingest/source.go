@@ -55,6 +55,9 @@ type SourceEvent struct {
 	// Timezone — IANA-зона площадки, если источник её сообщает; используется,
 	// когда зону не определяет справочник городов.
 	Timezone string `json:"timezone,omitempty"`
+	// Sport — код из справочника видов спорта (event.Sports); "" — бег.
+	// Стоит последним: payload и content_hash записей без него не меняются.
+	Sport string `json:"sport,omitempty"`
 }
 
 // RawDoc — один загруженный документ источника.
