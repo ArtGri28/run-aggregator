@@ -26,8 +26,9 @@ import (
 )
 
 // API Mini App (Phase 15). Чтение каталога (этап 2): meta, events,
-// events/{id}, cities, cities/suggest. По пользователю (этап 4): favorites
-// (чтение и запись) и profile (только чтение); пользователь — только TgID
+// events/{id}, cities, cities/suggest; календарь (этап 5): calendar. По
+// пользователю (этап 4): favorites (чтение и запись) и profile (только чтение);
+// пользователь — только TgID
 // из проверенного initData, в пути, параметрах и теле его нет. Единственная
 // таблица, в которую пишет этот пакет, — favorites (D-04, D-10). Все маршруты —
 // за Middleware; SQL здесь нет, всё через *store.Store. Контракты ответов —
@@ -38,6 +39,8 @@ const (
 	// defaultLimit и maxLimit — размер страницы по умолчанию и предел (D-11).
 	defaultLimit = 20
 	maxLimit     = 50
+	// maxCalendarDays — предел диапазона календаря в днях, включая оба края.
+	maxCalendarDays = 62
 	// rateLimit запросов чтения и writeLimit запросов записи за rateWindow на
 	// пользователя → 429 (D-11, раздел 5 плана); счётчики раздельные.
 	rateLimit  = 60
@@ -108,6 +111,7 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 	handle("GET /api/v1/meta", srv.meta)
 	handle("GET /api/v1/events", srv.events)
 	handle("GET /api/v1/events/{id}", srv.event)
+	handle("GET /api/v1/calendar", srv.calendar)
 	handle("GET /api/v1/cities", srv.cities)
 	handle("GET /api/v1/cities/suggest", srv.suggest)
 	handle("GET /api/v1/favorites", srv.favorites)
@@ -437,6 +441,31 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, listJSON{Total: total, Page: page, Pages: (total + limit - 1) / limit, Items: itemsJSON(items)})
+}
+
+// calendar — число событий выдачи по дням диапазона from…to (оба обязательны,
+// не больше maxCalendarDays дней): только дни с событиями. Фильтры и нижняя
+// граница «сегодня» — тот же разбор, что у events: счётчик дня равен total
+// у events?from=день&to=день.
+func (s *server) calendar(w http.ResponseWriter, r *http.Request) {
+	ctx, q := r.Context(), r.URL.Query()
+	f, err := s.filterQuery(q, s.today())
+	from, errFrom := time.Parse(time.DateOnly, q.Get("from"))
+	to, errTo := time.Parse(time.DateOnly, q.Get("to"))
+	if err != nil || errFrom != nil || errTo != nil || to.Before(from) || to.Sub(from) > (maxCalendarDays-1)*24*time.Hour {
+		fail(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	days, err := s.store.CountByDay(ctx, f)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	out := make([]dayJSON, 0, len(days))
+	for _, d := range days {
+		out = append(out, dayJSON{d.Date.Format(time.DateOnly), d.Count})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // event — карточка корня слияний (RootEventID). Нет события, скрыто, слито

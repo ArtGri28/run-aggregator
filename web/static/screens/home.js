@@ -1,5 +1,5 @@
 // Главная: бренд, виды спорта с числом будущих стартов (из meta), входы в
-// каталог, фильтры, избранное и профиль. Календарь — заглушка до этапа 5.
+// каталог, фильтры, календарь, избранное и профиль.
 
 import { meta } from '../api.js';
 import { el, plural, showError } from '../ui.js';
@@ -18,11 +18,6 @@ function sportTile(s) {
   }, plaque(s.code, ''), el('span', {},
     el('div', { class: 'title', text: s.title }),
     el('div', { class: 'count', text: `${s.count} ${plural(s.count, 'старт', 'старта', 'стартов')}` })));
-}
-
-function soonTile(title) {
-  return el('button', { type: 'button', class: 'tile', disabled: true },
-    el('span', { class: 'title', text: title }), el('span', { class: 'soon', text: 'скоро' }));
 }
 
 function linkTile(title, href) {
@@ -49,5 +44,5 @@ export async function render(box) {
     el('a', { class: 'btn btn-primary', href: '#/catalog', text: 'Все старты' }),
     el('a', { class: 'btn', href: '#/filters', text: 'Фильтры' })));
   box.append(el('h3', { text: 'Разделы' }),
-    el('div', { class: 'tiles' }, soonTile('Календарь'), linkTile('Избранное', '#/favorites'), linkTile('Профиль', '#/profile')));
+    el('div', { class: 'tiles' }, linkTile('Календарь', '#/calendar'), linkTile('Избранное', '#/favorites'), linkTile('Профиль', '#/profile')));
 }

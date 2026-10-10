@@ -92,7 +92,6 @@ p { margin: 0; }
 }
 .tile .title { font-weight: 600; }
 .tile .count { color: var(--hint); font-size: 14px; }
-.tile .soon { margin-left: auto; font-size: 12px; color: var(--hint); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
 .tile:disabled { opacity: .55; cursor: default; }
 
 /* Значок вида спорта / дисциплины на цветной плашке */
@@ -143,6 +142,27 @@ p { margin: 0; }
   font-weight: 600;
   vertical-align: middle;
 }
+
+/* Календарь */
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-wd { padding: 4px 0; text-align: center; color: var(--hint); font-size: 12px; }
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  line-height: 1.15;
+  text-decoration: none;
+}
+.cal-day.has { background: var(--bg-2); border-color: var(--border); }
+.cal-day.today { border-color: var(--accent); }
+.cal-day.past { color: var(--hint); opacity: .55; }
+.cal-day .num { font-weight: 600; }
+.cal-day .cnt { color: var(--accent); font-size: 11px; }
 
 /* Фильтры */
 .field { display: flex; flex-direction: column; gap: 8px; }

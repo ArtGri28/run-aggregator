@@ -1,6 +1,6 @@
 // Точка входа Mini App: инициализация Telegram.WebApp (ready, expand, тема,
 // BackButton) и маршрутизация по hash: #/ #/catalog #/filters #/event/<id>
-// #/favorites #/profile.
+// #/calendar[/<месяц или день>] #/favorites #/profile.
 // Вне Telegram (пустой initData) — только заглушка (D-09).
 
 import { el, stub } from './ui.js';
@@ -8,6 +8,7 @@ import * as home from './screens/home.js';
 import * as catalog from './screens/catalog.js';
 import * as filters from './screens/filters.js';
 import * as event from './screens/event.js';
+import * as calendar from './screens/calendar.js';
 import * as favorites from './screens/favorites.js';
 import * as profile from './screens/profile.js';
 
@@ -19,6 +20,7 @@ const ROUTES = [
   [/^#\/catalog$/, catalog],
   [/^#\/filters$/, filters],
   [/^#\/event\/(\d{1,18})$/, event],
+  [/^#\/calendar(?:\/(\d{4}-\d{2}(?:-\d{2})?))?$/, calendar],
   [/^#\/favorites$/, favorites],
   [/^#\/profile$/, profile],
 ];
@@ -44,13 +46,16 @@ function applyTheme() {
 }
 
 let current = home;
+let currentParam;
 // Список, из которого открыта карточка: туда ведёт «Назад» карточки.
 let listHash = '#/catalog';
 
 function show(screen, param) {
   current = screen;
+  currentParam = param;
   if (screen === catalog) listHash = '#/catalog';
   if (screen === favorites) listHash = '#/favorites';
+  if (screen === calendar) listHash = window.location.hash;
   const box = el('section', { class: 'screen' });
   root.replaceChildren(box);
   window.scrollTo(0, 0);
@@ -75,7 +80,11 @@ if (!tg || !tg.initData) {
   tg.expand();
   applyTheme();
   tg.onEvent('themeChanged', applyTheme);
-  tg.BackButton.onClick(() => { window.location.hash = current === event ? listHash : current.back || '#/'; });
+  // back экрана — hash или функция от параметра маршрута (календарь).
+  tg.BackButton.onClick(() => {
+    const back = current === event ? listHash : current.back;
+    window.location.hash = (typeof back === 'function' ? back(currentParam) : back) || '#/';
+  });
   window.addEventListener('hashchange', route);
   route();
 }

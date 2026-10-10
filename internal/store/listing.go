@@ -163,6 +163,32 @@ func (s *Store) CountEvents(ctx context.Context, f event.Filter) (int, error) {
 	return n, nil
 }
 
+// DayCount — число событий выдачи в день Date (полночь UTC, как start_date).
+type DayCount struct {
+	Date  time.Time
+	Count int
+}
+
+// CountByDay возвращает число событий выдачи по фильтру на каждый день, где
+// они есть, по возрастанию даты. Отбор тот же, что у CountEvents: сумма по
+// дням равна его результату. Только читает.
+func (s *Store) CountByDay(ctx context.Context, f event.Filter) ([]DayCount, error) {
+	q := `SELECT e.start_date, count(*) FROM events e` + listWhere() + `
+		GROUP BY e.start_date ORDER BY e.start_date`
+	rows, err := s.db.Query(ctx, q, filterArgs(f)...)
+	if err != nil {
+		return nil, fmt.Errorf("count by day: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (DayCount, error) {
+		var d DayCount
+		return d, row.Scan(&d.Date, &d.Count)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("count by day: %w", err)
+	}
+	return out, nil
+}
+
 // EventSource — источник события со ссылкой на его страницу.
 type EventSource struct{ Code, URL string }
 

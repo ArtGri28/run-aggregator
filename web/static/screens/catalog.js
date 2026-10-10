@@ -9,7 +9,8 @@ import { loadFilters, summary, toQuery } from './filters.js';
 
 export const back = '#/';
 
-function item(it) {
+// item — строка списка стартов; её же показывает список дня календаря.
+export function item(it) {
   const place = [shortDate(it.start_date), [flag(it.country_code), it.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
   return el('li', {}, el('a', { class: 'item', href: '#/event/' + it.id },
     plaque(it.sport, ''),

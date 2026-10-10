@@ -330,10 +330,10 @@ func TestStaticSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if files < 12 {
-		t.Fatalf("файлов статики %d, want ≥ 12", files)
+	if files < 13 {
+		t.Fatalf("файлов статики %d, want ≥ 13", files)
 	}
-	for _, p := range []string{"static/screens/favorites.js", "static/screens/profile.js"} {
+	for _, p := range []string{"static/screens/favorites.js", "static/screens/profile.js", "static/screens/calendar.js"} {
 		if _, err := fs.Stat(web.FS, p); err != nil {
 			t.Errorf("%s: %v", p, err)
 		}
@@ -584,6 +584,118 @@ func TestCities(t *testing.T) {
 		t.Fatalf("в логе нет строк запросов:\n%s", logs)
 	}
 	for _, bad := range []string{"tg_id", "Моск", "zzzzzz", "initData", "Authorization", "auth_date", "hash=", "q="} {
+		if strings.Contains(logs, bad) {
+			t.Fatalf("в логе есть %q:\n%s", bad, logs)
+		}
+	}
+}
+
+// TestCalendar — счётчики по дням согласованы с events при тех же параметрах:
+// сумма равна total, счётчик дня — total у events?from=день&to=день.
+func TestCalendar(t *testing.T) {
+	s := storetest.Open(t)
+	seedMarathonec(t, s)
+	r := newRig(t, s)
+	// Предел частоты — 60 запросов на пользователя: у каждой части свой.
+	const user, dayUser, filterUser = 21, 22, 23
+	const span = "from=2026-09-29&to=2026-11-29" // 62 дня — предел
+
+	if resp, body := r.get("/api/v1/calendar?"+span, ""); resp.StatusCode != http.StatusUnauthorized || !strings.Contains(string(body), `"unauthorized"`) {
+		t.Fatalf("без заголовка: code=%d body=%s, want 401", resp.StatusCode, body)
+	}
+
+	// sum — ответ calendar: сумма счётчиков; даты по возрастанию, в диапазоне
+	// lo…hi, счётчики больше нуля.
+	sum := func(tgID int64, query, lo, hi string) (int, []dayJSON) {
+		t.Helper()
+		var days []dayJSON
+		resp := r.getJSON(tgID, "/api/v1/calendar?"+query, http.StatusOK, &days)
+		if cc := resp.Header.Get("Cache-Control"); cc != cacheControl {
+			t.Fatalf("%s: Cache-Control = %q", query, cc)
+		}
+		n := 0
+		for i, d := range days {
+			if d.Count <= 0 || d.Date < lo || d.Date > hi || (i > 0 && d.Date <= days[i-1].Date) {
+				t.Fatalf("%s: день %+v (диапазон %s…%s)", query, d, lo, hi)
+			}
+			n += d.Count
+		}
+		return n, days
+	}
+	total := func(tgID int64, query string) int {
+		t.Helper()
+		var p listJSON
+		r.getJSON(tgID, "/api/v1/events?"+query, http.StatusOK, &p)
+		return p.Total
+	}
+
+	n, days := sum(user, span, "2026-09-29", "2026-11-29")
+	if want := total(user, span); n != want || n == 0 || len(days) < 10 {
+		t.Fatalf("сумма по дням = %d (дней %d), total events = %d", n, len(days), want)
+	}
+	if want := r.count(event.Filter{From: fixtureToday, To: time.Date(2026, 11, 29, 0, 0, 0, 0, time.UTC), CountryCode: "RU"}); n != want {
+		t.Fatalf("сумма по дням = %d, CountEvents = %d", n, want)
+	}
+	for _, d := range days {
+		if want := total(dayUser, "from="+d.Date+"&to="+d.Date); d.Count != want {
+			t.Fatalf("%s: count=%d, total events дня = %d", d.Date, d.Count, want)
+		}
+	}
+
+	// Неверные параметры → 400 bad_request; 63 дня — уже за пределом.
+	for _, q := range []string{"from=2026-09-29&to=2026-11-30", "from=2026-10-02&to=2026-10-01", "to=2026-10-31", "from=2026-10-01", "",
+		"from=2026-13-01&to=2026-10-31", "from=2026-10-01&to=31.10.2026", "from=01.10.2026&to=2026-10-31", "from=2026-10-1&to=2026-10-31",
+		span + "&periods=cm", span + "&sport=football", span + "&country=ru", span + "&country=*&city=moscow", span + "&dist=0"} {
+		if code := r.errCode(user, "/api/v1/calendar?"+q, http.StatusBadRequest); code != "bad_request" {
+			t.Fatalf("%s: %q", q, code)
+		}
+	}
+
+	// Прошедшие дни не отдаются — как у events, from поднимается до «сегодня».
+	if n, _ := sum(user, "from=2026-09-01&to=2026-10-15", "2026-09-29", "2026-10-15"); n == 0 || n != total(user, "from=2026-09-01&to=2026-10-15") {
+		t.Fatalf("from в прошлом: сумма %d", n)
+	}
+	if resp, body := r.get("/api/v1/calendar?from=2026-09-01&to=2026-09-10", r.auth(user)); resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("диапазон в прошлом: code=%d body=%s, want []", resp.StatusCode, body)
+	}
+
+	// Фильтры действуют согласованно с events.
+	storetest.SetSport(t, func() int64 {
+		var p listJSON
+		r.getJSON(filterUser, "/api/v1/events?limit=1&"+span, http.StatusOK, &p)
+		return p.Items[0].ID
+	}(), event.SportSkiing)
+	got := map[string]int{}
+	for _, q := range []string{"", "&country=RU", "&country=*", "&country=BY", "&sport=running", "&sport=skiing", "&city=moscow", "&type=trail", "&sport=running&dist=0", "&sport=running&dist=2,3&type=road"} {
+		n, _ := sum(filterUser, span+q, "2026-09-29", "2026-11-29")
+		if want := total(filterUser, span+q); n != want {
+			t.Fatalf("%s: сумма по дням = %d, total events = %d", q, n, want)
+		}
+		got[q] = n
+	}
+	if got[""] != got["&country=RU"] || got["&country=BY"] != 0 || got["&sport=skiing"] != 1 || got["&sport=running"] != got[""]-1 ||
+		got["&city=moscow"] == 0 || got["&city=moscow"] >= got[""] || got["&type=trail"] == 0 || got["&type=trail"] >= got[""] {
+		t.Fatalf("фильтры: %+v", got)
+	}
+	if resp, body := r.get("/api/v1/calendar?country=BY&"+span, r.auth(filterUser)); resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != "[]" {
+		t.Fatalf("страна без событий: code=%d body=%s, want []", resp.StatusCode, body)
+	}
+
+	// Скрытое событие из счёта дня уходит.
+	var p listJSON
+	first := days[0].Date
+	r.getJSON(filterUser, "/api/v1/events?from="+first+"&to="+first, http.StatusOK, &p)
+	storetest.HideEvent(t, p.Items[0].ID)
+	if n, _ := sum(filterUser, "from="+first+"&to="+first, first, first); n != p.Total-1 {
+		t.Fatalf("после скрытия: %d, want %d", n, p.Total-1)
+	}
+
+	// Лог (D-12): шаблон маршрута и код; без параметров запроса и пользователя.
+	logs := r.logs.String()
+	if !strings.Contains(logs, `route="GET /api/v1/calendar" status=200`) || !strings.Contains(logs, `route="GET /api/v1/calendar" status=400`) {
+		t.Fatalf("в логе нет строк запросов:\n%s", logs)
+	}
+	for _, bad := range []string{"tg_id", "from=", "to=", "2026-11-29", "moscow", "initData", "Authorization", "hash="} {
 		if strings.Contains(logs, bad) {
 			t.Fatalf("в логе есть %q:\n%s", bad, logs)
 		}

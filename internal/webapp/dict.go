@@ -151,6 +151,12 @@ type listJSON struct {
 	Items []listItemJSON `json:"items"`
 }
 
+// dayJSON — день календаря с числом событий.
+type dayJSON struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
 type favListJSON struct {
 	Total int        `json:"total"`
 	Page  int        `json:"page"`
