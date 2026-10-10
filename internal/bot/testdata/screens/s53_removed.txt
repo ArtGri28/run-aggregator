@@ -1,0 +1,9 @@
+method: editMessageReplyMarkup
+parse_mode: 
+---
+
+---
+[⭐ В избранное] → w:a:52
+method: answerCallbackQuery
+text: Убрано из избранного
+show_alert: 

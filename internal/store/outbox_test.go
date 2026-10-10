@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -170,5 +171,189 @@ func TestEnqueueChange(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(back, c) {
 			t.Errorf("строка %s %d %s читается как %+v, %v; want %+v", kind, id, payload, back, err, c)
 		}
+	}
+}
+
+// TestOutbox — операции отправки: порядок взятия, «не более одного раза»,
+// возврат, закрытие, срок годности и очистка.
+func TestOutbox(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	ev := listEvent(t, s, "2026-10-05", "Москва", "moscow", event.TypeRoad)
+	at := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	seq := 0
+	put := func(tg int64, kind string, created time.Time) int64 {
+		t.Helper()
+		seq++
+		return scalar[int64](t, `INSERT INTO outbox (tg_id, kind, event_id, dedup_key, payload, created_at)
+			VALUES ($1, $2, $3, $4, '{"link": true}', $5) RETURNING id`, tg, kind, ev, fmt.Sprintf("%s:%d", kind, seq), created)
+	}
+	// state — pending, claimed (исход неизвестен), sent, closed:<исход> или «нет».
+	state := func(id int64) string {
+		t.Helper()
+		return scalar[string](t, `SELECT COALESCE((SELECT CASE WHEN sent_at IS NOT NULL THEN 'sent'
+			WHEN done_at IS NOT NULL THEN 'closed:' || outcome
+			WHEN claimed_at IS NOT NULL THEN 'claimed' ELSE 'pending' END FROM outbox WHERE id = $1), 'нет')`, id)
+	}
+	claim := func(now time.Time) (OutboxRow, bool) {
+		t.Helper()
+		r, ok, err := s.ClaimOutbox(ctx, now)
+		if err != nil {
+			t.Fatalf("ClaimOutbox: %v", err)
+		}
+		return r, ok
+	}
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Взятие — в порядке id; строка приходит с содержимым; отметка ставится
+	// временем из параметра.
+	a, b, c := put(42, "change", at), put(43, "gone", at), put(42, "change", at)
+	r, ok := claim(at)
+	if !ok || r.ID != a || r.TgID != 42 || r.Kind != "change" || r.EventID != ev || string(r.Payload) != `{"link": true}` || !r.CreatedAt.Equal(at) {
+		t.Fatalf("первое взятие = %+v, %v; want строка %d", r, ok, a)
+	}
+	if got := scalar[bool](t, `SELECT claimed_at = $2 FROM outbox WHERE id = $1`, a, at); !got {
+		t.Error("отметка взятия не равна переданному времени")
+	}
+	if r, ok = claim(at); !ok || r.ID != b {
+		t.Fatalf("второе взятие = %+v, %v; want строка %d", r, ok, b)
+	}
+	// Взятая и не отмеченная строка повторно не берётся — ни сразу, ни при сдвиге
+	// часов на сутки; «исход неизвестен» видна запросом проверки.
+	if r, ok = claim(at); !ok || r.ID != c {
+		t.Fatalf("третье взятие = %+v, %v; want строка %d", r, ok, c)
+	}
+	for _, shift := range []time.Duration{0, time.Hour, 24 * time.Hour, 30 * 24 * time.Hour} {
+		if r, ok = claim(at.Add(shift)); ok {
+			t.Fatalf("взятие со сдвигом %v вернуло %+v: взятая строка взята повторно", shift, r)
+		}
+	}
+	const unknownQ = `SELECT count(*) FROM outbox WHERE claimed_at IS NOT NULL AND sent_at IS NULL AND done_at IS NULL`
+	if n := scalar[int64](t, unknownQ); n != 3 {
+		t.Errorf("строк с неизвестным исходом %d, want 3", n)
+	}
+
+	// Возврат делает строку снова ожидающей; она берётся первой.
+	must(s.ReleaseOutbox(ctx, b))
+	if state(b) != "pending" {
+		t.Fatalf("после возврата строка %s", state(b))
+	}
+	if r, ok = claim(at); !ok || r.ID != b {
+		t.Fatalf("взятие после возврата = %+v, %v; want строка %d", r, ok, b)
+	}
+
+	// Отправка и закрытие убирают строку из ожидающих; возврат их не трогает.
+	must(s.MarkOutboxSent(ctx, a, at))
+	must(s.CloseOutbox(ctx, b, OutboxRejected, at))
+	must(s.ReleaseOutbox(ctx, a))
+	must(s.ReleaseOutbox(ctx, b))
+	must(s.CloseOutbox(ctx, a, OutboxRejected, at)) // отправленную не закрыть
+	must(s.MarkOutboxSent(ctx, b, at))              // закрытую не отметить отправленной
+	if state(a) != "sent" || state(b) != "closed:rejected" {
+		t.Errorf("строки %s и %s; want sent и closed:rejected", state(a), state(b))
+	}
+	if _, ok = claim(at); ok {
+		t.Error("отправленная или закрытая строка взята")
+	}
+	// Отметка отправки ставится только взятой строке.
+	fresh := put(42, "change", at)
+	must(s.MarkOutboxSent(ctx, fresh, at))
+	must(s.CloseOutbox(ctx, fresh, OutboxStale, at))
+	if state(fresh) != "closed:stale" {
+		t.Errorf("ожидающая строка %s; want closed:stale — закрыть можно и невзятую", state(fresh))
+	}
+	// Исход вне формата база отвергает.
+	bad := put(42, "change", at)
+	if err := s.CloseOutbox(ctx, bad, "Не по формату", at); err == nil {
+		t.Error("исход вне формата принят")
+	}
+	if state(bad) != "pending" {
+		t.Errorf("после отказа строка %s, want pending", state(bad))
+	}
+
+	// Закрытие ожидающих строк пользователя: чужие и другие взятые не трогаются,
+	// переданная взятая закрывается.
+	exec(t, "DELETE FROM outbox")
+	p1, p2, other := put(42, "change", at), put(42, "gone", at), put(43, "change", at)
+	taken, current := put(42, "change", at), put(42, "change", at)
+	exec(t, `UPDATE outbox SET claimed_at = $1 WHERE id = ANY($2)`, at, []int64{taken, current})
+	n, err := s.CloseUserOutbox(ctx, 42, current, OutboxBlocked, at)
+	if err != nil || n != 3 {
+		t.Fatalf("CloseUserOutbox = %d, %v; want 3", n, err)
+	}
+	if got := [5]string{state(p1), state(p2), state(current), state(taken), state(other)}; got !=
+		[5]string{"closed:blocked", "closed:blocked", "closed:blocked", "claimed", "pending"} {
+		t.Errorf("после закрытия: %v", got)
+	}
+
+	// Срок годности: закрываются только ожидающие строки названных видов, созданные
+	// раньше границы; напоминания, свежие и взятые строки не затронуты.
+	exec(t, "DELETE FROM outbox")
+	cut := at.Add(-72 * time.Hour)
+	oldChange, oldGone := put(42, "change", cut.Add(-time.Second)), put(42, "gone", cut.Add(-time.Hour))
+	edge, freshChange := put(42, "change", cut), put(43, "change", at)
+	oldReminder, oldTaken := put(42, "reminder", cut.Add(-time.Hour)), put(43, "gone", cut.Add(-time.Hour))
+	exec(t, `UPDATE outbox SET claimed_at = $1 WHERE id = $2`, at, oldTaken)
+	if n, err = s.ExpireOutbox(ctx, []string{"change", "gone"}, cut, at); err != nil || n != 2 {
+		t.Fatalf("ExpireOutbox = %d, %v; want 2", n, err)
+	}
+	if got := [6]string{state(oldChange), state(oldGone), state(edge), state(freshChange), state(oldReminder), state(oldTaken)}; got !=
+		[6]string{"closed:expired", "closed:expired", "pending", "pending", "pending", "claimed"} {
+		t.Errorf("после срока годности: %v", got)
+	}
+
+	// Очистка: строки старше срока хранения удаляются в любом состоянии, свежие — нет.
+	exec(t, "DELETE FROM outbox")
+	keep := at.Add(-30 * 24 * time.Hour)
+	var olds, news []int64
+	for _, created := range []time.Time{keep.Add(-time.Second), keep} {
+		sent, closed, unknown, pending := put(42, "change", created), put(42, "change", created), put(42, "change", created), put(42, "change", created)
+		exec(t, `UPDATE outbox SET claimed_at = $2, sent_at = $2 WHERE id = $1`, sent, at)
+		exec(t, `UPDATE outbox SET claimed_at = $2, done_at = $2, outcome = 'rejected' WHERE id = $1`, closed, at)
+		exec(t, `UPDATE outbox SET claimed_at = $2 WHERE id = $1`, unknown, at)
+		if created.Before(keep) {
+			olds = append(olds, sent, closed, unknown, pending)
+		} else {
+			news = append(news, sent, closed, unknown, pending)
+		}
+	}
+	if n, err = s.PruneOutbox(ctx, keep); err != nil || n != 4 {
+		t.Fatalf("PruneOutbox = %d, %v; want 4", n, err)
+	}
+	for _, id := range olds {
+		if state(id) != "нет" {
+			t.Errorf("старая строка %d: %s, want удалена", id, state(id))
+		}
+	}
+	for _, id := range news {
+		if state(id) == "нет" {
+			t.Errorf("свежая строка %d удалена", id)
+		}
+	}
+
+	// Заблокированная другой транзакцией строка пропускается: два обработчика не
+	// ждут друг друга и не берут одну строку. Предел ожидания — на случай поломки.
+	exec(t, "DELETE FROM outbox")
+	x1, x2 := put(42, "change", at), put(42, "change", at)
+	err = s.InTx(ctx, func(tx *Store) error {
+		got, ok, err := tx.ClaimOutbox(ctx, at)
+		if err != nil || !ok || got.ID != x1 {
+			t.Errorf("взятие в транзакции = %+v, %v, %v; want строка %d", got, ok, err, x1)
+		}
+		short, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		got, ok, err = s.ClaimOutbox(short, at)
+		if err != nil || !ok || got.ID != x2 {
+			t.Errorf("взятие при заблокированной строке = %+v, %v, %v; want строка %d", got, ok, err, x2)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

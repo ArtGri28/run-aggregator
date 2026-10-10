@@ -1,0 +1,15 @@
+method: sendMessage
+parse_mode: HTML
+---
+🏔 <b>Трейл «Шарташ Карасики»</b>
+
+📅 3 октября 2026
+📍 Екатеринбург
+📏 7 · 21 км
+🏔 Трейл
+
+🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
+---
+[🔗 Регистрация] → url:https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026
+[✖️ Убрать из избранного] → w:x:52
+[⬅️ Назад] → w:p:1

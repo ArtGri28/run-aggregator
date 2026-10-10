@@ -16,6 +16,7 @@ type screen struct {
 	text  string
 	kb    *models.InlineKeyboardMarkup
 	plain bool // без parse_mode: админские сообщения
+	quiet bool // без звука (disable_notification): ночная отправка, D-13
 }
 
 // row — ряд inline-кнопок.
@@ -160,7 +161,7 @@ func attempt(ctx context.Context, sc screen, call func(screen) error) error {
 // (403) — запись в лог, без повтора.
 func (b *Bot) send(ctx context.Context, chatID int64, sc screen) error {
 	err := attempt(ctx, sc, func(sc screen) error {
-		p := &tgbot.SendMessageParams{ChatID: chatID, Text: sc.text, LinkPreviewOptions: linkPreviewOff()}
+		p := &tgbot.SendMessageParams{ChatID: chatID, Text: sc.text, LinkPreviewOptions: linkPreviewOff(), DisableNotification: sc.quiet}
 		if !sc.plain {
 			p.ParseMode = models.ParseModeHTML
 		}

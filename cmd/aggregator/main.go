@@ -255,10 +255,13 @@ func runBot(ctx context.Context) error {
 	// MON-03, MON-04: отметка бота (только пока он работает с Telegram) и
 	// инфраструктурные алерты — worker, резервные копии, БД.
 	infra := &alert.InfraLoop{Ages: s.HeartbeatAges, Watch: alert.BotWatch(), DBKey: alert.KeyPostgresDown, Admins: cfg.Admins, Send: b.SendAlert}
+	// Phase 14: сообщения пользователям из очереди шлёт только бот.
+	notify := bot.NewNotifier(b)
 	var wg sync.WaitGroup
 	wg.Go(func() { loop.Run(ctx) })
 	wg.Go(func() { digest.Run(ctx) })
 	wg.Go(func() { infra.Run(ctx) })
+	wg.Go(func() { notify.Run(ctx) })
 	wg.Go(func() {
 		heartbeat.Run(ctx, func(ctx context.Context) error { return s.Beat(ctx, "bot") }, beatEvery, func() bool { return b.Healthy(ctx) })
 	})

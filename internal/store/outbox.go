@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -89,6 +90,121 @@ func (s *Store) EnqueueChange(ctx context.Context, runID int64, c event.Change, 
 	cmd, err := s.db.Exec(ctx, q, kind, c.EventID, key, c.Payload(), now)
 	if err != nil {
 		return 0, fmt.Errorf("enqueue %s: %w", kind, err)
+	}
+	return int(cmd.RowsAffected()), nil
+}
+
+// OutboxRow — строка очереди, взятая в отправку. EventID = 0 — строка без
+// события.
+type OutboxRow struct {
+	ID        int64
+	TgID      int64
+	Kind      string
+	EventID   int64
+	Payload   []byte
+	CreatedAt time.Time
+}
+
+// Исходы строки, закрытой без доставки (колонка outcome).
+const (
+	OutboxBlocked     = "blocked"     // Telegram ответил 403
+	OutboxRejected    = "rejected"    // Telegram ответил 400 либо строку нельзя прочитать
+	OutboxExpired     = "expired"     // сообщение старше срока годности
+	OutboxStale       = "stale"       // условие сообщения больше не выполняется
+	OutboxUnfollowed  = "unfollowed"  // старт убран из избранного
+	OutboxUnavailable = "unavailable" // старт недоступен: скрыт, слит, прошёл, вид спорта выключен
+)
+
+// ClaimOutbox берёт в отправку самую старую ожидающую строку: одной записью
+// выбирает строку без отметок взятия и закрытия в порядке id (заблокированные
+// другими транзакциями пропускает) и ставит отметку взятия now. Запись
+// фиксируется сама, до вызова Bot API: взятая строка повторно не берётся
+// никогда — этим держится гарантия «не более одного раза». Нет ожидающих
+// строк — false.
+func (s *Store) ClaimOutbox(ctx context.Context, now time.Time) (OutboxRow, bool, error) {
+	const q = `
+		UPDATE outbox SET claimed_at = $1
+		WHERE id = (SELECT id FROM outbox WHERE claimed_at IS NULL AND done_at IS NULL
+		            ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED)
+		RETURNING id, tg_id, kind, COALESCE(event_id, 0), payload, created_at`
+	var r OutboxRow
+	err := s.db.QueryRow(ctx, q, now).Scan(&r.ID, &r.TgID, &r.Kind, &r.EventID, &r.Payload, &r.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OutboxRow{}, false, nil
+	}
+	if err != nil {
+		return OutboxRow{}, false, fmt.Errorf("claim outbox: %w", err)
+	}
+	return r, true, nil
+}
+
+// MarkOutboxSent отмечает взятую строку отправленной: Telegram принял
+// сообщение.
+func (s *Store) MarkOutboxSent(ctx context.Context, id int64, now time.Time) error {
+	const q = `UPDATE outbox SET sent_at = $2 WHERE id = $1 AND claimed_at IS NOT NULL AND sent_at IS NULL AND done_at IS NULL`
+	if _, err := s.db.Exec(ctx, q, id, now); err != nil {
+		return fmt.Errorf("mark outbox sent: %w", err)
+	}
+	return nil
+}
+
+// CloseOutbox закрывает строку без доставки с исходом outcome (формат колонки:
+// строчные буквы и «_»). Отправленную и уже закрытую строку не трогает.
+func (s *Store) CloseOutbox(ctx context.Context, id int64, outcome string, now time.Time) error {
+	const q = `UPDATE outbox SET done_at = $2, outcome = $3 WHERE id = $1 AND sent_at IS NULL AND done_at IS NULL`
+	if _, err := s.db.Exec(ctx, q, id, now, outcome); err != nil {
+		return fmt.Errorf("close outbox: %w", err)
+	}
+	return nil
+}
+
+// ReleaseOutbox снимает отметку взятия: строка снова ожидает. Вызывается
+// только когда сообщение заведомо не отправлялось — после ответа 429 и после
+// сбоя до вызова Bot API. Отправленную и закрытую строку не трогает.
+func (s *Store) ReleaseOutbox(ctx context.Context, id int64) error {
+	const q = `UPDATE outbox SET claimed_at = NULL WHERE id = $1 AND claimed_at IS NOT NULL AND sent_at IS NULL AND done_at IS NULL`
+	if _, err := s.db.Exec(ctx, q, id); err != nil {
+		return fmt.Errorf("release outbox: %w", err)
+	}
+	return nil
+}
+
+// CloseUserOutbox одной записью закрывает ожидающие строки пользователя и
+// строку also (взятая в отправку, получившая 403) с исходом outcome; строки
+// других пользователей и другие взятые строки не трогает. Возвращает число
+// закрытых строк.
+func (s *Store) CloseUserOutbox(ctx context.Context, tgID, also int64, outcome string, now time.Time) (int, error) {
+	const q = `
+		UPDATE outbox SET done_at = $3, outcome = $4
+		WHERE tg_id = $1 AND sent_at IS NULL AND done_at IS NULL AND (claimed_at IS NULL OR id = $2)`
+	cmd, err := s.db.Exec(ctx, q, tgID, also, now, outcome)
+	if err != nil {
+		return 0, fmt.Errorf("close user outbox: %w", err)
+	}
+	return int(cmd.RowsAffected()), nil
+}
+
+// ExpireOutbox закрывает с исходом «expired» ожидающие строки видов kinds,
+// созданные раньше before. Строки других видов и взятые строки не трогает.
+// Возвращает число закрытых строк.
+func (s *Store) ExpireOutbox(ctx context.Context, kinds []string, before, now time.Time) (int, error) {
+	const q = `
+		UPDATE outbox SET done_at = $3, outcome = $4
+		WHERE claimed_at IS NULL AND done_at IS NULL AND kind = ANY($1) AND created_at < $2`
+	cmd, err := s.db.Exec(ctx, q, kinds, before, now, OutboxExpired)
+	if err != nil {
+		return 0, fmt.Errorf("expire outbox: %w", err)
+	}
+	return int(cmd.RowsAffected()), nil
+}
+
+// PruneOutbox удаляет строки, созданные раньше before, в любом состоянии:
+// отправленные, закрытые и оставшиеся с неизвестным исходом. Возвращает число
+// удалённых строк.
+func (s *Store) PruneOutbox(ctx context.Context, before time.Time) (int, error) {
+	cmd, err := s.db.Exec(ctx, `DELETE FROM outbox WHERE created_at < $1`, before)
+	if err != nil {
+		return 0, fmt.Errorf("prune outbox: %w", err)
 	}
 	return int(cmd.RowsAffected()), nil
 }
