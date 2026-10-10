@@ -21,6 +21,10 @@ type Dictionary struct {
 	MaxPage int
 	// MaxCityInput — предел длины текста запроса города (в рунах).
 	MaxCityInput int
+	// MaxSearchCandidates — сколько будущих событий читает текстовый поиск.
+	MaxSearchCandidates int
+	// ValidCityKey — ключ города в грамматике бота.
+	ValidCityKey func(key string) bool
 	// Buckets — корзины дистанций по видам спорта; нет ключа — у вида
 	// спорта нет фильтра дистанции.
 	Buckets map[event.Sport][]Bucket
@@ -60,6 +64,7 @@ func Catalog() Dictionary {
 		FavLimit:       favLimit,
 		MaxPage:        maxPage,
 		MaxCityInput:   maxCityInput,
+		ValidCityKey:   validCityKey,
 		Buckets:        map[event.Sport][]Bucket{},
 		TypeLabels:     typeLabels,
 		Types:          map[event.Sport][]event.Type{},
@@ -79,6 +84,8 @@ func Catalog() Dictionary {
 			}
 			return out
 		},
+
+		MaxSearchCandidates: maxSearchCandidates,
 	}
 	for _, sp := range event.Sports {
 		for _, b := range sportBuckets(sp.Code) {

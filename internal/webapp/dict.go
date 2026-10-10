@@ -151,6 +151,14 @@ type listJSON struct {
 	Items []listItemJSON `json:"items"`
 }
 
+// searchJSON — ответ текстового поиска: total — число совпавших событий,
+// items — первые limit из них в порядке бота, cities — подходящие города.
+type searchJSON struct {
+	Total  int            `json:"total"`
+	Items  []listItemJSON `json:"items"`
+	Cities []cityJSON     `json:"cities"`
+}
+
 // dayJSON — день календаря с числом событий.
 type dayJSON struct {
 	Date  string `json:"date"`

@@ -72,11 +72,11 @@ func TestSearchWords(t *testing.T) {
 		"трейл, трейл!":     {"трейл"},
 		"a b c d e f g h i": nil,
 	} {
-		if got := searchWords(in); !reflect.DeepEqual(got, want) {
-			t.Errorf("searchWords(%q) = %q, want %q", in, got, want)
+		if got := SearchWords(in); !reflect.DeepEqual(got, want) {
+			t.Errorf("SearchWords(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if got := searchWords("один два три четыре пять шесть семь восемь"); len(got) != maxSearchWords {
+	if got := SearchWords("один два три четыре пять шесть семь восемь"); len(got) != maxSearchWords {
 		t.Errorf("слов в запросе %d, want не больше %d", len(got), maxSearchWords)
 	}
 }
@@ -119,7 +119,7 @@ func TestMatchEvents(t *testing.T) {
 	}
 	ids := func(words ...string) []int64 {
 		out := []int64{}
-		for _, it := range matchEvents(items, words) {
+		for _, it := range MatchEvents(items, words) {
 			out = append(out, it.ID)
 		}
 		return out
@@ -128,15 +128,15 @@ func TestMatchEvents(t *testing.T) {
 		words []string
 		want  []int64
 	}{
-		{searchWords("марафон"), []int64{3, 4, 1}},    // точные раньше опечатки
-		{searchWords("казань марафон"), []int64{3}},   // все слова
-		{searchWords("тула забег"), []int64{1, 2, 4}}, // всех слов нет ни у кого — по одному, порядок прежний
-		{searchWords("березовой рощи"), []int64{4}},   // «ё» и формы слов
-		{searchWords("мрафон"), []int64{3, 4}},        // опечатка в запросе
-		{searchWords("атлантида"), []int64{}},
+		{SearchWords("марафон"), []int64{3, 4, 1}},    // точные раньше опечатки
+		{SearchWords("казань марафон"), []int64{3}},   // все слова
+		{SearchWords("тула забег"), []int64{1, 2, 4}}, // всех слов нет ни у кого — по одному, порядок прежний
+		{SearchWords("березовой рощи"), []int64{4}},   // «ё» и формы слов
+		{SearchWords("мрафон"), []int64{3, 4}},        // опечатка в запросе
+		{SearchWords("атлантида"), []int64{}},
 	} {
 		if got := ids(tc.words...); !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("matchEvents(%q) = %v, want %v", tc.words, got, tc.want)
+			t.Errorf("MatchEvents(%q) = %v, want %v", tc.words, got, tc.want)
 		}
 	}
 }

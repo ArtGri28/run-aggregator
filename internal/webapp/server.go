@@ -26,7 +26,8 @@ import (
 )
 
 // API Mini App (Phase 15). Чтение каталога (этап 2): meta, events,
-// events/{id}, cities, cities/suggest; календарь (этап 5): calendar. По
+// events/{id}, cities, cities/suggest; календарь (этап 5): calendar;
+// текстовый поиск (этап 6): search. По
 // пользователю (этап 4): favorites (чтение и запись) и profile (только чтение);
 // пользователь — только TgID
 // из проверенного initData, в пути, параметрах и теле его нет. Единственная
@@ -41,6 +42,11 @@ const (
 	maxLimit     = 50
 	// maxCalendarDays — предел диапазона календаря в днях, включая оба края.
 	maxCalendarDays = 62
+	// minSearchRunes — наименьшая длина текста поиска; наибольшая — предел
+	// текста запроса бота (MaxCityInput). searchCities — число подсказок
+	// городов, как у бота.
+	minSearchRunes = 2
+	searchCities   = 5
 	// rateLimit запросов чтения и writeLimit запросов записи за rateWindow на
 	// пользователя → 429 (D-11, раздел 5 плана); счётчики раздельные.
 	rateLimit  = 60
@@ -114,6 +120,7 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 	handle("GET /api/v1/calendar", srv.calendar)
 	handle("GET /api/v1/cities", srv.cities)
 	handle("GET /api/v1/cities/suggest", srv.suggest)
+	handle("GET /api/v1/search", srv.search)
 	handle("GET /api/v1/favorites", srv.favorites)
 	handleWrite("PUT /api/v1/favorites/{id}", srv.favoriteAdd)
 	handleWrite("DELETE /api/v1/favorites/{id}", srv.favoriteRemove)
@@ -545,6 +552,59 @@ func (s *server) suggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, citiesJSON(out))
+}
+
+// search — текстовый поиск, как у бота (searchResults): слова запроса
+// сравниваются с названием и городом всех будущих событий страны запроса
+// (при "*" — всех стран) функциями бота; total — число совпавших, items —
+// первые limit в порядке бота. Города — подсказки по тексту в стране запроса;
+// при всех странах их нет. sport необязателен: пусто — все включённые виды
+// спорта, как у бота. Запрос без слов — пустой ответ. Текст запроса никуда
+// не пишется: ни в лог, ни в базу, ни в ответ.
+// Упрощение: дистанции в строках не заполняются (SearchCandidates их не
+// читает) и постраничной выдачи нет; при необходимости — метод store с
+// дистанциями и параметр page.
+func (s *server) search(w http.ResponseWriter, r *http.Request) {
+	ctx, today, q := r.Context(), s.today(), r.URL.Query()
+	w.Header().Set("Cache-Control", noStore)
+	country, all, err := s.countryParam(q)
+	limit, errLimit := intParam(q, "limit", defaultLimit, maxLimit)
+	sport, okSport := event.SportByCode(event.Sport(q.Get("sport")))
+	text := strings.Join(strings.Fields(q.Get("q")), " ") // одна строка, как у бота
+	n := utf8.RuneCountInString(text)
+	if err != nil || errLimit != nil || n < minSearchRunes || n > s.dict.MaxCityInput || (q.Get("sport") != "" && !(okSport && sport.Enabled)) {
+		fail(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	out := searchJSON{Items: []listItemJSON{}, Cities: []cityJSON{}}
+	words := bot.SearchWords(text)
+	if len(words) == 0 {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	items, err := s.store.SearchCandidates(ctx, country, today, s.dict.MaxSearchCandidates)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	if q.Get("sport") != "" {
+		items = slices.DeleteFunc(items, func(it store.ListItem) bool { return it.Sport != sport.Code })
+	}
+	found := bot.MatchEvents(items, words)
+	out.Total, out.Items = len(found), itemsJSON(found[:min(len(found), limit)])
+	if !all {
+		key := normalize.CityKey(text)
+		if !s.dict.ValidCityKey(key) {
+			key = ""
+		}
+		cities, err := s.store.SimilarCities(ctx, country, key, text, today, searchCities)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		out.Cities = citiesJSON(cities)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // favorites — страница избранного пользователя запроса: только будущие

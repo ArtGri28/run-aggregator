@@ -185,6 +185,8 @@ span.pill { cursor: default; }
 .hero h1 { max-width: 12em; font-size: 32px; }
 .hero .sub { max-width: 28em; color: #d5dee6; }
 .hero .find { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+.hero .find input { flex: 1 1 220px; width: auto; min-width: 0; max-width: 420px; background: rgba(11, 19, 27, .72); }
+.hero .find .btn { flex: none; }
 
 /* Значок вида спорта / дисциплины на цветной плашке (вместо фото) */
 .plaque {
@@ -316,7 +318,28 @@ span.pill { cursor: default; }
   color: var(--text);
   font: inherit;
 }
+input[type="search"] { text-overflow: ellipsis; }
 input[type="search"]::placeholder { color: var(--hint); }
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+
+/* Поиск каталога: поле с кнопкой очистки и кнопка отправки */
+.search { display: flex; gap: 8px; }
+.search .box { position: relative; flex: 1; min-width: 0; }
+.search .box input { padding-right: var(--tap); }
+.search .clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--hint);
+  font: inherit;
+  cursor: pointer;
+}
 
 /* Карточка события и профиль */
 .card-head { display: flex; gap: 14px; align-items: flex-start; }
@@ -350,6 +373,11 @@ input[type="search"]::placeholder { color: var(--hint); }
   font-size: 14px;
 }
 
+@media (max-width: 479px) {
+  .hero .find .btn { flex: 1 0 100%; }
+  .hero .find input { padding-left: 12px; padding-right: 12px; }
+  .hero .find input::placeholder { font-size: 15px; }
+}
 @media (min-width: 640px) {
   .brand .slogan { font-size: 12px; }
   .tiles { grid-template-columns: repeat(4, 1fr); }

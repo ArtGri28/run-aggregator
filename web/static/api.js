@@ -19,14 +19,16 @@ function initData() {
 }
 
 // request — запрос /api/v1/<path>?<params> без тела; пустые параметры не
-// передаются. Ответ 204 — null.
-async function request(method, path, params = {}) {
+// передаются (значения кодирует URLSearchParams). Ответ 204 — null. signal —
+// отмена запроса вызывающим.
+async function request(method, path, params = {}, signal) {
   const url = new URL('/api/v1/' + path, window.location.origin);
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
   }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  if (signal) signal.addEventListener('abort', () => ctrl.abort(), { once: true });
   let res;
   try {
     res = await fetch(url, { method, headers: { Authorization: 'tma ' + initData() }, signal: ctrl.signal });
@@ -50,6 +52,11 @@ async function request(method, path, params = {}) {
 export const get = (path, params) => request('GET', path, params);
 export const put = (path) => request('PUT', path);
 export const del = (path) => request('DELETE', path);
+
+// search — текстовый поиск стартов в стране country ('*' — все страны).
+// Текст запроса уходит только параметром q этого запроса и нигде не
+// сохраняется; signal отменяет запрос, когда набран новый текст.
+export const search = (q, country, signal) => request('GET', 'search', { q, country }, signal);
 
 // meta — справочники: один запрос на сеанс, при ошибке следующий вызов
 // запрашивает снова.

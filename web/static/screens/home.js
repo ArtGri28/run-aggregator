@@ -1,4 +1,4 @@
-// Главная: герой, чипы направлений, плитки разделов и три ближайших старта
+// Главная: герой с полем поиска, чипы направлений, плитки разделов и три ближайших старта
 // по текущим фильтрам.
 
 import { get, meta } from '../api.js';
@@ -6,6 +6,7 @@ import { el, showError } from '../ui.js';
 import { glyph } from '../icons.js';
 import { row } from '../row.js';
 import { directions, loadFilters, toQuery } from './filters.js';
+import { catalogHash } from './catalog.js';
 
 export const back = null;
 
@@ -14,13 +15,21 @@ function tile(name, title, sub, href) {
 }
 
 export async function render(box) {
-  // Поле текстового поиска героя появится вместе с поиском каталога — см.
-  // пометку в screens/catalog.js; до тех пор здесь только кнопка.
+  // Поле героя ведёт в каталог с набранным запросом; пустое — просто в каталог.
+  const query = el('input', {
+    type: 'search', placeholder: 'Город, соревнование или дистанция…', 'aria-label': 'Поиск стартов',
+    enterkeyhint: 'search', autocomplete: 'off', maxlength: '64',
+  });
+  const find = (e) => {
+    e.preventDefault();
+    window.location.hash = catalogHash(query.value);
+  };
   box.replaceChildren(el('section', { class: 'hero' },
     el('p', { class: 'eyebrow', text: 'Каталог спортивных событий' }),
     el('h1', { text: 'Найди свой следующий старт' }),
     el('p', { class: 'sub', text: 'Старты России и Беларуси — от городских забегов до трейлов' }),
-    el('div', { class: 'find' }, el('a', { class: 'btn btn-primary', href: '#/catalog', text: 'Найти старт ↗' }))));
+    el('form', { class: 'find', role: 'search', onsubmit: find }, query,
+      el('button', { type: 'submit', class: 'btn btn-primary', text: 'Найти старт ↗' }))));
   let m;
   try {
     m = await meta();

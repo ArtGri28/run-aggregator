@@ -9,9 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,9 +21,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"aggregator/internal/bot"
 	"aggregator/internal/event"
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/marathonec"
+	"aggregator/internal/normalize"
 	"aggregator/internal/store"
 	"aggregator/internal/store/storetest"
 	"aggregator/web"
@@ -696,6 +700,186 @@ func TestCalendar(t *testing.T) {
 		t.Fatalf("в логе нет строк запросов:\n%s", logs)
 	}
 	for _, bad := range []string{"tg_id", "from=", "to=", "2026-11-29", "moscow", "initData", "Authorization", "hash="} {
+		if strings.Contains(logs, bad) {
+			t.Fatalf("в логе есть %q:\n%s", bad, logs)
+		}
+	}
+}
+
+// Пользователи теста поиска: приметные идентификаторы (их не должно быть в
+// логе); у каждой части свой — предел частоты 60 запросов на пользователя.
+const (
+	searchA   int64 = 7700000041
+	searchBad int64 = 7700000042
+	searchVis int64 = 7700000043
+)
+
+// searchMark — редкое слово-метка запроса: его не должно быть ни в логе, ни
+// в ответах.
+const searchMark = "кракозябрик"
+
+// TestSearch — текстовый поиск: состав и порядок items равны сопоставлению
+// бота (bot.SearchWords и bot.MatchEvents над store.SearchCandidates) на той
+// же фикстуре и тех же фильтрах; города — как у бота; пределы параметров;
+// скрытое и слитое событие не показывается; текст запроса не попадает в лог.
+func TestSearch(t *testing.T) {
+	s := storetest.Open(t)
+	seedMarathonec(t, s)
+	r := newRig(t, s)
+	ctx := context.Background()
+	d := bot.Catalog()
+
+	if resp, body := r.get("/api/v1/search?q=забег", ""); resp.StatusCode != http.StatusUnauthorized || !strings.Contains(string(body), `"unauthorized"`) {
+		t.Fatalf("без заголовка: code=%d body=%s, want 401", resp.StatusCode, body)
+	}
+
+	// want — результат бота: кандидаты страны country ("" — все) и сопоставление слов.
+	want := func(country, q string) []store.ListItem {
+		t.Helper()
+		items, err := s.SearchCandidates(ctx, country, fixtureToday, d.MaxSearchCandidates)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return bot.MatchEvents(items, bot.SearchWords(q))
+	}
+	ids := func(items []store.ListItem) []int64 {
+		out := make([]int64, 0, len(items))
+		for _, it := range items {
+			out = append(out, it.ID)
+		}
+		return out
+	}
+	// search — ответ API и его тело; ответ не кэшируется.
+	search := func(tgID int64, q, params string) (searchJSON, []int64, string) {
+		t.Helper()
+		var res searchJSON
+		resp, body := r.get("/api/v1/search?q="+url.QueryEscape(q)+params, r.auth(tgID))
+		if err := json.Unmarshal(body, &res); err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("Cache-Control") != noStore {
+			t.Fatalf("search %q%s: code=%d Cache-Control=%q err=%v body=%s", q, params, resp.StatusCode, resp.Header.Get("Cache-Control"), err, body)
+		}
+		got := make([]int64, 0, len(res.Items))
+		for _, it := range res.Items {
+			got = append(got, it.ID)
+		}
+		return res, got, string(body)
+	}
+	same := slices.Equal[[]int64]
+
+	// Совпадение с ботом: название, часть слова, опечатка, город, несколько
+	// слов, запрос без результатов; «марафон» ставит точные совпадения выше
+	// частичных («полумарафон») — порядок отличается от порядка по дате.
+	sorted := false // хотя бы один запрос меняет порядок кандидатов
+	for _, q := range []string{"осенний", "забег", "моск", "марафон", "марофон", "Казань", "казань марафон", "Атлантида"} {
+		exp := want("RU", q)
+		res, got, body := search(searchA, q, "&limit=50")
+		if res.Total != len(exp) || !same(got, ids(exp[:min(len(exp), 50)])) {
+			t.Fatalf("%q: total=%d items=%v, у бота total=%d items=%v", q, res.Total, got, len(exp), ids(exp))
+		}
+		if (q == "Атлантида") != (res.Total == 0) {
+			t.Fatalf("%q: total=%d", q, res.Total)
+		}
+		for i := 1; i < len(exp); i++ {
+			if exp[i].StartDate.Before(exp[i-1].StartDate) {
+				sorted = true
+			}
+		}
+		// Города — как у бота: подсказки по тексту в стране запроса.
+		key := normalize.CityKey(q)
+		if !d.ValidCityKey(key) {
+			key = ""
+		}
+		cities, err := s.SimilarCities(ctx, "RU", key, q, fixtureToday, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Cities) != len(cities) || (len(cities) > 0 && res.Cities[0] != (cityJSON{cities[0].Key, cities[0].Name, cities[0].N})) {
+			t.Fatalf("%q: cities=%+v, у бота %+v", q, res.Cities, cities)
+		}
+		if q == "Казань" && (len(res.Cities) == 0 || res.Cities[0].Key != "kazan") {
+			t.Fatalf("%q: cities=%+v, want kazan", q, res.Cities)
+		}
+		if q == "моск" && (len(res.Cities) == 0 || res.Cities[0].Key != "moscow") {
+			t.Fatalf("%q: cities=%+v, want moscow", q, res.Cities)
+		}
+		if q == "Атлантида" && (!strings.Contains(body, `"items":[]`) || !strings.Contains(body, `"cities":[]`)) {
+			t.Fatalf("%q: пустой ответ не массивами: %s", q, body)
+		}
+		if it := res.Items; len(it) > 0 && (it[0].Title == "" || it[0].StartDate < "2026-09-29" || it[0].CountryCode != "RU" || it[0].Sport != "running" || it[0].Distances == nil) {
+			t.Fatalf("%q: item = %+v", q, it[0])
+		}
+	}
+	if !sorted {
+		t.Fatal("ни один запрос не меняет порядок кандидатов: сравнение с ботом ничего не проверяет")
+	}
+
+	// limit: по умолчанию 20, total — все совпавшие; страна по умолчанию RU;
+	// при всех странах городов нет; запрос приводится к одной строке.
+	exp := want("RU", "забег")
+	res, got, _ := search(searchA, "забег", "")
+	if len(exp) <= 20 || res.Total != len(exp) || !same(got, ids(exp[:20])) {
+		t.Fatalf("limit по умолчанию: total=%d items=%d, у бота %d", res.Total, len(got), len(exp))
+	}
+	if res, got, _ = search(searchA, "  Забег\n ", "&limit=3&country=RU"); res.Total != len(exp) || !same(got, ids(exp[:3])) {
+		t.Fatalf("limit=3: total=%d items=%v", res.Total, got)
+	}
+	expAll := want("", "Казань")
+	if res, got, _ = search(searchA, "Казань", "&country=*"); res.Total != len(expAll) || res.Total == 0 || !same(got, ids(expAll[:min(len(expAll), 20)])) || len(res.Cities) != 0 {
+		t.Fatalf("country=*: total=%d cities=%+v, у бота %d", res.Total, res.Cities, len(expAll))
+	}
+	if res, _, _ = search(searchA, "забег", "&country=BY"); res.Total != 0 || len(res.Cities) != 0 {
+		t.Fatalf("country=BY: %+v", res)
+	}
+	// Запрос без слов (как «Не понял запрос» бота) — пустой ответ, не ошибка.
+	if res, _, _ = search(searchA, "!!!", ""); res.Total != 0 || len(res.Items) != 0 || len(res.Cities) != 0 {
+		t.Fatalf("запрос без слов: %+v", res)
+	}
+	search(searchA, strings.Repeat("я", 64), "") // предел длины — включительно
+	search(searchA, "ям", "")
+
+	// Неверные параметры → 400 bad_request; текста запроса в ответе нет.
+	for _, q := range []string{"", "q=", "q=%20%20", "q=я", "q=%20я%20", "q=" + strings.Repeat("я", 65), "q=" + url.QueryEscape(strings.Repeat(searchMark, 6)),
+		"q=забег&limit=51", "q=забег&limit=0", "q=забег&limit=x", "q=забег&country=ru", "q=забег&sport=football", "q=забег&sport=swimming"} {
+		resp, body := r.get("/api/v1/search?"+q, r.auth(searchBad))
+		if resp.StatusCode != http.StatusBadRequest || strings.TrimSpace(string(body)) != `{"error":"bad_request"}` {
+			t.Fatalf("%s: code=%d body=%s, want 400 bad_request", q, resp.StatusCode, body)
+		}
+	}
+	// Метка в допустимом запросе: в ответе её нет.
+	if _, _, body := search(searchBad, searchMark+" забег", ""); strings.Contains(body, searchMark) {
+		t.Fatalf("текст запроса в ответе: %s", body)
+	}
+
+	// Скрытое событие уходит из результатов; слитое — тоже, остаётся его корень.
+	exp = want("RU", "забег")
+	hidden, merged, root := exp[0].ID, exp[1].ID, exp[2].ID
+	storetest.HideEvent(t, hidden)
+	storetest.MergeEvent(t, merged, root)
+	res, got, _ = search(searchVis, "забег", "&limit=50")
+	if res.Total != len(exp)-2 || !same(got, ids(exp[2:min(len(exp), 52)])) || got[0] != root {
+		t.Fatalf("после скрытия и слияния: total=%d items=%v, want %d без %d и %d", res.Total, got, len(exp)-2, hidden, merged)
+	}
+	// sport: пусто — все включённые виды спорта (как у бота), иначе — только он.
+	storetest.SetSport(t, root, event.SportSkiing)
+	if res, got, _ = search(searchVis, "забег", "&sport=skiing"); res.Total != 1 || got[0] != root || res.Items[0].Sport != event.SportSkiing {
+		t.Fatalf("sport=skiing: total=%d items=%v", res.Total, got)
+	}
+	if res, _, _ = search(searchVis, "забег", "&sport=running"); res.Total != len(exp)-3 {
+		t.Fatalf("sport=running: total=%d, want %d", res.Total, len(exp)-3)
+	}
+	if res, got, _ = search(searchVis, "забег", ""); res.Total != len(exp)-2 || got[0] != root {
+		t.Fatalf("без sport: total=%d items=%v", res.Total, got)
+	}
+
+	// Приватность лога (D-12): метод, шаблон маршрута, код; без текста запроса
+	// (ни буквами, ни в URL-кодировке), параметров и пользователя.
+	logs := r.logs.String()
+	for _, need := range []string{`method=GET route="GET /api/v1/search" status=200`, `route="GET /api/v1/search" status=400`} {
+		if !strings.Contains(logs, need) {
+			t.Fatalf("в логе нет %q:\n%s", need, logs)
+		}
+	}
+	for _, bad := range []string{searchMark, url.QueryEscape(searchMark), strings.ToLower(url.QueryEscape(searchMark)), "забег", "Казань", "Атлантида", "tg_id", "77000000",
+		"initData", "Authorization", "auth_date", "hash=", "q=", "?", "limit", "country"} {
 		if strings.Contains(logs, bad) {
 			t.Fatalf("в логе есть %q:\n%s", bad, logs)
 		}

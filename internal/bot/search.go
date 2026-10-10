@@ -63,8 +63,8 @@ func stems(text string) []string {
 	return out
 }
 
-// searchWords — основы слов запроса, не больше maxSearchWords.
-func searchWords(text string) []string {
+// SearchWords — основы слов запроса, не больше maxSearchWords.
+func SearchWords(text string) []string {
 	w := stems(text)
 	return w[:min(len(w), maxSearchWords)]
 }
@@ -123,11 +123,11 @@ func wordScore(q, w string) int {
 	return 0
 }
 
-// matchEvents — события из items, подходящие запросу words, лучшие первыми:
+// MatchEvents — события из items, подходящие запросу words, лучшие первыми:
 // сначала те, где нашлись все слова; если таких нет — где нашлось хотя бы
 // одно (больше слов — выше). При равенстве — точные совпадения выше опечаток,
 // затем прежний порядок items (дата, id). Слова события — из названия и города.
-func matchEvents(items []store.ListItem, words []string) []store.ListItem {
+func MatchEvents(items []store.ListItem, words []string) []store.ListItem {
 	type hit struct {
 		it             store.ListItem
 		matched, score int
@@ -166,7 +166,7 @@ func matchEvents(items []store.ListItem, words []string) []store.ListItem {
 }
 
 // searchResults — ответ на текстовый запрос, не совпавший с названием города:
-// события по словам запроса (matchEvents) и подсказки городов. Поиск идёт по
+// события по словам запроса (MatchEvents) и подсказки городов. Поиск идёт по
 // всем будущим событиям страны фильтров (при «всех странах» — по всем) всех
 // включённых видов спорта, остальные фильтры и выбранный вид спорта не
 // учитывает и ничего не меняет.
@@ -177,7 +177,7 @@ func (b *Bot) searchResults(ctx context.Context, uf userFilters, text string, v 
 	if all {
 		pick = btn("🌍 Страна", callback{Kind: cbCountry})
 	}
-	words := searchWords(text)
+	words := SearchWords(text)
 	if len(words) == 0 {
 		return screen{text: "Не понял запрос — напишите название старта или города", plain: true, kb: keyboard(pick, btn(backLabel, back))}, nil
 	}
@@ -186,7 +186,7 @@ func (b *Bot) searchResults(ctx context.Context, uf userFilters, text string, v 
 	if err != nil {
 		return screen{}, err
 	}
-	found := matchEvents(items, words)
+	found := MatchEvents(items, words)
 	var cities []store.CityCount
 	if !all {
 		key := normalize.CityKey(text)
