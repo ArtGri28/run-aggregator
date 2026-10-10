@@ -33,7 +33,7 @@ func TestSportHiddenList(t *testing.T) {
 		t.Fatalf("в списке нет кнопки %s", btn)
 	}
 
-	storetest.SetSport(t, items[0].ID, event.SportSkiing)
+	storetest.SetSport(t, items[0].ID, event.SportSwimming)
 	if listed(n - 1) {
 		t.Fatalf("в списке осталась кнопка %s", btn)
 	}
@@ -180,19 +180,19 @@ func TestSportHidden(t *testing.T) {
 	}
 
 	// Выключенный вид спорта.
-	storetest.SetSport(t, a, event.SportSkiing)
-	storetest.SetSport(t, by, event.SportSkiing)
+	storetest.SetSport(t, a, event.SportSwimming)
+	storetest.SetSport(t, by, event.SportSwimming)
 	seen, _ = probes()
-	want("skiing", seen, false)
+	want("swimming", seen, false)
 
 	// Карточка по прямой кнопке — как у скрытого события.
 	page := strings.Split(cardA, ":")[2]
 	fromList, fromSearch := press(t, b, api, cardA), pressOn(t, b, api, results, cardS)
 	if fromList.Form["text"] != goneNotice || !strings.HasPrefix(fromList.button(t, backLabel), "p:"+page+":v") || len(fromList.buttons(t)) != 1 {
-		t.Errorf("skiing: карточка из списка: %q, кнопки %v", fromList.Form["text"], datas(t, fromList))
+		t.Errorf("swimming: карточка из списка: %q, кнопки %v", fromList.Form["text"], datas(t, fromList))
 	}
 	if !strings.HasPrefix(fromSearch.Form["text"], goneNotice) || len(fromSearch.buttons(t)) != 1 || fromSearch.buttons(t)[0].Text != backLabel {
-		t.Errorf("skiing: карточка из поиска: %q, кнопки %v", fromSearch.Form["text"], datas(t, fromSearch))
+		t.Errorf("swimming: карточка из поиска: %q, кнопки %v", fromSearch.Form["text"], datas(t, fromSearch))
 	}
 	storetest.SetSport(t, a, event.SportRunning)
 	storetest.HideEvent(t, a)

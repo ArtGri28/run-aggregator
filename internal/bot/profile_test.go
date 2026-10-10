@@ -112,7 +112,7 @@ func step(t *testing.T, b *Bot, api *fakeAPI, id int64, data, snap string) call 
 }
 
 func isMainMenu(c call) bool {
-	return strings.Contains(c.Form["text"], "Собрали беговые старты") && !strings.Contains(c.Form["text"], "4 коротких вопроса")
+	return strings.Contains(c.Form["text"], "Собрали старты из разных календарей") && !strings.Contains(c.Form["text"], "4 коротких вопроса")
 }
 
 // TestS18Offer — S-18: предложение анкеты на /start (D-05, D-06, PRF-01).
@@ -209,7 +209,7 @@ func TestS19SkipAll(t *testing.T) {
 	}
 
 	// 2. Поиск работает как у пользователя без анкеты; ответы профиля пусты.
-	matchSnapshot(t, "s19_search", renderCall(t, press(t, b, api, menu.button(t, "🔎 Найти забег"))))
+	matchSnapshot(t, "s19_search", renderCall(t, press(t, b, api, menu.button(t, "🏃 Бег"))))
 	list := press(t, b, api, "p:1:v1")
 	items, err := s.ListEvents(context.Background(), event.Filter{From: fixtureToday}, pageSize, 0)
 	if err != nil || len(items) == 0 || len(listRows(t, list)) == 0 {
@@ -572,7 +572,7 @@ func TestS23Profile(t *testing.T) {
 	if !isMainMenu(menu) || uData(t, menu, "👤 Мой профиль") != "u:o" {
 		t.Fatalf("главное меню без кнопки профиля: %v", menu.buttons(t))
 	}
-	if got := datas(t, menu); !reflect.DeepEqual(got, []string{"f:s", "s:o", "u:o"}) {
+	if got := datas(t, menu); !reflect.DeepEqual(got, []string{"f:a:running", "s:o", "u:o"}) {
 		t.Errorf("кнопки главного меню: %v", got)
 	}
 	p1 := step(t, b, api, 42, "u:o", "s23_profile_from_menu")
@@ -581,7 +581,7 @@ func TestS23Profile(t *testing.T) {
 	}
 	// 7. «Назад» — главное меню правкой, три кнопки.
 	back := step(t, b, api, 42, uData(t, p1, "⬅️ Назад"), "s23_back")
-	if got := datas(t, back); !reflect.DeepEqual(got, []string{"f:s", "s:o", "u:o"}) {
+	if got := datas(t, back); !reflect.DeepEqual(got, []string{"f:a:running", "s:o", "u:o"}) {
 		t.Errorf("кнопки главного меню после «Назад»: %v", got)
 	}
 

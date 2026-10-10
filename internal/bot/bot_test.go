@@ -231,7 +231,7 @@ func TestTracerSearch(t *testing.T) {
 	b := newTestBot(t, api, s)
 	ctx := context.Background()
 
-	// Первый /start — предложение анкеты; приветствие и кнопка «Найти забег» —
+	// Первый /start — предложение анкеты; приветствие и кнопка «Бег» —
 	// на втором.
 	b.api.ProcessUpdate(ctx, startUpdate(42))
 	api.reset()
@@ -240,14 +240,14 @@ func TestTracerSearch(t *testing.T) {
 	if len(sends) != 1 || sends[0].Form["chat_id"] != "42" {
 		t.Fatalf("/start: sendMessage = %+v, want one to chat 42", sends)
 	}
-	if got := sends[0].button(t, "🔎 Найти забег"); got != "f:s" {
-		t.Fatalf("/start: button callback = %q, want f:s", got)
+	if got := sends[0].button(t, "🏃 Бег"); got != "f:a:running" {
+		t.Fatalf("/start: button callback = %q, want f:a:running", got)
 	}
 	if _, v, err := s.Filters(ctx, 42); err != nil || v != 1 {
 		t.Fatalf("Filters after /start: v=%d err=%v, want v=1", v, err)
 	}
 
-	// [Найти забег]: сводка.
+	// Кнопка поиска из прежнего сообщения (f:s): сводка.
 	want, err := s.CountEvents(ctx, event.Filter{From: time.Date(2026, 9, 29, 0, 0, 0, 0, time.UTC)})
 	if err != nil || want <= 100 {
 		t.Fatalf("CountEvents = %d, %v; want > 100", want, err)

@@ -19,10 +19,10 @@ func TestStartScreen(t *testing.T) {
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	s := api.of("sendMessage")
-	if len(s) != 1 || !strings.HasPrefix(s[0].Form["text"], "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\nСобрали беговые старты") {
+	if len(s) != 1 || !strings.HasPrefix(s[0].Form["text"], "🏁 <b>Где старт?</b>\nЛюбительские старты в разных городах\n\nСобрали старты из разных календарей") {
 		t.Fatalf("приветствие: %+v", s)
 	}
-	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:s", "s:o", "u:o"}) || s[0].button(t, "🔎 Найти забег") != "f:s" {
+	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:a:running", "s:o", "u:o"}) || s[0].button(t, "🏃 Бег") != "f:a:running" {
 		t.Errorf("кнопки: %v", got)
 	}
 }

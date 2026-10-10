@@ -21,12 +21,6 @@ var uxContracts = []string{
 
 var minScenarios = []int{17, 8, 10, 8}
 
-// pendingContract — номер контракта в uxContracts, часть сценариев которого
-// ещё не имеет тестов (сценарий главного меню Phase 13): такой сценарий в
-// сравнении не участвует, пока его теста нет. У остальных контрактов
-// строгость прежняя.
-const pendingContract = 3
-
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")
 	scenarioTestRE     = regexp.MustCompile(`(?m)^func (TestS([0-9]{2})[A-Za-z0-9]*)\(t \*testing\.T\)`)
@@ -37,10 +31,9 @@ var (
 // (Phase 8, Phase 9, Phase 11 и Phase 13) равно множеству тестов TestSxx…; у
 // каждого сценария есть хотя бы один эталон sxx_*, а тестов и эталонов
 // сценариев, которых нет ни в одном контракте, нет. Лишние и отсутствующие
-// сценарии перечисляются в ошибке. Исключение — pendingContract.
+// сценарии перечисляются в ошибке.
 func TestContractCoverage(t *testing.T) {
 	all := map[string]string{} // номер сценария → имя теста по контрактам
-	pending := map[string]bool{}
 	counts := make([]int, len(uxContracts))
 	for i, path := range uxContracts {
 		doc, err := os.ReadFile(path)
@@ -55,7 +48,6 @@ func TestContractCoverage(t *testing.T) {
 				t.Errorf("S-%s: сценарий есть в двух контрактах или дважды — %s и %s", m[1], prev, m[2])
 			}
 			all[m[1]] = m[2]
-			pending[m[1]] = i == pendingContract
 			counts[i]++
 		}
 	}
@@ -80,11 +72,6 @@ func TestContractCoverage(t *testing.T) {
 				t.Errorf("S-%s: два теста — %s и %s", m[2], prev, m[1])
 			}
 			got[m[2]] = m[1]
-		}
-	}
-	for n := range all {
-		if _, tested := got[n]; pending[n] && !tested {
-			delete(all, n)
 		}
 	}
 	if !reflect.DeepEqual(got, all) {

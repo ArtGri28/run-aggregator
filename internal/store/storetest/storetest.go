@@ -88,10 +88,22 @@ func SetSport(t testing.TB, id int64, sport event.Sport) {
 // процесс: тест с EnableSport не запускается параллельно с другими.
 func EnableSport(t testing.TB, code event.Sport) {
 	t.Helper()
+	setSportEnabled(t, code, true)
+}
+
+// DisableSport выключает вид спорта в справочнике event.Sports на время теста
+// и возвращает прежнее значение по его завершении — как EnableSport.
+func DisableSport(t testing.TB, code event.Sport) {
+	t.Helper()
+	setSportEnabled(t, code, false)
+}
+
+func setSportEnabled(t testing.TB, code event.Sport, on bool) {
+	t.Helper()
 	for i := range event.Sports {
 		if event.Sports[i].Code == code {
 			was := event.Sports[i].Enabled
-			event.Sports[i].Enabled = true
+			event.Sports[i].Enabled = on
 			t.Cleanup(func() { event.Sports[i].Enabled = was })
 			return
 		}

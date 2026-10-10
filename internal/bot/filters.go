@@ -1050,27 +1050,59 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 		b.logger().Error("start", "err", err)
 		return
 	}
-	sc := stamp(mainMenu(b.supportChat != 0), fv)
-	if offered {
-		sc = offerScreen(pv)
+	sc := offerScreen(pv)
+	if !offered {
+		sc = stamp(mainMenu(b.menuSports(ctx), b.supportChat != 0), fv)
 	}
 	if err := b.send(ctx, u.Message.Chat.ID, sc); err != nil {
 		b.logger().Warn("send start", "err", err)
 	}
 }
 
-// mainMenu — главное меню: вход в поиск, в настройки и в профиль (D-13);
-// при включённой поддержке — четвёртая кнопка «💬 Поддержка». Без группы меню
-// побайтно прежнее (D-03).
-func mainMenu(support bool) screen {
-	rows := []row{btn("🔎 Найти забег", back), btn("⚙️ Мои настройки", callback{Kind: cbSettings}),
-		btn("👤 Мой профиль", callback{Kind: cbProfile})}
+// mainMenu — главное меню: кнопки видов спорта sports по две в ряд (вход в
+// поиск выбранного вида спорта), ниже настройки и профиль; при включённой
+// поддержке — кнопка «💬 Поддержка». Текст один при любом составе кнопок.
+func mainMenu(sports []event.SportInfo, support bool) screen {
+	var rows []row
+	for i, sp := range sports {
+		if i%2 == 0 {
+			rows = append(rows, nil)
+		}
+		rows[len(rows)-1].add(sp.Emoji+" "+sp.Title, callback{Kind: cbSport, Value: string(sp.Code)})
+	}
+	rows = append(rows, btn("⚙️ Мои настройки", callback{Kind: cbSettings}), btn("👤 Мой профиль", callback{Kind: cbProfile}))
 	if support {
 		rows = append(rows, btn("💬 Поддержка", callback{Kind: cbSupport}))
 	}
-	return screen{text: "🏁 <b>Где старт?</b>\nСоревнования по бегу в разных городах\n\n" +
-		"Собрали беговые старты из разных календарей в одном месте. Выбери город, даты и дистанцию — покажу, куда можно заявиться.",
+	return screen{text: "🏁 <b>Где старт?</b>\nЛюбительские старты в разных городах\n\n" +
+		"Собрали старты из разных календарей в одном месте. Выбери вид спорта, город и даты — покажу, куда можно заявиться.",
 		kb: keyboard(rows...)}
+}
+
+// menuSports — виды спорта для кнопок главного меню в порядке справочника:
+// бег — всегда, в том числе при пустом каталоге; остальные включённые — только
+// с будущими событиями в каталоге (в любой стране). Ошибка запроса не
+// оставляет пользователя без меню: она уходит в лог, в меню остаётся один бег.
+// Упрощение: число событий — отдельным запросом на каждый включённый вид
+// спорта, кроме бега (сейчас такой один); при росте их числа — один запрос с
+// группировкой по виду спорта.
+func (b *Bot) menuSports(ctx context.Context) []event.SportInfo {
+	running, _ := event.SportByCode(event.SportRunning)
+	out := []event.SportInfo{running}
+	for _, sp := range event.Sports {
+		if sp.Code == event.SportRunning || !sp.Enabled {
+			continue
+		}
+		n, err := b.Store.CountEvents(ctx, event.Filter{From: b.today(), Sport: sp.Code})
+		if err != nil {
+			b.logger().Error("menu sports", "err", err)
+			return out[:1]
+		}
+		if n > 0 {
+			out = append(out, sp)
+		}
+	}
+	return out
 }
 
 // onMenu — «назад» в главное меню правкой сообщения. Экран от фильтров не
@@ -1081,7 +1113,7 @@ func (b *Bot) onMenu(ctx context.Context, q *models.CallbackQuery, _ callback) s
 		b.logger().Error("menu", "err", err)
 		return errNotice
 	}
-	if err := b.show(ctx, q, stamp(mainMenu(b.supportChat != 0), v)); err != nil {
+	if err := b.show(ctx, q, stamp(mainMenu(b.menuSports(ctx), b.supportChat != 0), v)); err != nil {
 		b.logger().Warn("show menu", "err", err)
 	}
 	return ""

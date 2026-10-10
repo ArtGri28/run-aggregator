@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -73,6 +74,9 @@ func TestPassSportSeparate(t *testing.T) {
 		t.Errorf("проход изменил журнал слияний:\nдо    %s\nпосле %s", merges, after)
 	}
 }
+
+// skiRolloutSection — раздел памятки выката с запросами проверки Phase 13.
+const skiRolloutSection = "## Phase 13: лыжи\n"
 
 // skiSnapshot — беговой каталог: беговые события целиком, их дистанции и
 // записи источников; журнал слияний и кандидаты — целиком.
@@ -279,7 +283,51 @@ func TestSkiBeforeAfter(t *testing.T) {
 	if after := skiSnapshot(t); after != before {
 		t.Errorf("лыжные записи изменили беговой каталог: снимки до миграции и после прогона различаются")
 	}
+
+	// Запросы проверки из памятки выката (раздел о Phase 13) — дословно, на
+	// этой же копии, после прогона с лыжными записями.
+	qs := rolloutSQL(t, skiRolloutSection)
+	if len(qs) != 3 {
+		t.Fatalf("запросов проверки в памятке %d, want 3", len(qs))
+	}
+	sports, types, runs := queryLines(t, db, qs[0]), queryLines(t, db, qs[1]), queryLines(t, db, qs[2])
+	if want := []string{fmt.Sprintf("sport=running|%d", running), fmt.Sprintf("sport=skiing|%d", other)}; !slices.Equal(sports, want) {
+		t.Errorf("запрос видов спорта = %q, want %q", sports, want)
+	}
+	seen := map[event.Sport]bool{}
+	for _, line := range types {
+		p := strings.Split(strings.TrimPrefix(line, "type="), "|")
+		if len(p) != 3 || !strings.HasPrefix(line, "type=") {
+			t.Fatalf("строка запроса дисциплин %q", line)
+		}
+		sp := event.Sport(p[0])
+		seen[sp] = true
+		if (sp != event.SportRunning && sp != event.SportSkiing) || !slices.Contains(event.SportTypes[sp], event.Type(p[1])) {
+			t.Errorf("дисциплина вне перечня вида спорта: %q", line)
+		}
+	}
+	if !seen[event.SportRunning] || !seen[event.SportSkiing] || len(event.SportTypes[event.SportRunning]) != 6 {
+		t.Errorf("запрос дисциплин: виды спорта %v, беговых значений в справочнике %d (want 6): %q", seen, len(event.SportTypes[event.SportRunning]), types)
+	}
+	last := map[string]string{} // последний прогон источника: строки идут по коду и номеру
+	for _, line := range runs {
+		code, rest, _ := strings.Cut(strings.TrimPrefix(line, "run_counts="), "|")
+		last[code] = rest
+	}
+	if len(last) != len(feeds) {
+		t.Errorf("источников в запросе прогонов %d, want %d: %q", len(last), len(feeds), runs)
+	}
+	for code, rest := range last {
+		want := "|created:0|changed:0|unchanged:"
+		if code == tssrc.Code {
+			want = fmt.Sprintf("|created:%d|changed:0|unchanged:", len(skiRecs))
+		}
+		if !strings.Contains(rest, want) {
+			t.Errorf("последний прогон %s = %q, want %q", code, rest, want)
+		}
+	}
 	if !t.Failed() {
 		t.Logf("SKI BEFORE-AFTER OK running=%d ski=%d merges=%d candidates=%d", running, other, merges, candidates)
+		t.Logf("ROLLOUT SQL 13 OK\n%s\n%s\n%s", strings.Join(sports, "\n"), strings.Join(types, "\n"), strings.Join(runs, "\n"))
 	}
 }

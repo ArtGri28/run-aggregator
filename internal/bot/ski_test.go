@@ -22,8 +22,8 @@ import (
 
 // Сценарии контракта экранов Phase 13 (13-UX-CONTRACT.md, раздел 9): лыжные
 // экраны на сохранённых страницах Tristyle. Лыжи включаются в справочнике
-// только на время теста; эталоны testdata/screens/s37_*…s43_* написаны вручную
-// по контракту. Шаги с главным меню (S-37 шаг 2, S-43 шаги 4 и 7) — отдельно.
+// только на время теста; эталоны testdata/screens/s36_*…s43_* написаны вручную
+// по контракту.
 
 const tristyleData = "../ingest/sources/tristyle/testdata/"
 
@@ -263,9 +263,98 @@ func skiRows(t *testing.T, c call) string {
 	return strings.Join(listRows(t, c), "\n")
 }
 
+// TestS36SportMenu — S-36: главное меню с кнопками видов спорта по две в ряд;
+// кнопка вида спорта есть, только если у него есть будущие события, бег — всегда.
+func TestS36SportMenu(t *testing.T) {
+	s, api, b := skiBot(t)
+	ctx := context.Background()
+	startSnapless(t, b, api) // первый /start — предложение анкеты, дальше — меню
+
+	// 1. /start: меню новым сообщением, два вида спорта в одном ряду; фильтры
+	// и версия прежние.
+	before := stored(t)
+	startSnap(t, b, api, "s36_menu")
+	menu := api.of("sendMessage")[0]
+	if got := stored(t); got != before || got != "{} v1" {
+		t.Errorf("шаг 1: /start изменил фильтры: %s → %s", before, got)
+	}
+	if strings.Contains(menu.Form["text"], "забег") || menu.button(t, "🔎") != "" {
+		t.Errorf("шаг 1: в меню слово «забег» или прежняя кнопка поиска:\n%s", renderCall(t, menu))
+	}
+
+	// 2. «m»: то же меню правкой сообщения, записей нет.
+	state := dbState(t)
+	matchSnapshot(t, "s36_menu_back", edited(t, "m", raw(b, api, 42, "m")))
+	if dbState(t) != state {
+		t.Error("шаг 2: кнопка меню записала в базу")
+	}
+
+	// 3. Бот с группой поддержки: четвёртая строка — поддержка.
+	startSnap(t, newSupportBot(t, api, s), api, "s36_support")
+
+	// 4. Будущих лыжных событий нет: одна кнопка вида спорта.
+	b.Now = func() time.Time { return time.Date(2027, 3, 2, 12, 0, 0, 0, time.UTC) }
+	startSnap(t, b, api, "s36_one_sport")
+	b.Now = func() time.Time { return fixtureNow }
+
+	// 6–7. Три и четыре вида спорта — по две кнопки в ряд. Дополнительные виды
+	// спорта включены только на время теста, у каждого одно будущее событие.
+	for _, step := range []struct {
+		sport event.Sport
+		snap  string
+	}{{event.SportSwimming, "s36_three"}, {event.SportCycling, "s36_four"}} {
+		storetest.EnableSport(t, step.sport)
+		e := &event.Event{Title: "Проба " + string(step.sport), TitleNorm: "проба " + string(step.sport), StartDate: fixtureToday.AddDate(0, 0, 5),
+			CountryCode: "RU", Type: event.TypeOther, Sport: step.sport, Status: event.StatusScheduled, Distances: []event.Distance{{Meters: 1000}}}
+		if _, err := s.SaveEvent(ctx, e); err != nil {
+			t.Fatalf("SaveEvent: %v", err)
+		}
+		startSnap(t, b, api, step.snap)
+	}
+
+	// 8. Кнопки видов спорта: код и порядок — из справочника, длина — в
+	// пределах callback_data.
+	four := api.of("sendMessage")[0]
+	checkCallbackLengths(t, four)
+	want := []string{}
+	for _, sp := range event.Sports {
+		if sp.Enabled {
+			want = append(want, "f:a:"+string(sp.Code))
+			if got := buttonText(t, four, want[len(want)-1]); got != sp.Emoji+" "+sp.Title {
+				t.Errorf("шаг 8: подпись кнопки %s = %q", sp.Code, got)
+			}
+		}
+	}
+	if got := datas(t, four); len(want) != 4 || !reflect.DeepEqual(got, append(want, "s:o", "u:o")) {
+		t.Errorf("шаг 8: кнопки %v, want виды спорта %v, настройки и профиль", got, want)
+	}
+
+	// Кнопка вида спорта открывает его сводку.
+	if c := press(t, b, api, menu.button(t, "⛷ Лыжи")); !strings.HasPrefix(c.Form["text"], "⛷ <b>Лыжи: поиск старта</b>") {
+		t.Errorf("«Лыжи» из меню: %q", c.Form["text"])
+	}
+	press(t, b, api, "m")
+	if c := press(t, b, api, menu.button(t, "🏃 Бег")); !strings.HasPrefix(c.Form["text"], "🔎 <b>Поиск забега</b>") {
+		t.Errorf("«Бег» из меню: %q", c.Form["text"])
+	}
+
+	// Ошибка счётчика не оставляет без меню: один бег, ошибка в логе.
+	logs := captureLogs(t)
+	dead, cancel := context.WithCancel(ctx)
+	cancel()
+	if got := b.menuSports(dead); len(got) != 1 || got[0].Code != event.SportRunning || !strings.Contains(logs.String(), "menu sports") {
+		t.Errorf("меню при ошибке запроса: %+v, лог %q", got, logs.String())
+	}
+
+	// 5. Каталог пуст: кнопка «Бег» остаётся, включённых видов спорта без
+	// событий в меню нет.
+	b2 := newTestBot(t, api, storetest.Open(t))
+	startSnapless(t, b2, api)
+	startSnap(t, b2, api, "s36_empty_catalog")
+}
+
 // TestS37SkiSearch — S-37: вход кнопкой вида спорта, лыжная сводка,
-// переключение бег ↔ лыжи с общими страной и датой. Шаг 2 (главное меню) —
-// вместе со сценарием главного меню.
+// переключение бег ↔ лыжи с общими страной и датой.
 func TestS37SkiSearch(t *testing.T) {
 	s, api, b := skiBot(t)
 	setUserFilters(t, s, `{}`)
@@ -276,6 +365,10 @@ func TestS37SkiSearch(t *testing.T) {
 	if toast(api) != "" || strings.Contains(renderCall(t, c), "забег") {
 		t.Errorf("шаг 1: уведомление %q, экран\n%s", toast(api), renderCall(t, c))
 	}
+
+	// 2. «⬅️ Назад»: главное меню с двумя кнопками и новой версией; фильтры прежние.
+	pressSnap(t, b, api, c.button(t, backLabel), "s37_menu")
+	wantStored(t, "шаг 2", `{"sport":"skiing"}`, 2)
 
 	// 3. «🏃 Бег»: прежняя беговая сводка, ключа sport нет.
 	pressSnap(t, b, api, "f:a:running", "s37_running")
@@ -651,8 +744,7 @@ func TestS42MixedSearch(t *testing.T) {
 }
 
 // TestS43SportStale — S-43: устаревшие кнопки вида спорта и выключенный вид
-// спорта (на плавании). Проверка главного меню в шаге 4 и шаг 7 — вместе со
-// сценарием главного меню.
+// спорта (на плавании; в шаге 7 — лыжи, выключенные на время теста).
 func TestS43SportStale(t *testing.T) {
 	s, api, b := skiBot(t)
 	logs := captureLogs(t)
@@ -672,10 +764,13 @@ func TestS43SportStale(t *testing.T) {
 	staleToast(t, b, api, "f:a:swimming:v3")
 	wantStored(t, "шаги 1–3", `{}`, 3)
 
-	// 4. Будущих лыжных событий уже нет: сводка с нулём.
+	// 4. Будущих лыжных событий уже нет: сводка с нулём, в меню кнопки лыж нет.
 	b.Now = func() time.Time { return time.Date(2027, 3, 2, 12, 0, 0, 0, time.UTC) }
 	pressSnap(t, b, api, "f:a:skiing", "s43_no_events")
 	wantStored(t, "шаг 4", `{"sport":"skiing"}`, 4)
+	if got, want := datas(t, press(t, b, api, "m")), []string{"f:a:running", "s:o", "u:o"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("шаг 4: кнопки меню %v, want %v", got, want)
+	}
 	b.Now = func() time.Time { return fixtureNow }
 
 	// 5. Кнопка поиска из сообщения, отправленного до выката (f:s): у
@@ -704,6 +799,27 @@ func TestS43SportStale(t *testing.T) {
 		if got := stored(t); got != before {
 			t.Errorf("шаг 6, %s: чтение переписало JSON: %s → %s", filters, before, got)
 		}
+	}
+
+	// 7. Лыжи выключены в справочнике (на время теста): меню с одной кнопкой,
+	// сохранённый вид спорта читается как бег, кнопка лыж устарела, карточка
+	// лыжного события недоступна, текстовый запрос лыжных событий не находит.
+	setUserFilters(t, s, `{"country":"*","sport":"skiing"}`)
+	storetest.DisableSport(t, event.SportSkiing)
+	off := stored(t)
+	pressSnap(t, b, api, "m", "s43_disabled_menu")
+	if c := press(t, b, api, "f:s"); !strings.HasPrefix(c.Form["text"], "🔎 <b>Поиск забега</b>") {
+		t.Errorf("шаг 7: сводка при выключенных лыжах: %q", c.Form["text"])
+	}
+	staleToast(t, b, api, at(t, "f:a:skiing"))
+	if c := press(t, b, api, at(t, fmt.Sprintf("e:%d:1", skiID(t, "817")))); c.Form["text"] != goneNotice {
+		t.Errorf("шаг 7: карточка лыжного события: %q", c.Form["text"])
+	}
+	if c := say(t, b, api, "этап"); !strings.Contains(c.Form["text"], "Старты по запросу: 1<") || strings.Contains(renderCall(t, c), "⛷") {
+		t.Errorf("шаг 7: текстовый запрос при выключенных лыжах:\n%s", renderCall(t, c))
+	}
+	if got := stored(t); got != off {
+		t.Errorf("шаг 7: фильтры изменились: %s → %s", off, got)
 	}
 
 	// 8. В логе — только вид кнопки.

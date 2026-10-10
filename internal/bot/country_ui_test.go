@@ -286,7 +286,7 @@ func TestSingleCountryUX(t *testing.T) {
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
 	api.reset()
 	b.api.ProcessUpdate(context.Background(), startUpdate(42))
-	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "Собрали беговые старты") {
+	if s := api.of("sendMessage"); len(s) != 1 || !strings.Contains(s[0].Form["text"], "Собрали старты из разных календарей") {
 		t.Errorf("приветствие: %+v", s)
 	}
 

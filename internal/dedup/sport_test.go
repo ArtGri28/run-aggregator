@@ -85,20 +85,20 @@ func sportSnapshot(t *testing.T) string {
 const rolloutDoc, rolloutSection = "../../deploy/README.md", "## Phase 12: вид спорта\n"
 
 // rolloutSQL — запросы проверки из памятки выката (блок ```sql раздела
-// rolloutSection): тест выполняет ровно тот текст, что записан в документе.
+// section): тест выполняет ровно тот текст, что записан в документе.
 // Каждая непустая строка блока — запрос; он должен только читать.
-func rolloutSQL(t *testing.T) []string {
+func rolloutSQL(t *testing.T, section string) []string {
 	t.Helper()
 	doc, err := os.ReadFile(rolloutDoc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, sec, ok := strings.Cut(string(doc), "\n"+rolloutSection)
+	_, sec, ok := strings.Cut(string(doc), "\n"+section)
 	sec, _, _ = strings.Cut(sec, "\n## ")
 	_, block, ok2 := strings.Cut(sec, "```sql\n")
 	block, _, ok3 := strings.Cut(block, "```")
 	if !ok || !ok2 || !ok3 {
-		t.Fatalf("%s: нет блока sql в разделе %q", rolloutDoc, rolloutSection)
+		t.Fatalf("%s: нет блока sql в разделе %q", rolloutDoc, section)
 	}
 	var out []string
 	for _, q := range strings.Split(block, "\n") {
@@ -267,7 +267,7 @@ func TestSportBeforeAfter(t *testing.T) {
 
 	// Запросы проверки из памятки выката — на этой же копии, после первого
 	// прогона, следующего за миграцией.
-	qs := rolloutSQL(t)
+	qs := rolloutSQL(t, rolloutSection)
 	if len(qs) != 2 {
 		t.Fatalf("запросов проверки в памятке %d, want 2", len(qs))
 	}
