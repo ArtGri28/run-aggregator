@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+⛷ <b>V этап Кубка «Виктория» — лыжные гонки</b>
+
+📅 19 декабря 2026
+📍 Минск, Минск, Веснянка
+📏 5 · 10 км
+⛷ Лыжи · Лыжные гонки
+
+🔗 Источник: <a href="https://tristyle.club/competition/817/">Tristyle.Клуб</a>
+---
+[⬅️ Назад] → p:1:v2

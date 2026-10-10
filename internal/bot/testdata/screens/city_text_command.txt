@@ -1,5 +1,5 @@
 method: sendMessage
 parse_mode: 
 ---
-Нажмите /start, чтобы найти забег
+Нажмите /start, чтобы найти старт
 ---

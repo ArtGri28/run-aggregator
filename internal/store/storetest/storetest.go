@@ -83,6 +83,22 @@ func SetSport(t testing.TB, id int64, sport event.Sport) {
 	exec(t, "UPDATE events SET sport = $1 WHERE id = $2", string(sport), id)
 }
 
+// EnableSport включает вид спорта в справочнике event.Sports на время теста
+// и возвращает прежнее значение по его завершении. Справочник общий на
+// процесс: тест с EnableSport не запускается параллельно с другими.
+func EnableSport(t testing.TB, code event.Sport) {
+	t.Helper()
+	for i := range event.Sports {
+		if event.Sports[i].Code == code {
+			was := event.Sports[i].Enabled
+			event.Sports[i].Enabled = true
+			t.Cleanup(func() { event.Sports[i].Enabled = was })
+			return
+		}
+	}
+	t.Fatalf("storetest: вида спорта %q нет в справочнике", code)
+}
+
 // AgeHeartbeat сдвигает отметку компоненты назад на age.
 func AgeHeartbeat(t testing.TB, component string, age time.Duration) {
 	t.Helper()

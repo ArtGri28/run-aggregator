@@ -191,7 +191,7 @@ func TestTextSearch(t *testing.T) {
 				t.Errorf("%q: событие %d = %q, want %q", tc.query, i, rows[i], title)
 			}
 		}
-		if !strings.HasPrefix(c.Form["text"], "Запрос «"+tc.query+"»") || !strings.Contains(c.Form["text"], "Забеги по запросу: "+strconv.Itoa(len(tc.want))) {
+		if !strings.HasPrefix(c.Form["text"], "Запрос «"+tc.query+"»") || !strings.Contains(c.Form["text"], "Старты по запросу: "+strconv.Itoa(len(tc.want))) {
 			t.Errorf("%q: текст %q", tc.query, c.Form["text"])
 		}
 		if got := datas(t, c); !reflect.DeepEqual(got[len(got)-2:], []string{"f:c", "f:s"}) {
@@ -270,7 +270,7 @@ func TestTextSearchMany(t *testing.T) {
 	if rows := listRows(t, c); len(rows) != pageSize {
 		t.Fatalf("события: %d, want %d", len(rows), pageSize)
 	}
-	want := "Забеги по запросу: " + strconv.Itoa(pageSize+3) + "</b>\nПоказаны первые " + strconv.Itoa(pageSize) + " — уточните запрос"
+	want := "Старты по запросу: " + strconv.Itoa(pageSize+3) + "</b>\nПоказаны первые " + strconv.Itoa(pageSize) + " — уточните запрос"
 	if !strings.Contains(c.Form["text"], want) {
 		t.Errorf("текст %q, want %q", c.Form["text"], want)
 	}

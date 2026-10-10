@@ -1,0 +1,7 @@
+method: editMessageText
+parse_mode: HTML
+---
+Выберите дисциплину
+---
+[✓ ⛷ Любая] → f:t:-:v5
+[⬅️ Назад] → f:s:v5

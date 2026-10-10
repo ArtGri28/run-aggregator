@@ -127,7 +127,7 @@ func TestTracerDupes(t *testing.T) {
 	// Не-админ: ответ неизвестной команды, кандидаты не тронуты.
 	e.b.api.ProcessUpdate(ctx, commandUpdate(2, "/dupes"))
 	sends := e.api.of("sendMessage")
-	if len(sends) != 1 || sends[0].Form["text"] != "Нажмите /start, чтобы найти забег" || strings.Contains(sends[0].Form["reply_markup"], "d:") {
+	if len(sends) != 1 || sends[0].Form["text"] != "Нажмите /start, чтобы найти старт" || strings.Contains(sends[0].Form["reply_markup"], "d:") {
 		t.Fatalf("/dupes не-админу: %+v", sends)
 	}
 	if p, f := counts(t, e.s); p != 2 || f != 2 {

@@ -76,6 +76,11 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 			return errNotice
 		}
 		sc = listScreen(items, total, page, v, f.Country == allCountries, today.Year(), activeLine(f, name))
+		// Небеговой вид спорта назван в заголовке списка; у бега заголовок прежний.
+		if sp := f.sport(); !f.running() {
+			_, rest, _ := strings.Cut(sc.text, "\n")
+			sc.text = fmt.Sprintf("%s <b>%s — найдено: %d</b>\n%s", sp.Emoji, sp.Title, total, rest)
+		}
 	}
 	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
 		b.logger().Warn("show list", "err", err)
@@ -262,11 +267,17 @@ const (
 )
 
 // cardScreen — карточка события (BOT-05, HTML): всё динамическое
-// экранировано, ссылки только из validURL. Пустые поля строк не дают.
+// экранировано, ссылки только из validURL. Пустые поля строк не дают. Вид
+// карточки определяет событие: у небегового — значок вида спорта перед
+// названием и строка «вид спорта · дисциплина» вместо строки типа.
 func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style placeStyle) screen {
 	esc := func(s string, n int) string { return html.EscapeString(cut(s, n)) }
+	icon, kind := typeEmoji(e.Type), typeEmoji(e.Type)+" "+typeLabel(string(e.Type))
+	if sp, ok := event.SportByCode(event.SportOf(string(e.Sport))); ok && sp.Code != event.SportRunning {
+		icon, kind = sp.Emoji, sp.Emoji+" "+sp.Title+" · "+typeLabel(string(e.Type))
+	}
 	var sb strings.Builder
-	sb.WriteString(typeEmoji(e.Type) + " <b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n\n")
+	sb.WriteString(icon + " <b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n\n")
 	sb.WriteString("📅 " + ruDate(e.StartDate))
 	if e.EndDate != nil && !e.EndDate.Equal(e.StartDate) {
 		sb.WriteString(" – " + ruDate(*e.EndDate))
@@ -306,7 +317,7 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 		}
 		sb.WriteString("📏 " + line + "\n")
 	}
-	sb.WriteString(typeEmoji(e.Type) + " " + typeLabel(string(e.Type)) + "\n")
+	sb.WriteString(kind + "\n")
 	if e.Description != "" {
 		sb.WriteString("\n" + esc(e.Description, 1000) + "\n")
 	}

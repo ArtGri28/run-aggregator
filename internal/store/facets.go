@@ -29,8 +29,10 @@ type CountryCount struct {
 // строка — без ограничения по стране, ключи разных стран тогда объединяются.
 
 // futureListed — видимые события включённых видов спорта с датой не раньше $1.
-var futureListed = `
-	WHERE e.is_listed AND e.merged_into_id IS NULL AND e.start_date >= $1::date` + sportVisible
+func futureListed() string {
+	return `
+	WHERE e.is_listed AND e.merged_into_id IS NULL AND e.start_date >= $1::date` + sportVisible()
+}
 
 // similarRE — алфавит и длина ключа города для поиска по началу слова.
 // Метасимволов LIKE (% и _) в нём нет.
@@ -51,11 +53,11 @@ func scanCities(rows pgx.Rows) ([]CityCount, error) {
 func (s *Store) TopCities(ctx context.Context, f event.Filter, limit int) ([]CityCount, error) {
 	q := `
 		SELECT e.city_key, COALESCE(mode() WITHIN GROUP (ORDER BY e.city), e.city_key), count(*)
-		FROM events e` + listWhere + `
+		FROM events e` + listWhere() + `
 		  AND e.city_key IS NOT NULL
 		GROUP BY e.city_key
 		ORDER BY count(*) DESC, e.city_key
-		LIMIT $10`
+		LIMIT $11`
 	f.CityKey = ""
 	rows, err := s.db.Query(ctx, q, append(filterArgs(f), limit)...)
 	if err != nil {
@@ -85,7 +87,7 @@ func (s *Store) SimilarCities(ctx context.Context, country, prefix, name string,
 	// пользователя ничего не значат.
 	q := `
 		SELECT e.city_key, COALESCE(mode() WITHIN GROUP (ORDER BY e.city), e.city_key), count(*)
-		FROM events e` + futureListed + `
+		FROM events e` + futureListed() + `
 		  AND e.city_key IS NOT NULL
 		  AND (($5::bool AND (e.city_key LIKE $2::text || '%' OR e.city_key LIKE '%-' || $2::text || '%'))
 		    OR ($6::bool AND left(lower(e.city), char_length($7::text)) = lower($7::text)))
@@ -109,7 +111,7 @@ func (s *Store) SimilarCities(ctx context.Context, country, prefix, name string,
 func (s *Store) CityName(ctx context.Context, country, key string, from time.Time) (name string, n int, err error) {
 	q := `
 		SELECT COALESCE(mode() WITHIN GROUP (ORDER BY e.city), $2::text), count(*)
-		FROM events e` + futureListed + ` AND e.city_key = $2::text
+		FROM events e` + futureListed() + ` AND e.city_key = $2::text
 		  AND ($3::text = '' OR e.country_code = $3::text)`
 	if err := s.db.QueryRow(ctx, q, from, key, country).Scan(&name, &n); err != nil {
 		return "", 0, fmt.Errorf("city name: %w", err)
@@ -120,7 +122,7 @@ func (s *Store) CityName(ctx context.Context, country, key string, from time.Tim
 // EventTypes возвращает отсортированные типы видимых событий страны country
 // с датой не раньше from.
 func (s *Store) EventTypes(ctx context.Context, country string, from time.Time) ([]event.Type, error) {
-	q := `SELECT DISTINCT e.event_type FROM events e` + futureListed + `
+	q := `SELECT DISTINCT e.event_type FROM events e` + futureListed() + `
 		  AND ($2::text = '' OR e.country_code = $2::text) ORDER BY 1`
 	rows, err := s.db.Query(ctx, q, from, country)
 	if err != nil {
@@ -143,7 +145,7 @@ func (s *Store) EventTypes(ctx context.Context, country string, from time.Time) 
 func (s *Store) Countries(ctx context.Context, f event.Filter) ([]CountryCount, error) {
 	q := `
 		SELECT e.country_code, count(*)
-		FROM events e` + listWhere + `
+		FROM events e` + listWhere() + `
 		GROUP BY e.country_code
 		ORDER BY count(*) DESC, e.country_code`
 	f.CountryCode = ""

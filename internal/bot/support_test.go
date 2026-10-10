@@ -529,7 +529,7 @@ func TestS35SupportDisabled(t *testing.T) {
 		t.Fatalf("поиск: %s", c.Form["text"])
 	}
 	long := strings.Repeat("я", 70)
-	if c := sayText(t, b, api, 1001, long); c.Form["text"] != "Нажмите /start, чтобы найти забег" {
+	if c := sayText(t, b, api, 1001, long); c.Form["text"] != "Нажмите /start, чтобы найти старт" {
 		t.Fatalf("текст длиннее 64 символов: %q", c.Form["text"])
 	}
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,8 +28,9 @@ import (
 const defaultCountry = "RU"
 
 // userFilters — фильтры пользователя (users.filters, jsonb). Значения
-// абсолютные; пустой объект — «все будущие даты, вся Россия, любая
-// дистанция, любой тип».
+// абсолютные; пустой объект — «бег, все будущие даты, вся Россия, любая
+// дистанция, любой тип». Страна, город и даты — общие для всех видов спорта;
+// дистанция и дисциплина у каждого вида спорта свои (own).
 type userFilters struct {
 	// Date — одиночный пресет прежнего формата: после loadFilters только "",
 	// "a" (все будущие) или "30". Месяц и «этот/следующий месяц» из старых
@@ -45,6 +47,67 @@ type userFilters struct {
 	// Country: "" — страна по умолчанию, "*" — все страны, иначе ISO
 	// alpha-2. Старые фильтры без поля читаются как "".
 	Country string `json:"country,omitempty"`
+	// Sport — код выбранного вида спорта; "" — бег (ключ не записывается).
+	Sport string `json:"sport,omitempty"`
+	// Sports — дистанция и дисциплина небеговых видов спорта по коду вида
+	// спорта; у бега они в Dist и Type. Пустая запись не хранится.
+	Sports map[string]sportFilters `json:"sports,omitempty"`
+}
+
+// sportFilters — фильтры одного небегового вида спорта: индексы его корзин и
+// код его дисциплины.
+type sportFilters struct {
+	Dist []int  `json:"dist,omitempty"`
+	Type string `json:"type,omitempty"`
+}
+
+// running — выбран бег: действуют Dist и Type, экраны прежние.
+func (f userFilters) running() bool { return f.Sport == "" }
+
+// sport — запись справочника выбранного вида спорта.
+func (f userFilters) sport() event.SportInfo {
+	sp, _ := event.SportByCode(event.SportOf(f.Sport))
+	return sp
+}
+
+// own — дистанция и дисциплина выбранного вида спорта.
+func (f userFilters) own() sportFilters {
+	if f.running() {
+		return sportFilters{Dist: f.Dist, Type: f.Type}
+	}
+	return f.Sports[f.Sport]
+}
+
+// setOwn задаёт дистанцию и дисциплину выбранного вида спорта; фильтры
+// остальных видов спорта не меняются.
+func (f userFilters) setOwn(o sportFilters) userFilters {
+	if f.running() {
+		f.Dist, f.Type = o.Dist, o.Type
+		return f
+	}
+	m := maps.Clone(f.Sports)
+	if len(o.Dist) == 0 && o.Type == "" {
+		delete(m, f.Sport)
+	} else {
+		if m == nil {
+			m = map[string]sportFilters{}
+		}
+		m[f.Sport] = o
+	}
+	if len(m) == 0 {
+		m = nil
+	}
+	f.Sports = m
+	return f
+}
+
+// setSport запоминает выбранный вид спорта; бег хранится как "".
+func (f userFilters) setSport(code string) userFilters {
+	if code == string(event.SportRunning) {
+		code = ""
+	}
+	f.Sport = code
+	return f
 }
 
 // MarshalJSON: один отмеченный период хранится в прежнем поле date — так его
@@ -59,17 +122,43 @@ func (f userFilters) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p)
 }
 
-// buckets — корзины дистанций: сплошные полуинтервалы (lo, hi] в метрах.
-// Границы стоят за классическими дистанциями: 10 км — в первой корзине,
-// полумарафон (21,1) — во второй, марафон (42,2) — в третьей.
-var buckets = [...]struct {
+// bucket — корзина дистанций: полуинтервал (lo, hi] в метрах.
+type bucket struct {
 	emoji, label string
 	lo, hi       int
-}{
+}
+
+// buckets — корзины дистанций бега: сплошные полуинтервалы (lo, hi] в метрах.
+// Границы стоят за классическими дистанциями: 10 км — в первой корзине,
+// полумарафон (21,1) — во второй, марафон (42,2) — в третьей.
+var buckets = [...]bucket{
 	{"🟢", "До 10 км", 0, 10000},
 	{"🟡", "10–21 км", 10000, 21100},
 	{"🟠", "21–42 км", 21100, 42200},
 	{"🔴", "42+ км", 42200, 2147483647},
+}
+
+// skiBuckets — корзины дистанций лыж: до 15, 15–30, 30–50, 50+ км. Граница
+// входит в верхнюю корзину: ровно 15 км — «15–30 км», 30 км — «30–50 км»,
+// 50 км — «50+ км». Дистанции хранятся целыми метрами, поэтому полуинтервал
+// [lo, hi) записан здесь как (lo − 1, hi − 1]: запрос выдачи сравнивает так
+// же, как у бега.
+var skiBuckets = []bucket{
+	{"🟢", "До 15 км", -1, 14999},
+	{"🟡", "15–30 км", 14999, 29999},
+	{"🟠", "30–50 км", 29999, 49999},
+	{"🔴", "50+ км", 49999, 2147483646},
+}
+
+// sportBuckets — набор корзин вида спорта; nil — фильтра дистанции у него нет.
+func sportBuckets(sp event.Sport) []bucket {
+	switch sp {
+	case event.SportRunning:
+		return buckets[:]
+	case event.SportSkiing:
+		return skiBuckets
+	}
+	return nil
 }
 
 var typeLabels = map[event.Type]string{
@@ -79,6 +168,9 @@ var typeLabels = map[event.Type]string{
 	event.TypeTrack:    "Стадион",
 	event.TypeObstacle: "OCR · с препятствиями",
 	event.TypeOther:    "Другое",
+
+	event.TypeSki:       "Лыжные гонки",
+	event.TypeRollerski: "Лыжероллеры",
 }
 
 var typeEmojis = map[event.Type]string{
@@ -87,6 +179,9 @@ var typeEmojis = map[event.Type]string{
 	event.TypeCross:    "🌲",
 	event.TypeTrack:    "🏟",
 	event.TypeObstacle: "🧗",
+
+	event.TypeSki:       "⛷",
+	event.TypeRollerski: "🛼",
 }
 
 // typeEmoji — значок типа; у «Другого» и неизвестного типа — бегун.
@@ -149,21 +244,53 @@ func loadFilters(raw []byte, today time.Time) userFilters {
 	if f.Type != "" && !validType(f.Type) {
 		f.Type = ""
 	}
+	f.Dist = cleanBuckets(f.Dist, len(buckets))
+	// Выбранный вид спорта: вне справочника или выключенный — бег.
+	if sp, ok := event.SportByCode(event.Sport(f.Sport)); !ok || !sp.Enabled || sp.Code == event.SportRunning {
+		f.Sport = ""
+	}
+	// Фильтры небеговых видов спорта: только коды справочника, корзины из
+	// набора вида спорта, дисциплина из его перечня; пустая запись не хранится.
+	var sports map[string]sportFilters
+	for code, o := range f.Sports {
+		sp := event.Sport(code)
+		if _, ok := event.SportByCode(sp); !ok || sp == event.SportRunning {
+			continue
+		}
+		o.Dist = cleanBuckets(o.Dist, len(sportBuckets(sp)))
+		if !slices.Contains(event.SportTypes[sp], event.Type(o.Type)) {
+			o.Type = ""
+		}
+		if len(o.Dist) == 0 && o.Type == "" {
+			continue
+		}
+		if sports == nil {
+			sports = map[string]sportFilters{}
+		}
+		sports[code] = o
+	}
+	f.Sports = sports
+	return f
+}
+
+// cleanBuckets — индексы корзин из набора в n корзин: без повторов и значений
+// вне набора, по возрастанию.
+func cleanBuckets(in []int, n int) []int {
 	var dist []int
-	for _, i := range f.Dist {
-		if i >= 0 && i < len(buckets) && !slices.Contains(dist, i) {
+	for _, i := range in {
+		if i >= 0 && i < n && !slices.Contains(dist, i) {
 			dist = append(dist, i)
 		}
 	}
 	slices.Sort(dist)
-	f.Dist = dist
-	return f
+	return dist
 }
 
 // Изменения фильтров — чистые методы, возвращают новое значение. Дата, город
 // и тип задаются абсолютно, корзина переключается относительно текущего
 // состояния: update применяет изменение под блокировкой строки, поэтому
-// двойное нажатие безопасно (даёт «выкл→вкл»).
+// двойное нажатие безопасно (даёт «выкл→вкл»). Корзина и тип (дисциплина) —
+// фильтры выбранного вида спорта.
 
 // maxPeriods — предел числа отмеченных периодов: в меню их двенадцать.
 const maxPeriods = 12
@@ -244,25 +371,28 @@ func (f userFilters) setType(t string) userFilters {
 	if t == "-" {
 		t = ""
 	}
-	f.Type = t
-	return f
+	o := f.own()
+	o.Type = t
+	return f.setOwn(o)
 }
 
 // toggleBucket добавляет или убирает корзину относительно текущего состояния
 // (под блокировкой строки в update); список отсортирован.
 func (f userFilters) toggleBucket(i int) userFilters {
-	if j := slices.Index(f.Dist, i); j >= 0 {
-		f.Dist = slices.Delete(slices.Clone(f.Dist), j, j+1)
-		return f
+	o := f.own()
+	if j := slices.Index(o.Dist, i); j >= 0 {
+		o.Dist = slices.Delete(slices.Clone(o.Dist), j, j+1)
+		return f.setOwn(o)
 	}
-	f.Dist = append(slices.Clone(f.Dist), i)
-	slices.Sort(f.Dist)
-	return f
+	o.Dist = append(slices.Clone(o.Dist), i)
+	slices.Sort(o.Dist)
+	return f.setOwn(o)
 }
 
 func (f userFilters) clearBuckets() userFilters {
-	f.Dist = nil
-	return f
+	o := f.own()
+	o.Dist = nil
+	return f.setOwn(o)
 }
 
 // unset снимает один фильтр: 'd' дата, 'c' город, 'b' дистанция, 't' тип,
@@ -274,16 +404,18 @@ func (f userFilters) unset(field byte) userFilters {
 	case 'c':
 		f.City = ""
 	case 'b':
-		f.Dist = nil
+		f = f.clearBuckets()
 	case 't':
-		f.Type = ""
+		f = f.setType("")
 	case 'k':
 		f = f.setCountry("")
 	}
 	return f
 }
 
-func (userFilters) reset() userFilters { return userFilters{} }
+// reset снимает общие фильтры и фильтры всех видов спорта; выбранный вид
+// спорта остаётся.
+func (f userFilters) reset() userFilters { return userFilters{Sport: f.Sport} }
 
 // mutation — изменение фильтров, которое делает кнопка; nil — кнопка
 // только показывает экран (сводку или подменю).
@@ -309,6 +441,8 @@ func mutation(c callback) func(userFilters) userFilters {
 		return func(f userFilters) userFilters { return f.setType(v) }
 	case c.Kind == cbCountry:
 		return func(f userFilters) userFilters { return f.setCountry(v) }
+	case c.Kind == cbSport:
+		return func(f userFilters) userFilters { return f.setSport(v) }
 	case c.Kind == cbBucket && v == "-":
 		return userFilters.clearBuckets
 	case c.Kind == cbBucket:
@@ -382,14 +516,16 @@ func (f userFilters) countryCode() string {
 
 // query переводит фильтры пользователя в параметры выдачи.
 func (f userFilters) query(today time.Time) event.Filter {
-	q := event.Filter{CountryCode: f.countryCode(), CityKey: f.City, Type: event.Type(f.Type)}
+	o, sp := f.own(), f.sport().Code
+	q := event.Filter{CountryCode: f.countryCode(), CityKey: f.City, Type: event.Type(o.Type), Sport: sp}
 	q.From, q.To = dateRange(f.Date, today)
 	for _, p := range f.Dates {
 		from, to := dateRange(p, today)
 		q.Periods = append(q.Periods, event.DateRange{From: from, To: to})
 	}
-	for _, i := range f.Dist {
-		q.Distances = append(q.Distances, event.DistanceRange{Lo: buckets[i].lo, Hi: buckets[i].hi})
+	bs := sportBuckets(sp)
+	for _, i := range o.Dist {
+		q.Distances = append(q.Distances, event.DistanceRange{Lo: bs[i].lo, Hi: bs[i].hi})
 	}
 	return q
 }
@@ -422,15 +558,16 @@ func datesLabel(f userFilters) string {
 	return strings.Join(l, ", ")
 }
 
-// distLabel — выбранные корзины с их цветными метками; метка корзины одна
-// и та же во всех экранах.
-func distLabel(dist []int) string {
+// distLabel — выбранные корзины выбранного вида спорта с их цветными метками;
+// метка корзины одна и та же во всех экранах.
+func distLabel(f userFilters) string {
+	dist, bs := f.own().Dist, sportBuckets(f.sport().Code)
 	if len(dist) == 0 {
 		return "любая"
 	}
 	l := make([]string, len(dist))
 	for i, b := range dist {
-		l[i] = buckets[b].emoji + " " + buckets[b].label
+		l[i] = bs[b].emoji + " " + bs[b].label
 	}
 	return strings.Join(l, ", ")
 }
@@ -463,11 +600,18 @@ func summaryLine(f userFilters, cityName string, showCountry bool) string {
 	if f.City != "" {
 		city = html.EscapeString(cityName)
 	}
+	kind := "🏃 Тип: " + upperFirst(typeLabel(f.Type))
+	if !f.running() {
+		kind = f.sport().Emoji + " Дисциплина: Любая"
+		if t := f.own().Type; t != "" {
+			kind = f.sport().Emoji + " Дисциплина: " + typeLabel(t)
+		}
+	}
 	lines := []string{
 		"📍 Город: " + city,
 		"📅 Дата: " + datesLabel(f),
-		"📏 Дистанция: " + upperFirst(distLabel(f.Dist)),
-		"🏃 Тип: " + upperFirst(typeLabel(f.Type)),
+		"📏 Дистанция: " + upperFirst(distLabel(f)),
+		kind,
 	}
 	if showCountry {
 		country := countryLabel(f.effectiveCountry())
@@ -480,10 +624,11 @@ func summaryLine(f userFilters, cityName string, showCountry bool) string {
 }
 
 // activeCount — число фильтров, отличающихся от значений по умолчанию, из
-// пяти: страна (не Россия), город, даты, дистанции, тип.
+// пяти: страна (не Россия), город, даты, дистанции и тип (дисциплина)
+// выбранного вида спорта.
 func (f userFilters) activeCount() int {
-	n := 0
-	for _, on := range []bool{f.Country != "", f.City != "", f.hasDate(), len(f.Dist) > 0, f.Type != ""} {
+	n, o := 0, f.own()
+	for _, on := range []bool{f.Country != "", f.City != "", f.hasDate(), len(o.Dist) > 0, o.Type != ""} {
 		if on {
 			n++
 		}
@@ -504,11 +649,12 @@ func activeLine(f userFilters, cityName string) string {
 	if f.hasDate() {
 		parts = append(parts, datesLabel(f))
 	}
-	if len(f.Dist) > 0 {
-		parts = append(parts, distLabel(f.Dist))
+	o := f.own()
+	if len(o.Dist) > 0 {
+		parts = append(parts, distLabel(f))
 	}
-	if f.Type != "" {
-		parts = append(parts, typeLabel(f.Type))
+	if o.Type != "" {
+		parts = append(parts, typeLabel(o.Type))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -542,21 +688,27 @@ const backLabel = "⬅️ Назад"
 // summaryScreen — экран поиска (D-10): значения фильтров в тексте, в кнопках
 // только названия; «Показать N»; showCountry добавляет страну над остальными.
 func summaryScreen(f userFilters, cityName string, v, n int, showCountry bool) screen {
+	// Бег — прежние тексты; у остальных видов спорта — нейтральные.
+	title, kind, show := "🔎 <b>Поиск забега</b>", "🏃 Тип", plural(n, "забег", "забега", "забегов")
+	if !f.running() {
+		sp := f.sport()
+		title, kind, show = sp.Emoji+" <b>"+sp.Title+": поиск старта</b>", sp.Emoji+" Дисциплина", plural(n, "старт", "старта", "стартов")
+	}
 	var r1, r2 row
 	r1.add("📍 Город", callback{Kind: cbCity})
 	r1.add("📅 Дата", callback{Kind: cbDate})
 	r2.add("📏 Дистанция", callback{Kind: cbBucket})
-	r2.add("🏃 Тип", callback{Kind: cbType})
+	r2.add(kind, callback{Kind: cbType})
 	var rows []row
 	if showCountry {
 		rows = append(rows, btn("🌍 Страна", callback{Kind: cbCountry}))
 	}
 	rows = append(rows, r1, r2,
-		btn(fmt.Sprintf("🔎 Показать %d %s", n, plural(n, "забег", "забега", "забегов")), callback{Kind: cbPage, Page: 1, V: v}),
+		btn(fmt.Sprintf("🔎 Показать %d %s", n, show), callback{Kind: cbPage, Page: 1, V: v}),
 		btn("🔄 Сбросить", callback{Kind: cbResetAsk, Value: fromSearch}),
 		btn(backLabel, callback{Kind: cbMenu}))
 	return screen{
-		text: "🔎 <b>Поиск забега</b>\n\n" + summaryLine(f, cityName, showCountry),
+		text: title + "\n\n" + summaryLine(f, cityName, showCountry),
 		kb:   keyboard(rows...),
 	}
 }
@@ -575,11 +727,16 @@ func emptyScreen(f userFilters, pickCountry bool) screen {
 	if f.City != "" {
 		rows = append(rows, btn("Снять город", callback{Kind: cbReset, Value: "c"}))
 	}
-	if len(f.Dist) > 0 {
+	o := f.own()
+	if len(o.Dist) > 0 {
 		rows = append(rows, btn("Снять дистанцию", callback{Kind: cbReset, Value: "b"}))
 	}
-	if f.Type != "" {
-		rows = append(rows, btn("Снять тип", callback{Kind: cbReset, Value: "t"}))
+	if o.Type != "" {
+		label := "Снять тип"
+		if !f.running() {
+			label = "Снять дисциплину"
+		}
+		rows = append(rows, btn(label, callback{Kind: cbReset, Value: "t"}))
 	}
 	text := "Ничего не нашлось"
 	if len(rows) > 0 {
@@ -625,7 +782,7 @@ func dateMenu(f userFilters, today time.Time) screen {
 	return screen{text: "Выберите даты (можно несколько)", kb: keyboard(rows...)}
 }
 
-// bucketMenu — корзины дистанций; выбранные отмечены «✓».
+// bucketMenu — корзины дистанций бега; выбранные отмечены «✓».
 func bucketMenu(f userFilters) screen {
 	var rows []row
 	for i, bk := range buckets {
@@ -633,6 +790,30 @@ func bucketMenu(f userFilters) screen {
 	}
 	rows = append(rows, btn(check(len(f.Dist) == 0, "🏃 Любая"), callback{Kind: cbBucket, Value: "-"}), btn(backLabel, back))
 	return screen{text: "Выберите дистанции (можно несколько)", kb: keyboard(rows...)}
+}
+
+// sportBucketMenu — корзины дистанций небегового вида спорта: у корзины число
+// событий при остальных фильтрах (отмеченные корзины на него не влияют);
+// корзина без событий не показывается, а выбранная остаётся и при нуле.
+// Упрощение: число событий — отдельным запросом на корзину (их четыре); при
+// росте числа корзин — один запрос с группировкой по корзинам.
+func (b *Bot) sportBucketMenu(ctx context.Context, f userFilters) (screen, error) {
+	sp, dist, q := f.sport(), f.own().Dist, f.query(b.today())
+	var rows []row
+	for i, bk := range sportBuckets(sp.Code) {
+		q.Distances = []event.DistanceRange{{Lo: bk.lo, Hi: bk.hi}}
+		n, err := b.Store.CountEvents(ctx, q)
+		if err != nil {
+			return screen{}, err
+		}
+		on := slices.Contains(dist, i)
+		if n == 0 && !on {
+			continue
+		}
+		rows = append(rows, btn(check(on, fmt.Sprintf("%s %s (%d)", bk.emoji, bk.label, n)), callback{Kind: cbBucket, Value: strconv.Itoa(i)}))
+	}
+	rows = append(rows, btn(check(len(dist) == 0, sp.Emoji+" Любая"), callback{Kind: cbBucket, Value: "-"}), btn(backLabel, back))
+	return screen{text: "Выберите дистанции (можно несколько)", kb: keyboard(rows...)}, nil
 }
 
 // cityMenu — топ-10 городов по остальным фильтрам; город можно и написать.
@@ -649,34 +830,42 @@ func (b *Bot) cityMenu(ctx context.Context, f userFilters) (screen, error) {
 	return screen{text: "Выберите город или напишите его название сообщением", kb: keyboard(rows...)}, nil
 }
 
-// typeMenu — только типы, которые есть среди будущих событий (D-09).
+// typeMenu — только типы, которые есть среди будущих событий (D-09). У
+// небегового вида спорта это меню дисциплин: дисциплины его перечня, кроме
+// «Другого», в порядке справочника.
 func (b *Bot) typeMenu(ctx context.Context, f userFilters) (screen, error) {
 	types, err := b.Store.EventTypes(ctx, f.countryCode(), b.today())
 	if err != nil {
 		return screen{}, err
 	}
-	// По две кнопки в ряд, в порядке menuTypes; только встречающиеся типы.
+	menu, text, anyLabel, cur := menuTypes[:], "Выберите тип забега", "🏃 Любой", f.own().Type
+	if !f.running() {
+		sp := f.sport()
+		menu = slices.DeleteFunc(slices.Clone(event.SportTypes[sp.Code]), func(t event.Type) bool { return t == event.TypeOther })
+		text, anyLabel = "Выберите дисциплину", sp.Emoji+" Любая"
+	}
+	// По две кнопки в ряд, в порядке menu; только встречающиеся типы.
 	var rows []row
 	var r row
-	for _, t := range menuTypes {
+	for _, t := range menu {
 		if !slices.Contains(types, t) {
 			continue
 		}
-		r.add(check(f.Type == string(t), typeEmoji(t)+" "+typeLabel(string(t))), callback{Kind: cbType, Value: string(t)})
+		r.add(check(cur == string(t), typeEmoji(t)+" "+typeLabel(string(t))), callback{Kind: cbType, Value: string(t)})
 		if len(r) == 2 {
 			rows, r = append(rows, r), nil
 		}
 	}
-	rows = append(rows, r, btn(check(f.Type == "", "🏃 Любой"), callback{Kind: cbType, Value: "-"}), btn(backLabel, back))
-	return screen{text: "Выберите тип забега", kb: keyboard(rows...)}, nil
+	rows = append(rows, r, btn(check(cur == "", anyLabel), callback{Kind: cbType, Value: "-"}), btn(backLabel, back))
+	return screen{text: text, kb: keyboard(rows...)}, nil
 }
 
-// countryAvailable — кнопка страны нужна: в будущем каталоге минимум две
-// страны либо одна, но не совпадающая со страной фильтра (иначе пользователь
+// countryAvailable — кнопка страны нужна: в будущем каталоге выбранного вида
+// спорта минимум две страны либо одна, но не совпадающая со страной фильтра (иначе пользователь
 // с умолчанием «Россия» не увидел бы каталог одной Беларуси). Одна страна,
 // равная эффективной, — прежний компактный интерфейс.
 func (b *Bot) countryAvailable(ctx context.Context, f userFilters) (bool, error) {
-	cs, err := b.Store.Countries(ctx, event.Filter{From: b.today()})
+	cs, err := b.Store.Countries(ctx, event.Filter{From: b.today(), Sport: f.sport().Code})
 	switch {
 	case err != nil:
 		return false, err
@@ -728,14 +917,15 @@ func (b *Bot) summary(ctx context.Context, f userFilters, v int) (screen, error)
 	return summaryScreen(f, name, v, n, show), nil
 }
 
-// countryMenu — все страны будущего каталога (без пользовательских фильтров:
+// countryMenu — все страны будущего каталога выбранного вида спорта (без
+// пользовательских фильтров:
 // иначе страну с нулём событий при текущих фильтрах не выбрать) с числом
 // событий при остальных фильтрах, в том числе (0), и «Все страны». Город в
 // счёт не входит: он принадлежит стране и сбрасывается при её смене. Порядок
 // не зависит от фильтров; текущая страна остаётся в списке, даже если её нет
 // в каталоге.
 func (b *Bot) countryMenu(ctx context.Context, f userFilters) (screen, error) {
-	catalog, err := b.Store.Countries(ctx, event.Filter{From: b.today()})
+	catalog, err := b.Store.Countries(ctx, event.Filter{From: b.today(), Sport: f.sport().Code})
 	if err != nil {
 		return screen{}, err
 	}
@@ -793,7 +983,14 @@ func (b *Bot) updateAt(ctx context.Context, tgID int64, c callback, fn func(user
 	}
 	today := b.today()
 	raw, v, err := b.Store.UpdateFiltersAt(ctx, tgID, c.V, func(cur []byte) ([]byte, error) {
-		return json.Marshal(fn(loadFilters(cur, today)))
+		f := loadFilters(cur, today)
+		// Кнопка уже выбранного вида спорта ничего не меняет и JSON не
+		// переписывает: у пользователя, не открывавшего другие виды спорта,
+		// «Бег» работает как прежняя кнопка поиска.
+		if c.Kind == cbSport && f.setSport(c.Value).Sport == f.Sport {
+			return cur, nil
+		}
+		return json.Marshal(fn(f))
 	})
 	return loadFilters(raw, today), v, err
 }
@@ -904,6 +1101,22 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 		err error
 	)
 	mut := mutation(c)
+	// Кнопка выключенного вида спорта и дисциплина не выбранного вида спорта
+	// (кнопка из сообщения другого вида спорта) устарели: в базу не пишется
+	// ничего. Чтение без записи; между ним и изменением стоит проверка версии.
+	if sp, _ := event.SportByCode(event.Sport(c.Value)); c.Kind == cbSport && !sp.Enabled {
+		return staleNotice
+	}
+	if c.Kind == cbType && mut != nil && c.Value != "-" {
+		raw, _, _, err := b.Store.PeekFilters(ctx, q.From.ID)
+		if err != nil {
+			b.logger().Error("filters", "err", err)
+			return errNotice
+		}
+		if sp := loadFilters(raw, b.today()).sport().Code; !slices.Contains(event.SportTypes[sp], event.Type(c.Value)) {
+			return staleNotice
+		}
+	}
 	if mut != nil {
 		f, v, err = b.updateAt(ctx, q.From.ID, c, mut)
 		if errors.Is(err, store.ErrStaleFilters) {
@@ -929,6 +1142,8 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 	case c.Kind == cbCity && f.Country == allCountries:
 		sc, err = b.countryMenu(ctx, f)
 		notice = cityNeedsCountry
+	case c.Kind == cbBucket && !f.running():
+		sc, err = b.sportBucketMenu(ctx, f)
 	case c.Kind == cbBucket:
 		sc = bucketMenu(f)
 	case c.Kind == cbPeriod:
@@ -957,7 +1172,7 @@ func (b *Bot) onFilter(ctx context.Context, q *models.CallbackQuery, c callback)
 const maxCityInput = 64
 
 // onText: любое текстовое сообщение не-команда в личном чате — запрос: город
-// или название забега. Состояний «жду ввод» два, и они не действуют
+// или название старта. Состояний «жду ввод» два, и они не действуют
 // одновременно (D-10 Phase 11): обращение в поддержку и город проживания
 // профиля. Порядок такой: поддержка, город проживания, поиск. При действующей
 // отметке поддержки текст уходит в группу (первой проверкой, до приведения к
@@ -989,7 +1204,7 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	}
 	text := strings.Join(strings.Fields(m.Text), " ") // без переводов строк: запрос — одна строка сообщения
 	if text == "" || utf8.RuneCountInString(text) > maxCityInput || strings.HasPrefix(text, "/") {
-		say(screen{text: "Нажмите /start, чтобы найти забег", plain: true})
+		say(screen{text: "Нажмите /start, чтобы найти старт", plain: true})
 		return
 	}
 	if b.residenceText(ctx, m, text) { // город проживания (D-10): в поиск и в фильтры не идёт

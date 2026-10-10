@@ -232,3 +232,39 @@ func TestCountryCallbackLength(t *testing.T) {
 		}
 	}
 }
+
+// TestCallbackSport — кнопка вида спорта f:a:<код>: только коды справочника,
+// значение и версия обязательны; f:t принимает дисциплины всех видов спорта
+// справочника.
+func TestCallbackSport(t *testing.T) {
+	for _, s := range []string{
+		"f:a:running:v1", "f:a:skiing:v1", "f:a:swimming:v0", "f:a:multisport:v99999", "f:a:cycling:v2147483647",
+		"f:t:ski:v1", "f:t:rollerski:v7", "f:t:other:v1",
+	} {
+		c, err := parseCallback(s)
+		if err != nil {
+			t.Fatalf("parseCallback(%q): %v", s, err)
+		}
+		if got, err := c.encode(); err != nil || got != s || c.Legacy {
+			t.Fatalf("encode(parse(%q)) = %q, %v (legacy %v); want the same", s, got, err, c.Legacy)
+		}
+	}
+	if c, err := parseCallback("f:a:skiing:v3"); err != nil || c.Kind != cbSport || c.Value != "skiing" || c.V != 3 {
+		t.Errorf("f:a:skiing:v3 = %+v, %v", c, err)
+	}
+	if len("f:a:multisport:v99999") > 21 {
+		t.Error("кнопка вида спорта с версией до 99999 длиннее 21 байта")
+	}
+	// Без версии — кнопка прежнего формата: разбирается, но считается устаревшей.
+	if c, err := parseCallback("f:a:skiing"); err != nil || !c.Legacy {
+		t.Errorf("f:a:skiing = %+v, %v; want Legacy", c, err)
+	}
+	for _, s := range []string{
+		"f:a", "f:a:v1", "f:a::v1", "f:a:-:v1", "f:a:chess:v1", "f:a:SKIING:v1", "f:a:Skiing:v1", "f:a: skiing:v1",
+		"f:a:ski:v1", "f:a:skiing:x:v1", "f:a:skiing:v1:v2", "f:a:лыжи:v1", "f:t:chess:v1", "f:t:SKI:v1",
+	} {
+		if c, err := parseCallback(s); err == nil {
+			t.Errorf("parseCallback(%q) = %+v, want ошибку", s, c)
+		}
+	}
+}

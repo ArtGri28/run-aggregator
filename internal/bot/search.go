@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-telegram/bot/models"
 
+	"aggregator/internal/event"
 	"aggregator/internal/normalize"
 	"aggregator/internal/store"
 )
@@ -166,8 +167,9 @@ func matchEvents(items []store.ListItem, words []string) []store.ListItem {
 
 // searchResults — ответ на текстовый запрос, не совпавший с названием города:
 // события по словам запроса (matchEvents) и подсказки городов. Поиск идёт по
-// всем будущим событиям страны фильтров (при «всех странах» — по всем),
-// остальные фильтры не учитывает и ничего не меняет.
+// всем будущим событиям страны фильтров (при «всех странах» — по всем) всех
+// включённых видов спорта, остальные фильтры и выбранный вид спорта не
+// учитывает и ничего не меняет.
 func (b *Bot) searchResults(ctx context.Context, uf userFilters, text string, v int) (screen, error) {
 	all := uf.Country == allCountries
 	// Кнопка выбора города; при «всех странах» город недоступен — выбор страны.
@@ -177,7 +179,7 @@ func (b *Bot) searchResults(ctx context.Context, uf userFilters, text string, v 
 	}
 	words := searchWords(text)
 	if len(words) == 0 {
-		return screen{text: "Не понял запрос — напишите название забега или города", plain: true, kb: keyboard(pick, btn(backLabel, back))}, nil
+		return screen{text: "Не понял запрос — напишите название старта или города", plain: true, kb: keyboard(pick, btn(backLabel, back))}, nil
 	}
 	today, country := b.today(), uf.countryCode()
 	items, err := b.Store.SearchCandidates(ctx, country, today, maxSearchCandidates)
@@ -201,7 +203,8 @@ func (b *Bot) searchResults(ctx context.Context, uf userFilters, text string, v 
 
 // searchScreen — результаты запроса: подсказки городов (кнопка выбирает город
 // фильтром) и найденные события (кнопка открывает карточку с возвратом к этим
-// результатам); ничего не найдено — предложение открыть каталог. Первая
+// результатам; у небегового события перед названием значок вида спорта);
+// ничего не найдено — предложение открыть каталог. Первая
 // строка «Запрос «…»» — по ней карточка узнаёт запрос (queryOf). pick —
 // кнопка выбора города или страны; v — версия фильтров для кнопок.
 func searchScreen(query string, items []store.ListItem, total int, cities []store.CityCount, v int, flags bool, year int, pick row) screen {
@@ -219,12 +222,15 @@ func searchScreen(query string, items []store.ListItem, total int, cities []stor
 		}
 	}
 	if total > 0 {
-		found := fmt.Sprintf("🔎 <b>Забеги по запросу: %d</b>", total)
+		found := fmt.Sprintf("🔎 <b>Старты по запросу: %d</b>", total)
 		if total > len(items) {
 			found += fmt.Sprintf("\nПоказаны первые %d — уточните запрос", len(items))
 		}
 		lines = append(lines, found)
 		for _, it := range items {
+			if sp, ok := event.SportByCode(it.Sport); ok && sp.Code != event.SportRunning {
+				it.Title = sp.Emoji + " " + it.Title
+			}
 			rows = append(rows, eventBtn(it, callback{Kind: cbSearchCard, ID: it.ID, V: v}, flags, year))
 		}
 	}

@@ -1,0 +1,8 @@
+method: editMessageText
+parse_mode: HTML
+---
+Выберите дисциплину
+---
+[⛷ Лыжные гонки] → f:t:ski:v2 | [🛼 Лыжероллеры] → f:t:rollerski:v2
+[✓ ⛷ Любая] → f:t:-:v2
+[⬅️ Назад] → f:s:v2

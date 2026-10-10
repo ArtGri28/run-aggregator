@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+⛷ <b>(дата уточняется) VI этап Кубка «Виктория» — лыжные гонки</b>
+
+📅 1 января 2027
+📍 Минск
+📏 5 · 10 км
+⛷ Лыжи · Лыжные гонки
+
+🔗 Источник: <a href="https://tristyle.club/competition/818/">Tristyle.Клуб</a>
+---
+[⬅️ Назад] → p:1:v2

@@ -18,9 +18,10 @@ import (
 //	f:d[:a|30|cm|nm|mYYYYMM]:v<N> дата: подменю / одно значение (так задают кнопки старых сообщений)
 //	f:w:<-|cm|nm|mYYYYMM>:v<N>    период дат: снять все / отметить или снять один
 //	f:c[:-|<city_key>]:v<N>       город
-//	f:n[:-|0..3]:v<N>             корзина дистанции
+//	f:n[:-|0..3]:v<N>             корзина дистанции выбранного вида спорта
 //	f:b[:-]:v<N>                  то же в сообщениях до смены корзин: только открыть и снять
-//	f:t[:-|<тип>]:v<N>            тип
+//	f:t[:-|<тип>]:v<N>            тип (дисциплина) выбранного вида спорта
+//	f:a:<код>:v<N>                выбрать вид спорта: код справочника event.Sports
 //	f:k[:-|*|<ISO>]:v<N>          страна: подменю / по умолчанию / все страны / код
 //	f:x:<d|c|b|t|k>:v<N>          снять один фильтр
 //	s:o:v<N>                      мои настройки
@@ -83,6 +84,8 @@ const (
 	cbSupport       // h:o
 	cbSupportReply  // h:r
 	cbSupportCancel // h:x
+
+	cbSport // f:a
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -159,8 +162,8 @@ var profLetters = map[cbKind]string{cbProfStart: "b", cbProfSkip: "n", cbProfDon
 
 // Корзины дистанций сменились: новые кнопки — f:n. Номер корзины в f:b из
 // старого сообщения значил бы другой диапазон, поэтому такая кнопка устарела.
-var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "w": cbPeriod, "c": cbCity, "b": cbBucket, "n": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset}
-var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbPeriod: "w", cbCity: "c", cbBucket: "n", cbType: "t", cbCountry: "k", cbReset: "x"}
+var fKinds = map[string]cbKind{"s": cbSummary, "d": cbDate, "w": cbPeriod, "c": cbCity, "b": cbBucket, "n": cbBucket, "t": cbType, "k": cbCountry, "x": cbReset, "a": cbSport}
+var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbPeriod: "w", cbCity: "c", cbBucket: "n", cbType: "t", cbCountry: "k", cbReset: "x", cbSport: "a"}
 
 // Кнопки поддержки не меняют ни профиль, ни фильтры, поэтому версии у них нет.
 var hKinds = map[string]cbKind{"o": cbSupport, "r": cbSupportReply, "x": cbSupportCancel}
@@ -174,6 +177,17 @@ var eventTypes = []event.Type{event.TypeRoad, event.TypeTrail, event.TypeCross, 
 func validType(s string) bool {
 	for _, t := range eventTypes {
 		if string(t) == s {
+			return true
+		}
+	}
+	return false
+}
+
+// validAnyType — дисциплина любого вида спорта справочника: кнопка f:t не
+// знает выбранного вида спорта, подходит ли ему значение — решает onFilter.
+func validAnyType(s string) bool {
+	for _, types := range event.SportTypes {
+		if slices.Contains(types, event.Type(s)) {
 			return true
 		}
 	}
@@ -207,11 +221,17 @@ func validValue(k cbKind, v string) bool {
 	case cbCity:
 		return v == "-" || validCityKey(v)
 	case cbBucket:
+		// Упрощение: номер корзины проверяется по числу беговых корзин — наборы
+		// всех видов спорта одного размера (TestSkiBuckets). Набор другого
+		// размера потребует проверки по выбранному виду спорта в onFilter.
 		return v == "-" || (len(v) == 1 && v[0] >= '0' && v[0] < '0'+byte(len(buckets)))
 	case cbType:
-		return v == "-" || validType(v)
+		return v == "-" || validAnyType(v)
 	case cbCountry:
 		return v == "-" || (v != "" && validCountry(v))
+	case cbSport:
+		_, ok := event.SportByCode(event.Sport(v))
+		return ok
 	case cbReset:
 		return v == "d" || v == "c" || v == "b" || v == "t" || v == "k"
 	}
@@ -265,8 +285,8 @@ func parseCallback(data string) (callback, error) {
 			return callback{}, errCallback
 		}
 		c.Kind = k
-		if (k == cbReset || k == cbPeriod) && len(p) != 3 {
-			return callback{}, errCallback // «сбросить всё» — только через подтверждение (s:y); у периода значение обязательно
+		if (k == cbReset || k == cbPeriod || k == cbSport) && len(p) != 3 {
+			return callback{}, errCallback // «сбросить всё» — только через подтверждение (s:y); у периода и вида спорта значение обязательно
 		}
 		if len(p) == 3 {
 			if !validValue(k, p[2]) || (p[1] == "b" && p[2] != "-") {
@@ -401,7 +421,7 @@ func parseProfile(p []string) (callback, error) {
 func (c callback) encode() (string, error) {
 	var s string
 	switch c.Kind {
-	case cbSummary, cbDate, cbPeriod, cbCity, cbBucket, cbType, cbCountry, cbReset:
+	case cbSummary, cbDate, cbPeriod, cbCity, cbBucket, cbType, cbCountry, cbReset, cbSport:
 		s = "f:" + fLetters[c.Kind]
 		if c.Value != "" {
 			s += ":" + c.Value

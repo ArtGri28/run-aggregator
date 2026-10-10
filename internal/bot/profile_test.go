@@ -1022,7 +1022,7 @@ func TestS25CityText(t *testing.T) {
 	state = profileRow(t, 47)
 	matchSnapshot(t, "s25_text_rejected", renderCall(t, sayText(t, b, api, 47, "/foo")))
 	long := sayText(t, b, api, 47, strings.Repeat("я", maxCityInput+1))
-	if long.Form["text"] != "Нажмите /start, чтобы найти забег" || profileRow(t, 47) != state || awaitingMark(t, 47) != modeEdit {
+	if long.Form["text"] != "Нажмите /start, чтобы найти старт" || profileRow(t, 47) != state || awaitingMark(t, 47) != modeEdit {
 		t.Errorf("длинный текст: %q, профиль %s", long.Form["text"], profileRow(t, 47))
 	}
 

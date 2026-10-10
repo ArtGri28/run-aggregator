@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+⛷ <b>Лыжероллерный марафон</b>
+
+📅 11 октября 2026
+📍 город не указан
+📏 15 · 30 · 45 км
+⛷ Лыжи · Лыжероллеры
+
+🔗 Источник: <a href="https://tristyle.club/competition/1178/">Tristyle.Клуб</a>
+---
+[⬅️ Назад] → p:1:v2

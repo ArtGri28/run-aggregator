@@ -19,7 +19,7 @@ func TestStats(t *testing.T) {
 
 	e.b.api.ProcessUpdate(ctx, commandUpdate(2, "/stats"))
 	sends := e.api.of("sendMessage")
-	if len(sends) != 1 || sends[0].Form["text"] != "Нажмите /start, чтобы найти забег" {
+	if len(sends) != 1 || sends[0].Form["text"] != "Нажмите /start, чтобы найти старт" {
 		t.Fatalf("/stats не-админу: %+v", sends)
 	}
 

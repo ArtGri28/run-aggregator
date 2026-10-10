@@ -12,14 +12,16 @@ import (
 	"aggregator/internal/event"
 )
 
-// listWhere — общий отбор выдачи. Предикат is_listed / merged_into_id
+// listBase — общий отбор выдачи без отбора по включённым видам спорта (его
+// добавляет listWhere). Предикат is_listed / merged_into_id
 // записан так же, как в частичных индексах events, чтобы планировщик их
 // использовал. Параметры: $1 from, $2 to, $3 city_key (пустая строка — любой),
 // $4 event_type (пустая строка — любой), $5 lo и $6 hi — пары диапазонов дистанций
 // (пусто — любая дистанция), $7 country_code (пустая строка — любая страна),
-// $8 начало и $9 конец периодов дат (пусто — без ограничения периодами).
-// Оканчивается sportVisible.
-var listWhere = `
+// $8 начало и $9 конец периодов дат (пусто — без ограничения периодами),
+// $10 выбранный вид спорта (пустая строка — любой из включённых).
+// Оканчивается sportVisible: выбранный вид отбирает поверх включённых.
+const listBase = `
 	WHERE e.is_listed AND e.merged_into_id IS NULL
 	  AND e.start_date >= $1::date AND e.start_date <= $2::date
 	  AND ($3::text = '' OR e.city_key = $3::text)
@@ -30,22 +32,30 @@ var listWhere = `
 	  AND ($7::text = '' OR e.country_code = $7::text)
 	  AND (COALESCE(cardinality($8::date[]), 0) = 0 OR EXISTS (
 	        SELECT 1 FROM unnest($8::date[], $9::date[]) AS p(lo, hi)
-	        WHERE e.start_date >= p.lo AND e.start_date <= p.hi))` + sportVisible
+	        WHERE e.start_date >= p.lo AND e.start_date <= p.hi))
+	  AND ($10::text = '' OR e.sport = $10::text)`
+
+func listWhere() string { return listBase + sportVisible() }
 
 // sportVisible — отбор по включённым видам спорта (D-08): один фрагмент на
 // все запросы выдачи, он стоит в конце listWhere и futureListed. Коды — только
 // константы справочника event.Sports, их формат закреплён тестом; ввод
-// пользователя сюда не попадает. Параметров фрагмент не добавляет: нумерация
-// $1…$9 в listWhere прежняя.
-var sportVisible = func() string {
+// пользователя сюда не попадает. Параметров фрагмент не добавляет. Справочник
+// читается при каждом запросе: признак «включён» действует сразу. Ни одного
+// включённого вида спорта — условие, которому не отвечает ни одно событие
+// (пустой перечень IN () — ошибка SQL).
+func sportVisible() string {
 	var codes []string
 	for _, sp := range event.Sports {
 		if sp.Enabled {
 			codes = append(codes, "'"+string(sp.Code)+"'")
 		}
 	}
+	if len(codes) == 0 {
+		return " AND false"
+	}
 	return " AND e.sport IN (" + strings.Join(codes, ", ") + ")"
-}()
+}
 
 // ListItem — строка списка выдачи.
 type ListItem struct {
@@ -55,6 +65,7 @@ type ListItem struct {
 	CountryCode string
 	City        string
 	Status      event.Status
+	Sport       event.Sport
 	// Distances — метры по возрастанию.
 	Distances []int
 }
@@ -62,7 +73,7 @@ type ListItem struct {
 // noUpperBound — верхняя граница дат для нулевого Filter.To.
 var noUpperBound = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 
-// filterArgs строит аргументы $1…$9 listWhere. Срезы диапазонов всегда
+// filterArgs строит аргументы $1…$10 listWhere. Срезы диапазонов всегда
 // непустые по типу ([]int32{}, не nil): pgx кодирует nil как NULL.
 func filterArgs(f event.Filter) []any {
 	to := f.To
@@ -77,18 +88,18 @@ func filterArgs(f event.Filter) []any {
 	for _, p := range f.Periods {
 		plo, phi = append(plo, p.From), append(phi, p.To)
 	}
-	return []any{f.From, to, f.CityKey, string(f.Type), lo, hi, f.CountryCode, plo, phi}
+	return []any{f.From, to, f.CityKey, string(f.Type), lo, hi, f.CountryCode, plo, phi, string(f.Sport)}
 }
 
 // ListEvents возвращает страницу выдачи по фильтру в порядке start_date, id.
 func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset int) ([]ListItem, error) {
 	q := `
-		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status,
+		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status, e.sport,
 		       COALESCE((SELECT array_agg(d.distance_m ORDER BY d.distance_m)
 		                 FROM event_distances d WHERE d.event_id = e.id), '{}')
-		FROM events e` + listWhere + `
+		FROM events e` + listWhere() + `
 		ORDER BY e.start_date, e.id
-		LIMIT $10 OFFSET $11`
+		LIMIT $11 OFFSET $12`
 	rows, err := s.db.Query(ctx, q, append(filterArgs(f), limit, offset)...)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
@@ -97,7 +108,7 @@ func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset in
 		var it ListItem
 		var status string
 		var dist []int32
-		if err := row.Scan(&it.ID, &it.Title, &it.StartDate, &it.CountryCode, &it.City, &status, &dist); err != nil {
+		if err := row.Scan(&it.ID, &it.Title, &it.StartDate, &it.CountryCode, &it.City, &status, &it.Sport, &dist); err != nil {
 			return ListItem{}, err
 		}
 		it.Status = event.Status(status)
@@ -118,8 +129,8 @@ func (s *Store) ListEvents(ctx context.Context, f event.Filter, limit, offset in
 // не зависит от локали базы. Дистанции не заполняются. Только читает.
 func (s *Store) SearchCandidates(ctx context.Context, country string, from time.Time, limit int) ([]ListItem, error) {
 	q := `
-		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status
-		FROM events e` + futureListed + `
+		SELECT e.id, e.title, e.start_date, e.country_code, COALESCE(e.city, ''), e.status, e.sport
+		FROM events e` + futureListed() + `
 		  AND ($2::text = '' OR e.country_code = $2::text)
 		ORDER BY e.start_date, e.id
 		LIMIT $3`
@@ -130,7 +141,7 @@ func (s *Store) SearchCandidates(ctx context.Context, country string, from time.
 	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ListItem, error) {
 		var it ListItem
 		var status string
-		if err := row.Scan(&it.ID, &it.Title, &it.StartDate, &it.CountryCode, &it.City, &status); err != nil {
+		if err := row.Scan(&it.ID, &it.Title, &it.StartDate, &it.CountryCode, &it.City, &status, &it.Sport); err != nil {
 			return ListItem{}, err
 		}
 		it.Status = event.Status(status)
@@ -144,7 +155,7 @@ func (s *Store) SearchCandidates(ctx context.Context, country string, from time.
 
 // CountEvents возвращает число событий выдачи по фильтру.
 func (s *Store) CountEvents(ctx context.Context, f event.Filter) (int, error) {
-	q := `SELECT count(*) FROM events e` + listWhere
+	q := `SELECT count(*) FROM events e` + listWhere()
 	var n int
 	if err := s.db.QueryRow(ctx, q, filterArgs(f)...).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count events: %w", err)

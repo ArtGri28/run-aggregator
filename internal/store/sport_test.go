@@ -263,6 +263,7 @@ func TestSportVisibility(t *testing.T) {
 	exec(t, setSport, probe, "running")
 	check("running", true)
 
+	sportVisible := sportVisible() // фрагмент собирается при каждом запросе
 	if !regexp.MustCompile(`^ AND e\.sport IN \('[a-z_]+'(, '[a-z_]+')*\)$`).MatchString(sportVisible) {
 		t.Fatalf("sportVisible = %q", sportVisible)
 	}

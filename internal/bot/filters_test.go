@@ -674,3 +674,35 @@ func TestLegacyFiltersKeepVersion(t *testing.T) {
 		t.Fatalf("unset(k): v %d, %+v, %v", v4, f4, err)
 	}
 }
+
+// TestLegacyFiltersTable закрепляет чтение сохранённых фильтров прежнего
+// формата и байты их повторной записи: литералы записаны с кода до появления
+// выбранного вида спорта и не меняются.
+func TestLegacyFiltersTable(t *testing.T) {
+	for _, tc := range []struct {
+		name, raw string
+		want      userFilters
+		json      string
+	}{
+		{"пустой объект", `{}`, userFilters{}, `{}`},
+		{"пресет 30", `{"date":"30"}`, userFilters{Date: "30"}, `{"date":"30"}`},
+		{"одиночный месяц в date", `{"date":"m202610"}`, userFilters{Dates: []string{"m202610"}}, `{"date":"m202610"}`},
+		{"несколько периодов", `{"dates":["cm","nm"]}`, userFilters{Dates: []string{"cm", "nm"}}, `{"dates":["cm","nm"]}`},
+		{"город со страной", `{"city":"minsk","country":"BY"}`, userFilters{City: "minsk", Country: "BY"}, `{"city":"minsk","country":"BY"}`},
+		{"все страны", `{"country":"*","date":"30","dist2":[1,2],"type":"trail"}`,
+			userFilters{Date: "30", Dist: []int{1, 2}, Type: "trail", Country: "*"}, `{"date":"30","dist2":[1,2],"type":"trail","country":"*"}`},
+		{"беговые корзины и тип", `{"city":"moscow","dist2":[0,3],"type":"trail"}`,
+			userFilters{City: "moscow", Dist: []int{0, 3}, Type: "trail"}, `{"city":"moscow","dist2":[0,3],"type":"trail"}`},
+		{"ключ прежних корзин", `{"dist":[1]}`, userFilters{}, `{}`},
+		{"лишние ключи", `{"foo":1,"city":"moscow","bar":{"x":[1]}}`, userFilters{City: "moscow"}, `{"city":"moscow"}`},
+		{"испорченный JSON", `{broken`, userFilters{}, `{}`},
+	} {
+		got := loadFilters([]byte(tc.raw), fixtureToday)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: loadFilters(%s) = %+v, want %+v", tc.name, tc.raw, got, tc.want)
+		}
+		if raw, err := json.Marshal(got); err != nil || string(raw) != tc.json {
+			t.Errorf("%s: json = %s, %v; want %s", tc.name, raw, err, tc.json)
+		}
+	}
+}
