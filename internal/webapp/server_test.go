@@ -102,7 +102,13 @@ func (r *rig) auth(tgID int64) string {
 // get выполняет запрос с заголовком auth ("" — без заголовка).
 func (r *rig) get(path, auth string) (*http.Response, []byte) {
 	r.t.Helper()
-	req, _ := http.NewRequest(http.MethodGet, r.srv.URL+path, nil)
+	return r.do(http.MethodGet, path, auth, "")
+}
+
+// do — запрос методом method с телом body ("" — без тела).
+func (r *rig) do(method, path, auth, body string) (*http.Response, []byte) {
+	r.t.Helper()
+	req, _ := http.NewRequest(method, r.srv.URL+path, strings.NewReader(body))
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
@@ -111,8 +117,68 @@ func (r *rig) get(path, auth string) (*http.Response, []byte) {
 		r.t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	return resp, body
+	out, _ := io.ReadAll(resp.Body)
+	return resp, out
+}
+
+// put — PUT /favorites/<id> пользователя tgID: код ответа и исход либо код ошибки.
+func (r *rig) put(tgID int64, id string) (int, string) {
+	r.t.Helper()
+	resp, body := r.do(http.MethodPut, "/api/v1/favorites/"+id, r.auth(tgID), "")
+	var v struct{ Outcome, Error string }
+	if err := json.Unmarshal(body, &v); err != nil {
+		r.t.Fatalf("PUT favorites/%s: %v: %s", id, err, body)
+	}
+	if resp.StatusCode == http.StatusOK && resp.Header.Get("Cache-Control") != noStore {
+		r.t.Fatalf("PUT favorites/%s: Cache-Control = %q", id, resp.Header.Get("Cache-Control"))
+	}
+	return resp.StatusCode, v.Outcome + v.Error
+}
+
+// del — DELETE /favorites/<id> пользователя tgID: всегда 204 без тела.
+func (r *rig) del(tgID int64, id string) {
+	r.t.Helper()
+	resp, body := r.do(http.MethodDelete, "/api/v1/favorites/"+id, r.auth(tgID), "")
+	if resp.StatusCode != http.StatusNoContent || len(body) != 0 || strings.Contains(resp.Header.Get("Cache-Control"), "max-age") {
+		r.t.Fatalf("DELETE favorites/%s: code=%d body=%q Cache-Control=%q, want 204 без тела", id, resp.StatusCode, body, resp.Header.Get("Cache-Control"))
+	}
+}
+
+// favIDs — идентификаторы избранного пользователя tgID через запятую и total.
+func (r *rig) favIDs(tgID int64, query string) (string, int) {
+	r.t.Helper()
+	var l favListJSON
+	resp := r.getJSON(tgID, "/api/v1/favorites"+query, http.StatusOK, &l)
+	if cc := resp.Header.Get("Cache-Control"); cc != noStore {
+		r.t.Fatalf("GET favorites: Cache-Control = %q", cc)
+	}
+	ids := make([]string, 0, len(l.Items))
+	for _, it := range l.Items {
+		ids = append(ids, strconv.FormatInt(it.ID, 10))
+	}
+	return strings.Join(ids, ","), l.Total
+}
+
+// dbCount — число из запроса count(*) отдельным соединением.
+func dbCount(t *testing.T, q string) int {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	var n int
+	if err := conn.QueryRow(ctx, q).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// userRows — число строк users и user_profiles: Mini App их не создаёт (D-10).
+func userRows(t *testing.T) [2]int {
+	t.Helper()
+	return [2]int{dbCount(t, `SELECT count(*) FROM users`), dbCount(t, `SELECT count(*) FROM user_profiles`)}
 }
 
 // getJSON — запрос пользователя tgID, ждёт код want; тело разбирается в v.
@@ -264,8 +330,13 @@ func TestStaticSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if files < 9 {
-		t.Fatalf("файлов статики %d, want ≥ 9", files)
+	if files < 12 {
+		t.Fatalf("файлов статики %d, want ≥ 12", files)
+	}
+	for _, p := range []string{"static/screens/favorites.js", "static/screens/profile.js"} {
+		if _, err := fs.Stat(web.FS, p); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
 	}
 }
 
@@ -536,5 +607,309 @@ func TestRateLimit(t *testing.T) {
 	}
 	if !strings.Contains(r.logs.String(), "status=429") || strings.Contains(r.logs.String(), "tg_id") {
 		t.Fatalf("лог:\n%s", r.logs.String())
+	}
+}
+
+// Пользователи тестов избранного и профиля: приметные идентификаторы, чтобы
+// их появление в логе было видно.
+const (
+	favA   int64 = 7700000011
+	favB   int64 = 7700000012
+	favBad int64 = 7700000013
+	favLim int64 = 7700000014
+)
+
+// TestFavorites — избранное по пользователю из initData: исходы добавления
+// (как internal/bot/fav_test.go), идемпотентность, изоляция пользователей,
+// видимость списка и то, что Mini App не создаёт строк users/user_profiles.
+func TestFavorites(t *testing.T) {
+	s := storetest.Open(t)
+	seedMarathonec(t, s)
+	dbExec(t, `DELETE FROM favorites`)
+	r := newRig(t, s)
+	ctx := context.Background()
+	before := userRows(t)
+
+	items, err := s.ListEvents(ctx, event.Filter{From: fixtureToday}, 60, 0)
+	if err != nil || len(items) < 60 {
+		t.Fatalf("ListEvents: %d событий, err=%v", len(items), err)
+	}
+	id := func(i int) string { return strconv.FormatInt(items[i].ID, 10) }
+	isFav := func(tgID int64, i int) bool {
+		var c cardJSON
+		resp := r.getJSON(tgID, "/api/v1/events/"+id(i), http.StatusOK, &c)
+		if cc := resp.Header.Get("Cache-Control"); cc != noStore {
+			t.Fatalf("карточка: Cache-Control = %q", cc)
+		}
+		return c.IsFavorite
+	}
+	want := func(step string, tgID int64, ids string) {
+		t.Helper()
+		n := 0
+		if ids != "" {
+			n = strings.Count(ids, ",") + 1
+		}
+		if got, total := r.favIDs(tgID, ""); got != ids || total != n {
+			t.Fatalf("%s: избранное %d = %q (total %d), want %q", step, tgID, got, total, ids)
+		}
+	}
+
+	// Пусто: массив, а не null.
+	if _, body := r.get("/api/v1/favorites", r.auth(favA)); !strings.Contains(string(body), `"total":0`) || !strings.Contains(string(body), `"items":[]`) {
+		t.Fatalf("пустое избранное: %s", body)
+	}
+
+	// added, повтор — already; карточка видит состояние своего пользователя.
+	if code, out := r.put(favA, id(1)); code != http.StatusOK || out != "added" {
+		t.Fatalf("PUT: %d %q, want 200 added", code, out)
+	}
+	if code, out := r.put(favA, id(1)); code != http.StatusOK || out != "already" {
+		t.Fatalf("повторный PUT: %d %q, want 200 already", code, out)
+	}
+	if n := dbCount(t, `SELECT count(*) FROM favorites`); n != 1 {
+		t.Fatalf("после двух PUT записей %d, want 1", n)
+	}
+	if !isFav(favA, 1) || isFav(favB, 1) {
+		t.Fatal("is_favorite: want true у своего пользователя и false у другого")
+	}
+	want("после PUT", favA, id(1))
+	want("чужое избранное", favB, "")
+
+	// Пользователя нельзя подменить: параметр tg_id и тело запроса
+	// игнорируются, маршрутов с идентификатором пользователя нет.
+	a := strconv.FormatInt(favA, 10)
+	if got, total := r.favIDs(favB, "?tg_id="+a); got != "" || total != 0 {
+		t.Fatalf("?tg_id= показал чужое избранное: %q (%d)", got, total)
+	}
+	if resp, body := r.do(http.MethodPut, "/api/v1/favorites/"+id(2)+"?tg_id="+a, r.auth(favB), `{"tg_id":`+a+`}`); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"added"`) {
+		t.Fatalf("PUT с ?tg_id= и телом: %d %s", resp.StatusCode, body)
+	}
+	want("PUT с чужим tg_id — себе", favB, id(2))
+	want("PUT с чужим tg_id — не владельцу", favA, id(1))
+	if resp, _ := r.do(http.MethodDelete, "/api/v1/favorites/"+id(1)+"?tg_id="+a, r.auth(favB), `{"tg_id":`+a+`}`); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE с ?tg_id=: %d", resp.StatusCode)
+	}
+	want("DELETE с чужим tg_id", favA, id(1))
+	for _, p := range []string{"/api/v1/favorites/" + a + "/" + id(1), "/api/v1/users/" + a + "/favorites", "/api/v1/profile/" + a} {
+		for _, m := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+			if resp, body := r.do(m, p, r.auth(favB), ""); resp.StatusCode != http.StatusNotFound || !strings.Contains(string(body), `"not_found"`) {
+				t.Fatalf("%s %s: %d %s, want 404 not_found", m, p, resp.StatusCode, body)
+			}
+		}
+	}
+	want("после запросов по чужим путям", favA, id(1))
+
+	// DELETE идемпотентен: всегда 204, и для несуществующего события.
+	r.del(favA, id(1))
+	if isFav(favA, 1) {
+		t.Fatal("is_favorite = true после DELETE")
+	}
+	r.del(favA, id(1))
+	r.del(favA, "999999")
+	want("после DELETE", favA, "")
+	want("DELETE не тронул другого", favB, id(2))
+
+	// Идентификатор в пути: число больше нуля без знака и ведущих нулей.
+	for _, bad := range []string{"0", "01", "+5", "-5", "abc", "1.0", "99999999999999999999"} {
+		if code, out := r.put(favBad, bad); code != http.StatusBadRequest || out != "bad_request" {
+			t.Fatalf("PUT %q: %d %q, want 400", bad, code, out)
+		}
+		if resp, _ := r.do(http.MethodDelete, "/api/v1/favorites/"+bad, r.auth(favBad), ""); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("DELETE %q: %d, want 400", bad, resp.StatusCode)
+		}
+	}
+	for _, q := range []string{"?limit=51", "?limit=0", "?page=0", "?page=10001", "?page=x"} {
+		if code := r.errCode(favBad, "/api/v1/favorites"+q, http.StatusBadRequest); code != "bad_request" {
+			t.Fatalf("favorites%s: %q", q, code)
+		}
+	}
+
+	// gone: нет события, скрыто. past: дата прошла. Отказ записи не создаёт.
+	storetest.HideEvent(t, items[3].ID)
+	for _, gone := range []string{"999999", id(3)} {
+		if code, out := r.put(favA, gone); code != http.StatusNotFound || out != "gone" {
+			t.Fatalf("PUT %s: %d %q, want 404 gone", gone, code, out)
+		}
+	}
+	dbExec(t, `UPDATE events SET start_date = '2026-09-01' WHERE id = $1`, items[4].ID)
+	if code, out := r.put(favA, id(4)); code != http.StatusOK || out != "past" {
+		t.Fatalf("PUT прошедшего: %d %q, want 200 past", code, out)
+	}
+	want("после отказов", favA, "")
+
+	// Список: только будущие; запись на слитое событие — корнем, один раз;
+	// порядок — по дате; страницы.
+	for _, i := range []int{7, 5, 6} {
+		if code, out := r.put(favA, id(i)); out != "added" {
+			t.Fatalf("PUT %s: %d %q", id(i), code, out)
+		}
+	}
+	want("три старта", favA, id(5)+","+id(6)+","+id(7))
+	if got, total := r.favIDs(favA, "?page=2&limit=2"); got != id(7) || total != 3 {
+		t.Fatalf("страница 2: %q (total %d)", got, total)
+	}
+	var l favListJSON
+	r.getJSON(favA, "/api/v1/favorites?limit=2", http.StatusOK, &l)
+	if l.Page != 1 || l.Pages != 2 || l.Items[0].Title != items[5].Title || l.Items[0].StartDate != items[5].StartDate.Format(time.DateOnly) || l.Items[0].Sport != "running" || l.Items[0].CountryCode != "RU" {
+		t.Fatalf("страница 1: %+v", l)
+	}
+	if _, body := r.get("/api/v1/favorites", r.auth(favA)); strings.Contains(string(body), "distances") || strings.Contains(string(body), "tg_id") {
+		t.Fatalf("лишние поля в ответе: %s", body)
+	}
+	dbExec(t, `UPDATE events SET start_date = '2026-09-02' WHERE id = $1`, items[5].ID)
+	want("прошедший не показан", favA, id(6)+","+id(7))
+	storetest.MergeEvent(t, items[6].ID, items[8].ID)
+	want("слитое — корнем", favA, id(7)+","+id(8))
+	if code, out := r.put(favA, id(6)); code != http.StatusOK || out != "already" {
+		t.Fatalf("PUT слитого: %d %q, want already (запись ведёт к корню)", code, out)
+	}
+	if !isFav(favA, 8) {
+		t.Fatal("карточка корня: is_favorite = false")
+	}
+	r.del(favA, id(8))
+	want("DELETE корня убирает запись на слитое", favA, id(7))
+
+	// limit: предел бота; пятьдесят первый не добавляется, после удаления — да.
+	const limit = 50
+	var filled int
+	for _, it := range items[9:] {
+		if filled == limit {
+			break
+		}
+		if out, err := s.AddFavorite(ctx, favLim, it.ID, fixtureToday, fixtureNow, limit); err != nil || out != store.FavAdded {
+			t.Fatalf("AddFavorite(%d) = %v, %v", it.ID, out, err)
+		}
+		filled++
+	}
+	if _, total := r.favIDs(favLim, "?limit=1"); filled != limit || total != limit {
+		t.Fatalf("заполнено %d, total %d, want %d", filled, total, limit)
+	}
+	if code, out := r.put(favLim, id(7)); code != http.StatusOK || out != "limit" {
+		t.Fatalf("PUT сверх предела: %d %q, want 200 limit", code, out)
+	}
+	if code, out := r.put(favLim, id(9)); code != http.StatusOK || out != "already" {
+		t.Fatalf("PUT имеющегося при пределе: %d %q, want already", code, out)
+	}
+	r.del(favLim, id(9))
+	if code, out := r.put(favLim, id(7)); code != http.StatusOK || out != "added" {
+		t.Fatalf("PUT после удаления: %d %q, want added", code, out)
+	}
+
+	// Mini App не создал строк users и user_profiles (D-10).
+	if after := userRows(t); after != before {
+		t.Fatalf("строки users/user_profiles: %v → %v", before, after)
+	}
+
+	// Приватность лога (D-12): метод, шаблон маршрута, код; без
+	// пользователя, идентификаторов событий и initData.
+	logs := r.logs.String()
+	for _, need := range []string{`method=PUT route="PUT /api/v1/favorites/{id}" status=200`, `route="PUT /api/v1/favorites/{id}" status=404`,
+		`method=DELETE route="DELETE /api/v1/favorites/{id}" status=204`, `route="GET /api/v1/favorites" status=200`} {
+		if !strings.Contains(logs, need) {
+			t.Fatalf("в логе нет %q:\n%s", need, logs)
+		}
+	}
+	for _, bad := range []string{"tg_id", "77000000", "initData", "Authorization", "auth_date", "hash=", "999999", "outcome"} {
+		if strings.Contains(logs, bad) {
+			t.Fatalf("в логе есть %q:\n%s", bad, logs)
+		}
+	}
+	if m := regexp.MustCompile(`favorites/\d|events/\d|\?`).FindString(logs); m != "" {
+		t.Fatalf("в логе путь запроса: %q\n%s", m, logs)
+	}
+}
+
+// TestWriteLimit — запись считается отдельным, более строгим счётчиком:
+// 20 запросов в минуту на пользователя, чтение его не расходует.
+func TestWriteLimit(t *testing.T) {
+	r := newRig(t, nil) // негодный id: до базы не доходит, но считается
+	const user, other = 7700000031, 7700000032
+	for i := 1; i <= writeLimit; i++ {
+		m := http.MethodPut
+		if i%2 == 0 {
+			m = http.MethodDelete
+		}
+		if resp, _ := r.do(m, "/api/v1/favorites/abc", r.auth(user), ""); resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("запрос %d: code=%d, want 400", i, resp.StatusCode)
+		}
+	}
+	for _, m := range []string{http.MethodPut, http.MethodDelete} {
+		resp, body := r.do(m, "/api/v1/favorites/abc", r.auth(user), "")
+		if resp.StatusCode != http.StatusTooManyRequests || resp.Header.Get("Retry-After") != "60" || !strings.Contains(string(body), `"rate_limited"`) {
+			t.Fatalf("%s сверх предела: code=%d Retry-After=%q body=%s", m, resp.StatusCode, resp.Header.Get("Retry-After"), body)
+		}
+	}
+	// Чтение того же пользователя и запись другого не затронуты.
+	if resp, _ := r.get("/api/v1/nope", r.auth(user)); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("чтение после предела записи: code=%d, want 404", resp.StatusCode)
+	}
+	if resp, _ := r.do(http.MethodPut, "/api/v1/favorites/abc", r.auth(other), ""); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("другой пользователь: code=%d, want 400", resp.StatusCode)
+	}
+	if logs := r.logs.String(); !strings.Contains(logs, `route="PUT /api/v1/favorites/{id}" status=429`) || strings.Contains(logs, "tg_id") || strings.Contains(logs, "77000000") {
+		t.Fatalf("лог:\n%s", logs)
+	}
+}
+
+// TestProfile — анкета только для чтения: без строки — exists:false, со
+// строкой — коды с подписями; служебные поля и идентификатор не отдаются;
+// запросы ничего не создают.
+func TestProfile(t *testing.T) {
+	s := storetest.Open(t)
+	r := newRig(t, s)
+	ctx := context.Background()
+	const user, fresh, other int64 = 7700000021, 7700000022, 7700000023
+
+	resp, body := r.get("/api/v1/profile?tg_id="+strconv.FormatInt(user, 10), r.auth(other))
+	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != `{"exists":false}` || resp.Header.Get("Cache-Control") != noStore {
+		t.Fatalf("без строки: code=%d Cache-Control=%q body=%s", resp.StatusCode, resp.Header.Get("Cache-Control"), body)
+	}
+	if rows := userRows(t); rows != [2]int{0, 0} {
+		t.Fatalf("GET /profile создал строки: %v", rows)
+	}
+
+	// Строки создаёт бот (/start); здесь — тем же методом store.
+	for _, id := range []int64{user, fresh} {
+		if _, _, _, err := s.StartUser(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dbExec(t, `UPDATE user_profiles SET status = 'completed', gender = 'f', age_group = 2, residence_country_code = 'RU',
+		residence_city = 'Нижний Тагил', residence_city_key = 'nizhny-tagil', sports = '{ski,run}',
+		awaiting_city_until = now(), awaiting_city_mode = 'e' WHERE tg_id = $1`, user)
+	before := userRows(t)
+
+	var p profileJSON
+	resp, body = r.get("/api/v1/profile", r.auth(user))
+	if err := json.Unmarshal(body, &p); err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("Cache-Control") != noStore {
+		t.Fatalf("профиль: code=%d err=%v body=%s", resp.StatusCode, err, body)
+	}
+	if !p.Exists || p.Status != store.ProfileCompleted || p.Gender == nil || *p.Gender != (optionJSON{"f", "Женский"}) ||
+		p.AgeGroup == nil || *p.AgeGroup != (optionJSON{"2", "25–34"}) || p.Country == nil || p.Country.Code != "RU" || !strings.Contains(p.Country.Label, "Россия") ||
+		p.City != "Нижний Тагил" || len(p.Sports) != 2 || p.Sports[0].Code != "run" || !strings.Contains(p.Sports[0].Label, "Бег") || p.Sports[1].Code != "ski" {
+		t.Fatalf("профиль = %s", body)
+	}
+	for _, bad := range []string{"awaiting", "tg_id", "nizhny-tagil", "77000000", `"v"`, "profile_v"} {
+		if strings.Contains(string(body), bad) {
+			t.Fatalf("в ответе есть %q: %s", bad, body)
+		}
+	}
+
+	// Незаполненная анкета: поля null, виды спорта — пустой массив.
+	_, body = r.get("/api/v1/profile", r.auth(fresh))
+	for _, need := range []string{`"exists":true`, `"status":"not_started"`, `"gender":null`, `"age_group":null`, `"country":null`, `"city":""`, `"sports":[]`} {
+		if !strings.Contains(string(body), need) {
+			t.Fatalf("незаполненная анкета без %s: %s", need, body)
+		}
+	}
+	// Чужой профиль не виден: у третьего пользователя строки нет.
+	if _, body = r.get("/api/v1/profile", r.auth(other)); strings.TrimSpace(string(body)) != `{"exists":false}` {
+		t.Fatalf("третий пользователь: %s", body)
+	}
+	if after := userRows(t); after != before {
+		t.Fatalf("строки users/user_profiles: %v → %v", before, after)
+	}
+	if logs := r.logs.String(); !strings.Contains(logs, `route="GET /api/v1/profile" status=200`) || strings.Contains(logs, "tg_id") || strings.Contains(logs, "77000000") || strings.Contains(logs, "Тагил") {
+		t.Fatalf("лог:\n%s", logs)
 	}
 }

@@ -1,5 +1,5 @@
 // Главная: бренд, виды спорта с числом будущих стартов (из meta), входы в
-// каталог и фильтры. Календарь, избранное и профиль — заглушки до этапов 4–5.
+// каталог, фильтры, избранное и профиль. Календарь — заглушка до этапа 5.
 
 import { meta } from '../api.js';
 import { el, plural, showError } from '../ui.js';
@@ -25,6 +25,10 @@ function soonTile(title) {
     el('span', { class: 'title', text: title }), el('span', { class: 'soon', text: 'скоро' }));
 }
 
+function linkTile(title, href) {
+  return el('a', { class: 'tile', href }, el('span', { class: 'title', text: title }));
+}
+
 export async function render(box) {
   box.replaceChildren(el('header', { class: 'brand' },
     el('h1', {}, 'Где ', el('span', { class: 'accent', text: 'старт?' })),
@@ -45,5 +49,5 @@ export async function render(box) {
     el('a', { class: 'btn btn-primary', href: '#/catalog', text: 'Все старты' }),
     el('a', { class: 'btn', href: '#/filters', text: 'Фильтры' })));
   box.append(el('h3', { text: 'Разделы' }),
-    el('div', { class: 'tiles' }, soonTile('Календарь'), soonTile('Избранное'), soonTile('Профиль')));
+    el('div', { class: 'tiles' }, soonTile('Календарь'), linkTile('Избранное', '#/favorites'), linkTile('Профиль', '#/profile')));
 }

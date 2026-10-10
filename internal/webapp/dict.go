@@ -1,6 +1,8 @@
 package webapp
 
 import (
+	"slices"
+	"strconv"
 	"time"
 
 	"aggregator/internal/bot"
@@ -125,7 +127,9 @@ func citiesJSON(in []store.CityCount) []cityJSON {
 	return out
 }
 
-type listItemJSON struct {
+// itemJSON — строка списка без дистанций (избранное: ListFavorites их не
+// заполняет).
+type itemJSON struct {
 	ID          int64        `json:"id"`
 	Title       string       `json:"title"`
 	StartDate   string       `json:"start_date"`
@@ -133,7 +137,11 @@ type listItemJSON struct {
 	City        string       `json:"city"`
 	Status      event.Status `json:"status"`
 	Sport       event.Sport  `json:"sport"`
-	Distances   []int        `json:"distances"`
+}
+
+type listItemJSON struct {
+	itemJSON
+	Distances []int `json:"distances"`
 }
 
 type listJSON struct {
@@ -143,6 +151,17 @@ type listJSON struct {
 	Items []listItemJSON `json:"items"`
 }
 
+type favListJSON struct {
+	Total int        `json:"total"`
+	Page  int        `json:"page"`
+	Pages int        `json:"pages"`
+	Items []itemJSON `json:"items"`
+}
+
+func itemJSONOf(it store.ListItem) itemJSON {
+	return itemJSON{it.ID, it.Title, it.StartDate.Format(time.DateOnly), it.CountryCode, it.City, it.Status, it.Sport}
+}
+
 func itemsJSON(in []store.ListItem) []listItemJSON {
 	out := make([]listItemJSON, 0, len(in))
 	for _, it := range in {
@@ -150,7 +169,54 @@ func itemsJSON(in []store.ListItem) []listItemJSON {
 		if dist == nil {
 			dist = []int{}
 		}
-		out = append(out, listItemJSON{it.ID, it.Title, it.StartDate.Format(time.DateOnly), it.CountryCode, it.City, it.Status, it.Sport, dist})
+		out = append(out, listItemJSON{itemJSONOf(it), dist})
+	}
+	return out
+}
+
+func favItemsJSON(in []store.ListItem) []itemJSON {
+	out := make([]itemJSON, 0, len(in))
+	for _, it := range in {
+		out = append(out, itemJSONOf(it))
+	}
+	return out
+}
+
+// profileJSON — ответы анкеты только для чтения: код и подпись из
+// справочников анкеты бота; незаполненное поле — null. Служебных полей
+// ожидания города и идентификатора пользователя здесь нет.
+type profileJSON struct {
+	Exists   bool         `json:"exists"`
+	Status   string       `json:"status"`
+	Gender   *optionJSON  `json:"gender"`
+	AgeGroup *optionJSON  `json:"age_group"`
+	Country  *optionJSON  `json:"country"`
+	City     string       `json:"city"`
+	Sports   []optionJSON `json:"sports"`
+}
+
+// option — значение справочника по коду; пустой или неизвестный код — nil.
+func option(opts []bot.Option, code string) *optionJSON {
+	for _, o := range opts {
+		if o.Code == code {
+			return &optionJSON{o.Code, o.Label}
+		}
+	}
+	return nil
+}
+
+func profileJSONOf(d bot.Dictionary, p store.Profile) profileJSON {
+	out := profileJSON{
+		Exists: true, Status: p.Status, City: p.City, Sports: []optionJSON{},
+		Gender:   option(d.ProfileGenders, p.Gender),
+		AgeGroup: option(d.ProfileAges, strconv.Itoa(p.AgeGroup)),
+		Country:  option(d.ProfileCountries, p.Country),
+	}
+	// Порядок видов спорта — как в профиле бота.
+	for _, o := range d.ProfileSports {
+		if slices.Contains(p.Sports, o.Code) {
+			out.Sports = append(out.Sports, optionJSON{o.Code, o.Label})
+		}
 	}
 	return out
 }

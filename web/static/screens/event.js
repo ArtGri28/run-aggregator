@@ -1,9 +1,9 @@
 // Карточка события GET /events/{id}: те же поля, что в карточке бота.
-// Кнопка «Регистрация» — только при registration_url; избранное показывается
-// значком без действия (добавление — этап 4).
+// Кнопка «Регистрация» — только при registration_url; кнопка избранного
+// задаёт состояние (PUT/DELETE идемпотентны) и сразу его показывает.
 
-import { get, meta } from '../api.js';
-import { el, flag, km, link, ruDate, showError, statusBadge } from '../ui.js';
+import { del, get, meta, put } from '../api.js';
+import { el, errorText, flag, km, link, ruDate, showError, statusBadge } from '../ui.js';
 import { plaque } from '../icons.js';
 
 export const back = '#/catalog';
@@ -17,6 +17,44 @@ function distances(list) {
   const labelled = list.some((d) => d.label);
   const parts = list.map((d) => km(d.m) + (labelled ? ' км' : '') + (d.label ? ` (${d.label})` : ''));
   return parts.join(' · ') + (labelled ? '' : ' км');
+}
+
+// favControl — кнопка «В избранное» / «Убрать из избранного» и строка
+// сообщения об отказе; mark — пометка в шапке карточки.
+function favControl(c, m, mark) {
+  let fav = c.is_favorite;
+  const note = el('p', { class: 'hint', role: 'status' });
+  const btn = el('button', { type: 'button', class: 'btn btn-block' });
+  const paint = () => {
+    btn.textContent = fav ? 'Убрать из избранного' : 'В избранное';
+    btn.setAttribute('aria-pressed', String(fav));
+    mark.hidden = !fav;
+  };
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    note.textContent = '';
+    try {
+      if (fav) {
+        await del('favorites/' + c.id);
+        fav = false;
+      } else {
+        const { outcome } = await put('favorites/' + c.id);
+        if (outcome === 'limit') {
+          note.textContent = `В избранном уже ${m.limits.favorites} стартов — это предел. Уберите лишний, чтобы добавить новый.`;
+        } else if (outcome === 'past') {
+          note.textContent = 'Старт уже прошёл.';
+        } else {
+          fav = true;
+        }
+      }
+    } catch (e) {
+      note.textContent = errorText(e, 'Не удалось сохранить. Повторите позже.');
+    }
+    paint();
+    btn.disabled = false;
+  });
+  paint();
+  return [btn, note];
 }
 
 export async function render(box, id) {
@@ -33,10 +71,10 @@ export async function render(box, id) {
   const sport = m.sports.find((s) => s.code === c.sport);
   const kind = (sport && sport.code !== 'running' ? sport.title + ' · ' : '') + c.type_label;
 
+  const mark = el('p', { class: 'fav', text: '★ В избранном' });
   box.append(el('div', { class: 'card-head' }, plaque(c.sport, c.type, true),
     el('div', {}, el('h2', {}, statusBadge(c.status), statusBadge(c.status) ? ' ' : null, c.title),
-      el('p', { class: 'hint', text: kind }),
-      c.is_favorite ? el('p', { class: 'fav', text: '★ В избранном' }) : null)));
+      el('p', { class: 'hint', text: kind }), mark)));
 
   let when = ruDate(c.start_date);
   if (c.end_date && c.end_date !== c.start_date) when += ' – ' + ruDate(c.end_date);
@@ -65,5 +103,6 @@ export async function render(box, id) {
       box.append(a);
     }
   }
+  box.append(...favControl(c, m, mark));
   box.append(el('a', { class: 'btn btn-block', href: '#/catalog', text: 'К каталогу' }));
 }

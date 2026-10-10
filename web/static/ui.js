@@ -83,22 +83,28 @@ export function stub(root) {
     el('p', { text: 'Откройте приложение из Telegram.' })));
 }
 
-// showError — сообщение об ошибке запроса в box; retry — повтор по кнопке
-// (без автоматических повторов). 401 — заглушка на всю страницу.
-export function showError(box, err, retry) {
+// errorText — текст ошибки запроса; fallback — для прочих ошибок. 401 —
+// заглушка на всю страницу и пустая строка.
+export function errorText(err, fallback) {
   const e = err instanceof ApiError ? err : new ApiError(0, 'network');
   if (e.status === 401) {
     stub(document.getElementById('app'));
-    return;
+    return '';
   }
-  let text = 'Не удалось загрузить данные.';
   if (e.status === 429) {
-    text = e.retryAfter ? `Слишком много запросов. Повторите через ${e.retryAfter} с.` : 'Слишком много запросов. Повторите позже.';
-  } else if (e.code === 'timeout') {
-    text = 'Сервер не ответил вовремя.';
-  } else if (e.status === 404) {
-    text = 'Событие больше не доступно.';
+    return e.retryAfter ? `Слишком много запросов. Повторите через ${e.retryAfter} с.` : 'Слишком много запросов. Повторите позже.';
   }
+  if (e.code === 'timeout') return 'Сервер не ответил вовремя.';
+  if (e.status === 404) return 'Событие больше не доступно.';
+  return fallback;
+}
+
+// showError — сообщение об ошибке запроса в box; retry — повтор по кнопке
+// (без автоматических повторов).
+export function showError(box, err, retry) {
+  const e = err instanceof ApiError ? err : new ApiError(0, 'network');
+  const text = errorText(e, 'Не удалось загрузить данные.');
+  if (!text) return;
   const notice = el('div', { class: 'notice' }, el('p', { text }));
   if (e.status === 404) {
     notice.append(el('a', { class: 'btn btn-block', href: '#/catalog', text: 'К каталогу' }));

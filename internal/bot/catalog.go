@@ -32,6 +32,9 @@ type Dictionary struct {
 	CountryNames map[string]string
 	// SourceNames — подписи источников по коду.
 	SourceNames map[string]string
+	// ProfileGenders, ProfileAges, ProfileCountries, ProfileSports —
+	// допустимые значения анкеты и их подписи в порядке кнопок бота.
+	ProfileGenders, ProfileAges, ProfileCountries, ProfileSports []Option
 	// Months — периоды-месяцы: текущий и 11 следующих.
 	Months func(today time.Time) []Option
 	// ValidPeriod — период дат ("cm", "nm", "mYYYYMM") в грамматике бота.
@@ -64,6 +67,11 @@ func Catalog() Dictionary {
 		SourceNames:    sourceNames,
 		ValidPeriod:    validPeriod,
 		DateRange:      dateRange,
+
+		ProfileGenders:   profileOptions(profileGenders),
+		ProfileAges:      profileOptions(profileAges),
+		ProfileCountries: profileOptions(profileCountries),
+		ProfileSports:    profileOptions(profileSports),
 		Months: func(today time.Time) []Option {
 			var out []Option
 			for _, o := range monthOptions(today) {
@@ -85,4 +93,13 @@ func Catalog() Dictionary {
 		}
 	}
 	return c
+}
+
+// profileOptions — справочник анкеты в экспортируемом виде.
+func profileOptions(in []profileOption) []Option {
+	out := make([]Option, 0, len(in))
+	for _, o := range in {
+		out = append(out, Option(o))
+	}
+	return out
 }

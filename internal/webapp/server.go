@@ -25,26 +25,34 @@ import (
 	"aggregator/web"
 )
 
-// API только чтения (этап 2 плана Phase 15): meta, events, events/{id},
-// cities, cities/suggest. Все маршруты — за Middleware; SQL здесь нет, всё
-// через *store.Store. Контракты ответов — раздел 5 плана. Статика Mini App
-// (этап 3) отдаётся из web.FS на всех остальных путях без проверки initData:
-// он нужен только API.
+// API Mini App (Phase 15). Чтение каталога (этап 2): meta, events,
+// events/{id}, cities, cities/suggest. По пользователю (этап 4): favorites
+// (чтение и запись) и profile (только чтение); пользователь — только TgID
+// из проверенного initData, в пути, параметрах и теле его нет. Единственная
+// таблица, в которую пишет этот пакет, — favorites (D-04, D-10). Все маршруты —
+// за Middleware; SQL здесь нет, всё через *store.Store. Контракты ответов —
+// раздел 5 плана. Статика Mini App (этап 3) отдаётся из web.FS на всех
+// остальных путях без проверки initData: он нужен только API.
 
 const (
 	// defaultLimit и maxLimit — размер страницы по умолчанию и предел (D-11).
 	defaultLimit = 20
 	maxLimit     = 50
-	// rateLimit запросов за rateWindow на пользователя → 429 (D-11).
+	// rateLimit запросов чтения и writeLimit запросов записи за rateWindow на
+	// пользователя → 429 (D-11, раздел 5 плана); счётчики раздельные.
 	rateLimit  = 60
+	writeLimit = 20
 	rateWindow = time.Minute
 	// sweepAt — число пользователей в счётчике, при котором устаревшие окна
 	// вычищаются перед добавлением нового.
 	sweepAt = 1024
-	// maxBody — предел тела запроса: API чтения тела не ждёт вовсе.
+	// maxBody — предел тела запроса: API тела не ждёт вовсе и не читает его.
 	maxBody = 64 << 10
 	// cacheControl — ответы чтения каталога кэшируются только у клиента.
 	cacheControl = "private, max-age=60"
+	// noStore — ответы по пользователю (избранное, профиль, карточка с
+	// состоянием избранного) и ответы записи не кэшируются.
+	noStore = "no-store"
 	// shutdownGrace — предел ожидания текущих запросов при остановке.
 	shutdownGrace = 10 * time.Second
 	// staticCacheControl — статика перепроверяется при каждом открытии.
@@ -61,6 +69,9 @@ var (
 	// кодека бота.
 	cityKeyRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 	countryRE = regexp.MustCompile(`^[A-Z]{2}$`)
+	// idRE — идентификатор события в пути: десятичное число без знака и
+	// ведущих нулей.
+	idRE = regexp.MustCompile(`^[1-9][0-9]{0,18}$`)
 	// moscow — часовой пояс «сегодня» (как у бота: календарная дата по
 	// Москве); перехода на летнее время там нет с 2014 года.
 	moscow = time.FixedZone("MSK", 3*60*60)
@@ -74,23 +85,35 @@ type server struct {
 	now   func() time.Time
 	log   *slog.Logger
 	limit *limiter
+	write *limiter
 }
 
 // New собирает маршруты API. Каждый маршрут: лог → проверка initData →
-// ограничение частоты → обработчик; неизвестный путь под /api/ — 404 JSON
-// (тоже за проверкой).
+// ограничение частоты (у записи — свой, более строгий счётчик) → обработчик;
+// неизвестный путь под /api/ — 404 JSON (тоже за проверкой).
 func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) http.Handler {
-	srv := &server{store: s, dict: bot.Catalog(), now: now, log: log, limit: &limiter{now: now, hits: map[int64]*window{}}}
+	srv := &server{
+		store: s, dict: bot.Catalog(), now: now, log: log,
+		limit: &limiter{now: now, max: rateLimit, hits: map[int64]*window{}},
+		write: &limiter{now: now, max: writeLimit, hits: map[int64]*window{}},
+	}
 	auth := Middleware(secret, now, func(code string) { log.Info("auth rejected", "code", code) })
 	mux := http.NewServeMux()
 	handle := func(pattern string, h http.HandlerFunc) {
-		mux.Handle(pattern, srv.logged(auth(srv.limited(h))))
+		mux.Handle(pattern, srv.logged(auth(limited(srv.limit, h))))
+	}
+	handleWrite := func(pattern string, h http.HandlerFunc) {
+		mux.Handle(pattern, srv.logged(auth(limited(srv.write, h))))
 	}
 	handle("GET /api/v1/meta", srv.meta)
 	handle("GET /api/v1/events", srv.events)
 	handle("GET /api/v1/events/{id}", srv.event)
 	handle("GET /api/v1/cities", srv.cities)
 	handle("GET /api/v1/cities/suggest", srv.suggest)
+	handle("GET /api/v1/favorites", srv.favorites)
+	handleWrite("PUT /api/v1/favorites/{id}", srv.favoriteAdd)
+	handleWrite("DELETE /api/v1/favorites/{id}", srv.favoriteRemove)
+	handle("GET /api/v1/profile", srv.profile)
 	handle("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, http.StatusNotFound, "not_found") })
 	mux.Handle("/", srv.logged(static()))
 	return mux
@@ -162,11 +185,13 @@ func (s *server) logged(next http.Handler) http.Handler {
 	})
 }
 
-// limiter — счётчик запросов пользователя в фиксированном окне rateWindow.
+// limiter — счётчик запросов пользователя в фиксированном окне rateWindow с
+// пределом max.
 // Упрощение: в памяти одного процесса; при нескольких экземплярах webapp —
 // счётчик в базе или на прокси.
 type limiter struct {
 	now  func() time.Time
+	max  int
 	mu   sync.Mutex
 	hits map[int64]*window
 }
@@ -195,17 +220,17 @@ func (l *limiter) take(id int64) int {
 		l.hits[id] = w
 	}
 	w.n++
-	if w.n > rateLimit {
+	if w.n > l.max {
 		return int(math.Ceil((rateWindow - now.Sub(w.start)).Seconds()))
 	}
 	return 0
 }
 
-// limited — 429 с Retry-After при превышении предела пользователя.
-func (s *server) limited(next http.Handler) http.Handler {
+// limited — 429 с Retry-After при превышении предела пользователя в счётчике l.
+func limited(l *limiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, _ := TgID(r.Context())
-		if retry := s.limit.take(id); retry > 0 {
+		if retry := l.take(id); retry > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(retry))
 			fail(w, http.StatusTooManyRequests, "rate_limited")
 			return
@@ -216,7 +241,8 @@ func (s *server) limited(next http.Handler) http.Handler {
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if status == http.StatusOK {
+	// Обработчик ответа по пользователю ставит noStore сам, до вызова.
+	if status == http.StatusOK && w.Header().Get("Cache-Control") == "" {
 		w.Header().Set("Cache-Control", cacheControl)
 	}
 	w.WriteHeader(status)
@@ -354,6 +380,17 @@ func intParam(q url.Values, key string, def, max int) (int, error) {
 	return n, nil
 }
 
+// pathID — идентификатор события из пути: десятичное число больше нуля без
+// знака и ведущих нулей.
+func pathID(r *http.Request) (int64, bool) {
+	v := r.PathValue("id")
+	if !idRE.MatchString(v) {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(v, 10, 64)
+	return id, err == nil
+}
+
 // meta — справочники и счётчики: события по включённым видам спорта (во
 // всех странах, как menuSports бота) и страны каталога.
 func (s *server) meta(w http.ResponseWriter, r *http.Request) {
@@ -406,11 +443,14 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 // или вид спорта выключен — 404 gone, как «Событие больше не доступно» у бота.
 func (s *server) event(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
+	id, ok := pathID(r)
+	if !ok {
 		fail(w, http.StatusBadRequest, "bad_request")
 		return
 	}
+	// В карточке — состояние избранного пользователя: не кэшируется, иначе
+	// после добавления или удаления клиент увидел бы прежнее.
+	w.Header().Set("Cache-Control", noStore)
 	root, err := s.store.RootEventID(ctx, id)
 	var e event.Event
 	if err == nil {
@@ -476,4 +516,93 @@ func (s *server) suggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, citiesJSON(out))
+}
+
+// favorites — страница избранного пользователя запроса: только будущие
+// видимые старты; запись на слитое событие показывается его корнем (как
+// раздел «Избранное» бота). В базу не пишет.
+func (s *server) favorites(w http.ResponseWriter, r *http.Request) {
+	ctx, q := r.Context(), r.URL.Query()
+	w.Header().Set("Cache-Control", noStore)
+	page, errPage := intParam(q, "page", 1, s.dict.MaxPage)
+	limit, errLimit := intParam(q, "limit", defaultLimit, maxLimit)
+	if errPage != nil || errLimit != nil {
+		fail(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	tgID, _ := TgID(ctx)
+	items, total, err := s.store.ListFavorites(ctx, tgID, s.today(), limit, (page-1)*limit)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, favListJSON{Total: total, Page: page, Pages: (total + limit - 1) / limit, Items: favItemsJSON(items)})
+}
+
+// favOutcomes — исход добавления в ответе; FavGone — 404 gone.
+var favOutcomes = map[store.FavOutcome]string{
+	store.FavAdded:   "added",
+	store.FavAlready: "already",
+	store.FavLimit:   "limit",
+	store.FavPast:    "past",
+}
+
+// favoriteAdd добавляет старт в избранное пользователя запроса; повтор —
+// "already". Тело запроса не читается. Предел — как у бота (FavLimit).
+func (s *server) favoriteAdd(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Cache-Control", noStore)
+	id, ok := pathID(r)
+	if !ok {
+		fail(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	tgID, _ := TgID(ctx)
+	res, err := s.store.AddFavorite(ctx, tgID, id, s.today(), s.now(), s.dict.FavLimit)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	outcome, ok := favOutcomes[res]
+	if !ok {
+		fail(w, http.StatusNotFound, "gone")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"outcome": outcome})
+}
+
+// favoriteRemove убирает старт из избранного пользователя запроса; нет записи
+// или события — тоже 204. Убрать можно и скрытый, и прошедший старт.
+func (s *server) favoriteRemove(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Cache-Control", noStore)
+	id, ok := pathID(r)
+	if !ok {
+		fail(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	tgID, _ := TgID(ctx)
+	if err := s.store.RemoveFavorite(ctx, tgID, id); err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// profile — ответы анкеты пользователя запроса только для чтения
+// (PeekProfile строк не создаёт); нет строки — {"exists":false}.
+func (s *server) profile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Cache-Control", noStore)
+	tgID, _ := TgID(ctx)
+	p, _, ok, err := s.store.PeekProfile(ctx, tgID)
+	if err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]bool{"exists": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, profileJSONOf(s.dict, p))
 }

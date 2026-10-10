@@ -18,6 +18,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -130,6 +131,8 @@ p { margin: 0; }
 .item .meta { color: var(--hint); font-size: 13px; }
 .item .name { font-weight: 600; overflow-wrap: anywhere; }
 .item .dist { color: var(--hint); font-size: 13px; }
+.fav-row { display: flex; gap: 8px; align-items: stretch; }
+.fav-row .item { flex: 1; min-width: 0; }
 .badge {
   display: inline-block;
   padding: 1px 8px;

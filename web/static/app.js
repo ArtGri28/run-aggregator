@@ -1,5 +1,6 @@
 // Точка входа Mini App: инициализация Telegram.WebApp (ready, expand, тема,
-// BackButton) и маршрутизация по hash: #/ #/catalog #/filters #/event/<id>.
+// BackButton) и маршрутизация по hash: #/ #/catalog #/filters #/event/<id>
+// #/favorites #/profile.
 // Вне Telegram (пустой initData) — только заглушка (D-09).
 
 import { el, stub } from './ui.js';
@@ -7,6 +8,8 @@ import * as home from './screens/home.js';
 import * as catalog from './screens/catalog.js';
 import * as filters from './screens/filters.js';
 import * as event from './screens/event.js';
+import * as favorites from './screens/favorites.js';
+import * as profile from './screens/profile.js';
 
 const tg = window.Telegram && window.Telegram.WebApp;
 const root = document.getElementById('app');
@@ -16,6 +19,8 @@ const ROUTES = [
   [/^#\/catalog$/, catalog],
   [/^#\/filters$/, filters],
   [/^#\/event\/(\d{1,18})$/, event],
+  [/^#\/favorites$/, favorites],
+  [/^#\/profile$/, profile],
 ];
 
 // Переменные темы, которые при светлой схеме берутся из themeParams Telegram;
@@ -39,9 +44,13 @@ function applyTheme() {
 }
 
 let current = home;
+// Список, из которого открыта карточка: туда ведёт «Назад» карточки.
+let listHash = '#/catalog';
 
 function show(screen, param) {
   current = screen;
+  if (screen === catalog) listHash = '#/catalog';
+  if (screen === favorites) listHash = '#/favorites';
   const box = el('section', { class: 'screen' });
   root.replaceChildren(box);
   window.scrollTo(0, 0);
@@ -66,7 +75,7 @@ if (!tg || !tg.initData) {
   tg.expand();
   applyTheme();
   tg.onEvent('themeChanged', applyTheme);
-  tg.BackButton.onClick(() => { window.location.hash = current.back || '#/'; });
+  tg.BackButton.onClick(() => { window.location.hash = current === event ? listHash : current.back || '#/'; });
   window.addEventListener('hashchange', route);
   route();
 }
