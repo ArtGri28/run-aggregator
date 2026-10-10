@@ -500,7 +500,7 @@ func TestEventConstraints(t *testing.T) {
 		{"bad country_code", func(e *event.Event) { e.CountryCode = "RUS" }},
 		{"bad city_key", func(e *event.Event) { e.CityKey = "Moscow" }},
 		{"bad status", func(e *event.Event) { e.Status = event.Status("unknown") }},
-		{"bad type", func(e *event.Event) { e.Type = event.Type("ultra") }},
+		{"bad type", func(e *event.Event) { e.Type = event.Type("Ultra") }}, // схема проверяет формат (миграция 00009)
 	}
 
 	for _, tt := range tests {

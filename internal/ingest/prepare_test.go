@@ -416,3 +416,51 @@ func TestPrepareSourceTimezone(t *testing.T) {
 		t.Fatalf("timezone = %v, want %v", got, want)
 	}
 }
+
+// TestPrepareSki — дисциплина и дистанции лыжной записи (D-11): дисциплина —
+// только из перечня своего вида спорта; «марафон» и «полумарафон» дистанцию
+// дают только беговой записи.
+func TestPrepareSki(t *testing.T) {
+	now := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	r := func(id, sport, title, label, distances string) SourceEvent {
+		return SourceEvent{ExternalID: id, Title: title, Date: "15/11/2026", Distances: distances, City: "Сочи", TypeLabel: label, Sport: sport}
+	}
+	out, st := Prepare([]SourceEvent{
+		r("1", "skiing", "Гонка", "Лыжные гонки", "10 км"),
+		r("2", "skiing", "Гонка", "Лыжероллеры", "10 км"),
+		r("3", "skiing", "Гонка", "trail", "10 км"),
+		r("4", "skiing", "Гонка", "", "10 км"),
+		r("5", "", "Забег", "Лыжные гонки", "10 км"),
+		r("6", "", "Забег", "trail", "10 км"),
+		r("7", "skiing", "Лыжный марафон", "Лыжные гонки", ""),
+		r("8", "skiing", "Лыжный полумарафон", "Лыжные гонки", "классический стиль"),
+		r("9", "skiing", "Лыжная гонка 30 км", "Лыжные гонки", ""),
+		r("10", "skiing", "Лыжный марафон", "Лыжные гонки", "15 км, 30 км и 45 км."),
+		r("11", "", "Марафон", "shosse", ""),
+		r("12", "", "Забег", "shosse", "полумарафон"),
+	}, now, ruOnly)
+	want := []struct {
+		typ    event.Type
+		meters []int
+	}{
+		{event.TypeSki, []int{10000}}, {event.TypeRollerski, []int{10000}}, {event.TypeOther, []int{10000}}, {event.TypeOther, []int{10000}},
+		{event.TypeOther, []int{10000}}, {event.TypeTrail, []int{10000}},
+		{event.TypeSki, nil}, {event.TypeSki, nil}, {event.TypeSki, []int{30000}}, {event.TypeSki, []int{15000, 30000, 45000}},
+		{event.TypeRoad, []int{42195}}, {event.TypeRoad, []int{21098}},
+	}
+	if len(out) != len(want) || st.Rejected != 0 || st.Empty["distances"] != 2 {
+		t.Fatalf("выход %d записей, Stats %+v; want %d записей, 2 без дистанций", len(out), st, len(want))
+	}
+	for i, p := range out {
+		var meters []int
+		for _, d := range p.Event.Distances {
+			meters = append(meters, d.Meters)
+		}
+		if p.Event.Type != want[i].typ || !slices.Equal(meters, want[i].meters) {
+			t.Errorf("запись %s: тип %q, дистанции %v; want %q, %v", p.Source.ExternalID, p.Event.Type, meters, want[i].typ, want[i].meters)
+		}
+		if got := event.TypeFor(p.Event.Sport, p.Event.Type); got != p.Event.Type {
+			t.Errorf("запись %s: пара %s — %s вне перечня справочника", p.Source.ExternalID, p.Event.Sport, p.Event.Type)
+		}
+	}
+}

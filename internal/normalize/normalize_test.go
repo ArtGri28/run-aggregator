@@ -1,6 +1,7 @@
 package normalize
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -191,6 +192,68 @@ func TestTime(t *testing.T) {
 		got, ok := Time(tt.in)
 		if got != tt.want || ok != tt.ok {
 			t.Errorf("Time(%q) = (%q, %v), want (%q, %v)", tt.in, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+// TestSportType — дисциплина по паре «вид спорта — подпись» (D-11).
+func TestSportType(t *testing.T) {
+	// Бег: результат равен Type на всех подписях карты и вне её.
+	for label := range types {
+		if got := SportType(event.SportRunning, label); got != Type(label) || got == event.TypeOther {
+			t.Errorf("SportType(running, %q) = %q, want %q", label, got, Type(label))
+		}
+	}
+	for _, c := range []struct {
+		sport event.Sport
+		label string
+		want  event.Type
+	}{
+		{event.SportRunning, "Шоссе", event.TypeRoad},
+		{event.SportRunning, "ultra", event.TypeOther},
+		{event.SportRunning, "", event.TypeOther},
+		{event.SportRunning, "Лыжные гонки", event.TypeOther},
+		{event.SportSkiing, "Лыжные гонки", event.TypeSki},
+		{event.SportSkiing, "лыжные  гонки", event.TypeSki},
+		{event.SportSkiing, "Лыжероллеры", event.TypeRollerski},
+		{event.SportSkiing, "трейл", event.TypeOther},
+		{event.SportSkiing, "биатлон", event.TypeOther},
+		{event.SportSkiing, "", event.TypeOther},
+		{event.SportSwimming, "Лыжные гонки", event.TypeOther},
+		{event.SportSwimming, "шоссе", event.TypeOther},
+	} {
+		if got := SportType(c.sport, c.label); got != c.want {
+			t.Errorf("SportType(%s, %q) = %q, want %q", c.sport, c.label, got, c.want)
+		}
+	}
+	// Каждая подпись даёт дисциплину из перечня своего вида спорта.
+	for label, typ := range skiTypes {
+		if event.TypeFor(event.SportSkiing, typ) != typ || SportType(event.SportSkiing, label) != typ {
+			t.Errorf("подпись %q: %q не в перечне лыж", label, typ)
+		}
+	}
+}
+
+// TestNumericDistances — именованные дистанции не разбираются, числовые —
+// как в Distances.
+func TestNumericDistances(t *testing.T) {
+	for in, want := range map[string][]int{
+		"Лыжный марафон":           nil,
+		"полумарафон":              nil,
+		"":                         nil,
+		"Лыжная гонка 30 км":       {30000},
+		"Лыжный марафон 50 км":     {50000},
+		"15 км, 30 км и 45 км.":    {15000, 30000, 45000},
+		"5 км и 10 км классикой.":  {5000, 10000},
+		"спринт 1,4 км, 500 м":     {500, 1400},
+		"марафон через 10 минут":   nil,
+		"масс-старт, 2 круга по 5": nil,
+	} {
+		if got := NumericDistances(in); !slices.Equal(got, want) {
+			t.Errorf("NumericDistances(%q) = %v, want %v", in, got, want)
+		}
+		if len(want) > 0 && !slices.Equal(Distances(in), want) {
+			t.Errorf("Distances(%q) = %v, want %v", in, Distances(in), want)
 		}
 	}
 }

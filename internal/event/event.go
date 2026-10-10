@@ -2,7 +2,10 @@
 // consumer (ingest, match, bot — Phase 3+). MVP.md §3.2, §4.2, §4.4.
 package event
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // Status is the fate of the competition itself (MVP.md §4.4) — changed
 // only by an explicit status from the source, never by observation state.
@@ -56,6 +59,28 @@ var Sports = [...]SportInfo{
 	{SportSwimming, "Плавание", "🏊", false},
 	{SportCycling, "Велоспорт", "🚴", false},
 	{SportMultisport, "Мультиспорт", "🏅", false},
+}
+
+// Дисциплины лыж: значения events.event_type у событий вида спорта skiing.
+const (
+	TypeSki       Type = "ski"
+	TypeRollerski Type = "rollerski"
+)
+
+// SportTypes — допустимые дисциплины по видам спорта. Схема проверяет только
+// формат event_type (миграция 00009); перечень значений — здесь. TypeOther
+// допустим у любого вида спорта.
+var SportTypes = map[Sport][]Type{
+	SportRunning: {TypeRoad, TypeTrail, TypeCross, TypeTrack, TypeObstacle, TypeOther},
+	SportSkiing:  {TypeSki, TypeRollerski, TypeOther},
+}
+
+// TypeFor — дисциплина t, если она допустима у вида спорта s, иначе TypeOther.
+func TypeFor(s Sport, t Type) Type {
+	if slices.Contains(SportTypes[s], t) {
+		return t
+	}
+	return TypeOther
 }
 
 // SportOf — вид спорта по коду записи: пустой код означает бег (D-05),

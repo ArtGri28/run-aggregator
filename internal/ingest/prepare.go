@@ -183,8 +183,18 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 		if strings.TrimSpace(distSrc) == "" {
 			distSrc = title
 		}
+		// Именованные дистанции («марафон») — только у бега: у остальных
+		// видов спорта это слово названия.
+		sport := event.SportOf(rec.Sport)
+		distances := normalize.Distances
+		if sport != event.SportRunning {
+			distances = normalize.NumericDistances
+		}
+		// Дисциплина — только из перечня своего вида спорта: схема проверяет
+		// один формат event_type.
+		eventType := event.TypeFor(sport, normalize.SportType(sport, rec.TypeLabel))
 		var dists []event.Distance
-		for _, meters := range normalize.Distances(distSrc) {
+		for _, meters := range distances(distSrc) {
 			if meters > normalize.MaxPlausibleDistanceM {
 				st.DroppedDistances++
 				continue
@@ -217,8 +227,8 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 				City:            city,
 				CityKey:         cityKey,
 				Timezone:        timezone(cityKey, region, rec.Timezone),
-				Type:            normalize.Type(rec.TypeLabel),
-				Sport:           event.SportOf(rec.Sport),
+				Type:            eventType,
+				Sport:           sport,
 				Status:          event.StatusScheduled,
 				Description:     normalize.Description(rec.Description),
 				Address:         normalize.Region(rec.Address),

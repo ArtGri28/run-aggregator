@@ -47,7 +47,9 @@ type DedupEvent struct {
 	CountryCode string
 	CityKey     string
 	RegURL      string
-	Sources     []DedupSource
+	// Sport — код вида спорта события (events.sport).
+	Sport   event.Sport
+	Sources []DedupSource
 	// FirstSourceEventID — минимальный id записи: сторона A в строке кандидата.
 	FirstSourceEventID int64
 	// Complete — у всех записей есть fields (прошли текущую версию записи).
@@ -60,7 +62,7 @@ type DedupEvent struct {
 func (s *Store) DedupEvents(ctx context.Context, from time.Time) ([]DedupEvent, error) {
 	const q = `
 		SELECT e.id, e.title, e.start_date, e.end_date, e.country_code,
-		       COALESCE(e.city_key, ''), COALESCE(e.registration_url, ''),
+		       COALESCE(e.city_key, ''), COALESCE(e.registration_url, ''), e.sport,
 		       s.code, COALESCE(se.payload->>'group_key', ''), se.id, se.fields IS NOT NULL
 		FROM events e
 		JOIN source_events se ON se.event_id = e.id AND se.state <> 'gone' AND se.match_state <> 'out_of_scope'
@@ -78,7 +80,7 @@ func (s *Store) DedupEvents(ctx context.Context, from time.Time) ([]DedupEvent, 
 		var src DedupSource
 		var seID int64
 		var hasFields bool
-		if err := rows.Scan(&e.ID, &e.Title, &e.Start, &e.End, &e.CountryCode, &e.CityKey, &e.RegURL,
+		if err := rows.Scan(&e.ID, &e.Title, &e.Start, &e.End, &e.CountryCode, &e.CityKey, &e.RegURL, &e.Sport,
 			&src.Code, &src.GroupKey, &seID, &hasFields); err != nil {
 			return nil, fmt.Errorf("dedup events: scan: %w", err)
 		}

@@ -1,7 +1,9 @@
 package tristyle
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,9 +13,12 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"aggregator/internal/dedup"
 	"aggregator/internal/event"
@@ -75,6 +80,8 @@ func testSource(srvURL string) *Source {
 	cfg.Attempts = 1
 	s := New(ingest.NewFetcher(cfg))
 	s.listURL, s.base, s.delay = srvURL+"/competition/?only_belarus=on", srvURL+"/competition/", time.Millisecond
+	// Источник с одним списком; оба списка — skiSource.
+	s.skiListURL = ""
 	return s
 }
 
@@ -360,4 +367,359 @@ func TestTracerRun(t *testing.T) {
 		}
 	}
 	t.Logf("TRACER tristyle first=%s created=%d again=%s pending_candidates=%d", res.Status, acc.Created, again.Status, pending)
+}
+
+// skiNow — день загрузки лыжных фикстур (testdata/README.md, раздел «Лыжи»).
+var skiNow = time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+
+// skiIDs — события лыжного списка в порядке страницы.
+var skiIDs = []string{"1178", "817", "818", "819", "820"}
+
+// skiDoc — документ лыжного события: адрес с пометкой вида спорта.
+func skiDoc(id string, body []byte) ingest.RawDoc {
+	return ingest.RawDoc{URL: eventBase + id + "/#" + skiMark, Body: body, FetchedAt: skiNow}
+}
+
+func parseSki(t *testing.T, id string, body []byte) ingest.SourceEvent {
+	t.Helper()
+	recs, err := Parse(skiDoc(id, body))
+	if err != nil || len(recs) != 1 {
+		t.Fatalf("Parse(%s, лыжи) = %+v, %v; want 1 запись", id, recs, err)
+	}
+	return recs[0]
+}
+
+// skiSource — источник с обоими списками на тестовом сервере: адреса списков
+// отличаются от настоящих только хостом.
+func skiSource(srvURL string) *Source {
+	s := testSource(srvURL)
+	s.listURL = strings.Replace(ListURL, "https://tristyle.club", srvURL, 1)
+	s.skiListURL = strings.Replace(SkiListURL, "https://tristyle.club", srvURL, 1)
+	return s
+}
+
+// skiServer — сервер двух списков и страниц событий; hits считает запросы по
+// адресу запроса целиком (путь и параметры). Список выбирается параметром
+// specialization; nil — 404.
+type skiServer struct {
+	mu            sync.Mutex
+	list, skiList []byte
+	pages         map[string][]byte
+	hits          map[string]int
+}
+
+func (s *skiServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hits[r.URL.RequestURI()]++
+	body := s.pages[r.URL.Path]
+	if r.URL.Path == "/competition/" {
+		switch r.URL.Query().Get("specialization") {
+		case "running":
+			body = s.list
+		case "skiing":
+			body = s.skiList
+		}
+	}
+	if body == nil {
+		http.NotFound(w, r)
+		return
+	}
+	_, _ = w.Write(body)
+}
+
+// total — число запросов с начала теста.
+func (s *skiServer) total() (n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, h := range s.hits {
+		n += h
+	}
+	return n
+}
+
+func dbText(t *testing.T, q string) string {
+	t.Helper()
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	var out string
+	if err := conn.QueryRow(ctx, q).Scan(&out); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	return out
+}
+
+// Tracer лыж: два списка → страница события один раз → запись skiing с
+// дисциплиной → событие в каталоге → бот его не показывает, пока лыжи
+// выключены в справочнике; беговая запись ключа sport не получает; повторный
+// прогон ничего не меняет.
+func TestSkiTracerRun(t *testing.T) {
+	st := storetest.Open(t)
+	srv := &skiServer{hits: map[string]int{}, list: listPage("11"), skiList: listPage("817"), pages: map[string][]byte{
+		"/competition/11/":  eventPage("Гомельский полумарафон", "2026-10-24T11:00:00", "г. Гомель, ул. Набережная, 27", "<p>Дистанции: 7 км и 21,1 км</p>"),
+		"/competition/817/": fixture(t, "event-817.html"),
+	}}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+	src := skiSource(ts.URL)
+
+	ctx := context.Background()
+	dcfg := dedup.DefaultConfig()
+	r := &ingest.Runner{Store: st, Now: func() time.Time { return skiNow }, Fold: dcfg.Fold(),
+		PostApply: func(ctx context.Context) error { return dedup.Pass(ctx, st, dcfg) }}
+
+	res, err := r.Run(ctx, src)
+	if err != nil || res.Status != ingest.StatusSuspect {
+		t.Fatalf("первый прогон = %+v, %v; want suspect", res, err)
+	}
+	// Каждая страница — один раз; в запросе страницы события нет ни параметров,
+	// ни пометки вида спорта.
+	const runList, skiList = "/competition/?q=&specialization=running&from=&to=&only_belarus=on", "/competition/?q=&specialization=skiing&from=&to=&only_belarus=on"
+	wantHits := func(n int) {
+		t.Helper()
+		want := map[string]int{runList: n, skiList: n, "/competition/11/": n, "/competition/817/": n}
+		if !reflect.DeepEqual(srv.hits, want) {
+			t.Fatalf("запросы = %v, want %v", srv.hits, want)
+		}
+	}
+	wantHits(1)
+	acc, err := r.Accept(ctx, src, res.RunID)
+	if err != nil || acc.Created != 2 {
+		t.Fatalf("Accept = %+v, %v; want Created 2", acc, err)
+	}
+
+	if got, want := dbText(t, `SELECT string_agg(sport || ':' || event_type || ':' || title, '|' ORDER BY start_date) FROM events`),
+		"running:other:Гомельский полумарафон|skiing:ski:V этап Кубка «Виктория» — лыжные гонки"; got != want {
+		t.Fatalf("события =\n%s\nwant\n%s", got, want)
+	}
+	if !slices.Contains(event.SportTypes[event.SportSkiing], event.TypeSki) {
+		t.Fatal("дисциплина ski не в перечне лыж")
+	}
+	// Ключ sport — только у лыжной записи.
+	if got, want := dbText(t, `SELECT string_agg(e.sport || ':' || (se.payload ? 'sport') || ':' || (se.fields ? 'sport'), '|' ORDER BY e.start_date)
+		FROM source_events se JOIN events e ON e.id = se.event_id`), "running:false:false|skiing:true:true"; got != want {
+		t.Fatalf("ключ sport в payload и fields = %s, want %s", got, want)
+	}
+
+	// Бот видит лыжное событие тогда и только тогда, когда лыжи включены.
+	ski, _ := event.SportByCode(event.SportSkiing)
+	want := 1
+	if ski.Enabled {
+		want = 2
+	}
+	if n, err := st.CountEvents(ctx, event.Filter{}); err != nil || n != want {
+		t.Fatalf("CountEvents = %d, %v; want %d (лыжи включены: %v)", n, err, want, ski.Enabled)
+	}
+
+	again, err := r.Run(ctx, src)
+	if err != nil || again.Status != ingest.StatusOK || again.Created != 0 || again.Changed != 0 || again.Unchanged != 2 {
+		t.Fatalf("повторный прогон = %+v, %v; want ok, Created 0, Changed 0, Unchanged 2", again, err)
+	}
+	wantHits(2)
+	t.Logf("TRACER ski=stored visible=%v rerun=unchanged", ski.Enabled)
+}
+
+func TestSkiFetch(t *testing.T) {
+	page := func(path string) []byte { return []byte("<html>" + path + "</html>") }
+	srv := &skiServer{hits: map[string]int{}, pages: map[string][]byte{}}
+	for _, id := range []string{"5", "6", "7", "8"} {
+		srv.pages["/competition/"+id+"/"] = page(id)
+	}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+	s := skiSource(ts.URL)
+	ctx := context.Background()
+	urls := func(docs []ingest.RawDoc) (out []string) {
+		for _, d := range docs {
+			out = append(out, strings.TrimPrefix(d.URL, ts.URL))
+		}
+		return out
+	}
+	const runList, skiList = "/competition/?q=&specialization=running&from=&to=&only_belarus=on", "/competition/?q=&specialization=skiing&from=&to=&only_belarus=on"
+
+	// Номер 6 есть в обоих списках: запрошен один раз и остаётся беговым.
+	srv.list, srv.skiList = listPage("5", "6"), listPage("6", "7", "8")
+	docs, err := s.Fetch(ctx)
+	want := []string{runList, skiList, "/competition/5/", "/competition/6/", "/competition/7/#skiing", "/competition/8/#skiing"}
+	if err != nil || !slices.Equal(urls(docs), want) {
+		t.Fatalf("Fetch = %v, %v; want %v", urls(docs), err, want)
+	}
+	if want := map[string]int{runList: 1, skiList: 1, "/competition/5/": 1, "/competition/6/": 1, "/competition/7/": 1, "/competition/8/": 1}; !reflect.DeepEqual(srv.hits, want) {
+		t.Fatalf("запросы = %v, want %v", srv.hits, want)
+	}
+	// Пометка доходит до Parse: тело страницы 7 — в документе с фрагментом.
+	if string(docs[4].Body) != string(page("7")) {
+		t.Fatalf("документ лыжного события: %q", docs[4].Body)
+	}
+
+	// Пустой лыжный список: прежний набор и документ лыжного списка.
+	srv.skiList = listPage()
+	docs, err = s.Fetch(ctx)
+	if want := []string{runList, skiList, "/competition/5/", "/competition/6/"}; err != nil || !slices.Equal(urls(docs), want) {
+		t.Fatalf("Fetch с пустым лыжным списком = %v, %v; want %v", urls(docs), err, want)
+	}
+
+	// Ошибки — ошибка прогона, а не неполный набор: лыжный список недоступен,
+	// без структуры, страница лыжного события недоступна.
+	for name, skiList := range map[string][]byte{
+		"лыжный список недоступен":    nil,
+		"лыжный список без структуры": []byte("<html></html>"),
+		"событие недоступно":          listPage("404"),
+	} {
+		srv.skiList = skiList
+		if docs, err := s.Fetch(ctx); err == nil || docs != nil {
+			t.Errorf("%s: Fetch = %v, %v; want ошибку", name, urls(docs), err)
+		}
+	}
+	srv.skiList = []byte("<html></html>")
+	if _, err := s.Fetch(ctx); !errors.Is(err, ingest.ErrStructureNotFound) {
+		t.Errorf("лыжный список без структуры: %v, want ErrStructureNotFound", err)
+	}
+
+	// Предел — на уникальные номера обоих списков: ровно maxEvents проходит
+	// (один номер общий), на один больше — ошибка до запросов событий.
+	var run, ski []string
+	for i := range 40 {
+		run = append(run, fmt.Sprint(1000+i))
+		srv.pages["/competition/"+run[i]+"/"] = page(run[i])
+	}
+	for i := range maxEvents - 40 + 1 {
+		ski = append(ski, fmt.Sprint(1039+i))
+		srv.pages["/competition/"+ski[i]+"/"] = page(ski[i])
+	}
+	srv.list, srv.skiList = listPage(run...), listPage(ski...)
+	if docs, err := s.Fetch(ctx); err != nil || len(docs) != 2+maxEvents {
+		t.Fatalf("Fetch на пределе: %d документов, %v; want %d", len(docs), err, 2+maxEvents)
+	}
+	srv.skiList = listPage(append(ski, "2000")...)
+	before := srv.total()
+	if _, err := s.Fetch(ctx); err == nil || srv.total() != before+2 {
+		t.Fatalf("Fetch сверх предела: %v, запросов %d; want ошибку и 2 запроса списков", err, srv.total()-before)
+	}
+}
+
+func TestParseSkiFixtures(t *testing.T) {
+	list := fixture(t, "list-skiing.html")
+	if ids, err := listIDs(list); err != nil || !slices.Equal(ids, skiIDs) {
+		t.Fatalf("listIDs = %v, %v; want %v", ids, err, skiIDs)
+	}
+	if recs, err := Parse(ingest.RawDoc{URL: SkiListURL, Body: list}); err != nil || recs != nil {
+		t.Fatalf("Parse(лыжный список) = %+v, %v; want без записей и ошибки", recs, err)
+	}
+	if recs, err := Parse(ingest.RawDoc{URL: SkiListURL, Body: []byte("<html><body><p>Технические работы</p></body></html>")}); !errors.Is(err, ingest.ErrStructureNotFound) || recs != nil {
+		t.Fatalf("Parse(лыжный список без блока) = %+v, %v; want ErrStructureNotFound", recs, err)
+	}
+
+	var recs []ingest.SourceEvent
+	for _, id := range skiIDs {
+		recs = append(recs, parseSki(t, id, fixture(t, "event-"+id+".html")))
+	}
+	// Эталон составлен по таблице фактов README и разделу «Данные» контракта,
+	// а не выводом разбора: расхождение — ошибка разбора либо таблицы.
+	got, err := json.MarshalIndent(recs, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := fixture(t, "skiing.golden.json"); !bytes.Equal(append(got, '\n'), want) {
+		t.Errorf("расхождение с testdata/skiing.golden.json:\n%s", got)
+	}
+
+	// Дистанции после подготовки — раздел «Данные» контракта, всего 11.
+	wantKm := map[string][]int{"1178": {15, 30, 45}, "817": {5, 10}, "818": {5, 10}, "819": {10, 15}, "820": {20, 30}}
+	wantType := map[string]event.Type{"1178": event.TypeRollerski, "817": event.TypeSki, "818": event.TypeSki, "819": event.TypeSki, "820": event.TypeSki}
+	prep, st := ingest.Prepare(recs, skiNow, New(nil).Policy())
+	if st.Valid != 5 || st.OutOfScope != 0 || st.Rejected != 0 {
+		t.Fatalf("Prepare: %+v", st)
+	}
+	total := 0
+	for _, p := range prep {
+		id, e := p.Source.ExternalID, p.Event
+		var km []int
+		for _, d := range e.Distances {
+			km = append(km, d.Meters/1000)
+		}
+		total += len(km)
+		marked := strings.HasPrefix(e.Title, "(дата уточняется) ")
+		if !slices.Equal(km, wantKm[id]) || e.Type != wantType[id] || e.Sport != event.SportSkiing || e.CountryCode != "BY" ||
+			marked != slices.Contains([]string{"818", "819", "820"}, id) || strings.Count(e.Title, "дата уточняется") > 1 {
+			t.Errorf("%s: %q, дистанции %v км (want %v), дисциплина %s (want %s), вид спорта %s, страна %s", id, e.Title, km, wantKm[id], e.Type, wantType[id], e.Sport, e.CountryCode)
+		}
+		t.Logf("SKI %s: %q date=%s city=%q km=%v type=%s", id, e.Title, e.StartDate.Format(time.DateOnly), e.City, km, e.Type)
+	}
+	if total != 11 {
+		t.Errorf("дистанций %d, want 11", total)
+	}
+
+	// Отменённое событие записи не даёт.
+	if recs, err := Parse(skiDoc("7", eventPage("Лыжная гонка отменена", "2026-12-19T12:00:00", "Минск", ""))); err != nil || recs != nil {
+		t.Errorf("отменённое: Parse = %+v, %v; want без записей", recs, err)
+	}
+}
+
+// D-22: перечисление с общей единицей раскрывается только у лыжного документа.
+func TestSkiDistanceList(t *testing.T) {
+	for _, c := range []struct {
+		in, want string
+		meters   []int
+	}{
+		{"15, 30 и 45 км.", "15 км, 30 км и 45 км.", []int{15000, 30000, 45000}},
+		{"5 и 10 км свободным стилем.", "5 км и 10 км свободным стилем.", []int{5000, 10000}},
+		{"7,5 и 15 км", "7,5 км и 15 км", []int{7500, 15000}},
+		{"200, 400 и 800 м", "200 м, 400 м и 800 м", []int{200, 400, 800}},
+		// Свои единицы, одно число и строка без чисел не меняются.
+		{"5 км, 10 км и 21,1 км", "5 км, 10 км и 21,1 км", []int{5000, 10000, 21100}},
+		{"500 м и 5 км", "500 м и 5 км", []int{500, 5000}},
+		{"30 км", "30 км", []int{30000}},
+		{"классика и конёк", "классика и конёк", nil},
+		{"", "", nil},
+		// Единица — не начало слова: «5 и 10 минут» не дистанции.
+		{"5 и 10 минут", "5 и 10 минут", nil},
+	} {
+		if got := expandList(c.in); got != c.want || !slices.Equal(normalize.Distances(got), c.meters) {
+			t.Errorf("expandList(%q) = %q → %v; want %q → %v", c.in, got, normalize.Distances(got), c.want, c.meters)
+		}
+	}
+
+	// Одна и та же страница: у лыжного документа перечисление раскрыто, у
+	// бегового (без пометки вида спорта) строка прежняя.
+	body := eventPage("Гонка", "2026-12-19T12:00:00", "Минск", "<p>Дистанции: 15, 30 и 45 км.</p>")
+	if got := parseSki(t, "7", body).Distances; got != "15 км, 30 км и 45 км." {
+		t.Errorf("лыжный документ: distances = %q", got)
+	}
+	if got := parseOne(t, "7", body).Distances; got != "15, 30 и 45 км." {
+		t.Errorf("беговой документ: distances = %q, want прежняя строка", got)
+	}
+}
+
+// D-23, D-30: пометка даты-заглушки — в начале названия, только у лыжного
+// документа.
+func TestSkiDatePlaceholder(t *testing.T) {
+	const mark = "(дата уточняется) "
+	for _, c := range []struct {
+		name, title, date, text string
+		want                    string
+	}{
+		{"назван только месяц", "Этап кубка", "2027-01-01T12:00:00", "<p>📅 январь 2027 г.</p>", mark + "Этап кубка"},
+		{"день назван", "Этап кубка", "2027-01-01T12:00:00", "<p>📅 1 января 2027 г.</p>", "Этап кубка"},
+		{"день с нулём", "Этап кубка", "2027-01-01T12:00:00", "<p>Старт 01 Января в 12:00</p>", "Этап кубка"},
+		{"другой день месяца", "Этап кубка", "2027-01-01T12:00:00", "<p>11 января 2027 г.</p>", mark + "Этап кубка"},
+		{"день другого месяца", "Этап кубка", "2027-01-01T12:00:00", "<p>Заявки до 1 декабря</p>", mark + "Этап кубка"},
+		{"не первое число", "Этап кубка", "2026-12-19T12:00:00", "<p>декабрь 2026 г.</p>", "Этап кубка"},
+		{"первое число, дат в тексте нет", "Этап кубка", "2027-02-01T12:00:00", "<p>Дистанции: 10 км</p>", mark + "Этап кубка"},
+		{"пометка уже в названии", "Этап кубка (дата уточняется)", "2027-01-01T12:00:00", "<p>январь 2027 г.</p>", "Этап кубка (дата уточняется)"},
+		{"неразборчивая дата", "Этап кубка", "скоро", "", "Этап кубка"},
+	} {
+		body := eventPage(c.title, c.date, "Минск", c.text)
+		if got := parseSki(t, "7", body).Title; got != c.want {
+			t.Errorf("%s: название %q, want %q", c.name, got, c.want)
+		}
+		// Беговой документ пометку не получает никогда.
+		if got := parseOne(t, "7", body).Title; got != c.title {
+			t.Errorf("%s: беговое название %q, want %q", c.name, got, c.title)
+		}
+	}
 }

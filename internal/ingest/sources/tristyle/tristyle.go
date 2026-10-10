@@ -3,8 +3,10 @@ package tristyle
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
+	"aggregator/internal/event"
 	"aggregator/internal/ingest"
 	"aggregator/internal/normalize"
 )
@@ -14,29 +16,39 @@ const (
 	Code = "tristyle"
 	// ListURL — календарь Tristyle.Клуба с фильтрами сайта «Бег» и «только
 	// Беларусь»; на него же ссылается races.by. Страна и вид спорта записей
-	// следуют из этих фильтров: страница события их не повторяет.
+	// следуют из этих фильтров: страница события их не повторяет. Вид спорта
+	// записи — по списку, в котором событие найдено.
 	ListURL = "https://tristyle.club/competition/?q=&specialization=running&from=&to=&only_belarus=on"
+	// SkiListURL — тот же календарь с фильтром «Лыжи»: события этого списка —
+	// лыжные (лыжные гонки и лыжероллеры).
+	SkiListURL = "https://tristyle.club/competition/?q=&specialization=skiing&from=&to=&only_belarus=on"
 	// CrawlDelay — robots.txt сайта не задаёт Crawl-delay; страницы событий
 	// запрашиваются по одной с этой паузой.
 	CrawlDelay = 5 * time.Second
-	// maxEvents — предел страниц событий за прогон. Больше — ошибка, а не
-	// усечение: обрезанный список пометил бы остальные события пропавшими.
+	// maxEvents — предел страниц событий за прогон, на оба списка вместе.
+	// Больше — ошибка, а не усечение: обрезанный список пометил бы остальные
+	// события пропавшими.
 	maxEvents = 60
+	// skiMark — фрагмент адреса документа лыжного события. На сервер фрагмент
+	// не отправляется, а RawDoc.URL его сохраняет: так вид спорта доходит от
+	// списка до Parse без состояния между Fetch и Parse.
+	skiMark = string(event.SportSkiing)
 )
 
-// Source — источник Tristyle.Клуб: GET ListURL и по одному GET на каждое
-// событие списка (города и полной даты в списке нет).
+// Source — источник Tristyle.Клуб: GET ListURL, GET SkiListURL и по одному
+// GET на каждое событие списков (города и полной даты в списке нет).
 type Source struct {
-	f             *ingest.Fetcher
-	listURL, base string
-	delay         time.Duration
+	f *ingest.Fetcher
+	// skiListURL пустой — второго запроса списка нет.
+	listURL, skiListURL, base string
+	delay                     time.Duration
 }
 
 var _ ingest.Source = (*Source)(nil)
 
 // New создаёт источник с загрузчиком f.
 func New(f *ingest.Fetcher) *Source {
-	return &Source{f: f, listURL: ListURL, base: eventBase, delay: CrawlDelay}
+	return &Source{f: f, listURL: ListURL, skiListURL: SkiListURL, base: eventBase, delay: CrawlDelay}
 }
 
 // Code — код источника.
@@ -48,8 +60,11 @@ func (s *Source) Policy() ingest.Policy {
 	return ingest.Policy{CountryFallback: normalize.NoFallback, CrawlDelay: CrawlDelay}
 }
 
-// Fetch загружает список и страницы всех его событий. Ошибка любой
-// страницы — ошибка прогона: неполный набор не возвращается.
+// Fetch загружает оба списка и страницы всех их событий: документы списков,
+// затем события бегового списка, затем лыжного. Страница события
+// запрашивается один раз: номер из обоих списков остаётся беговым. Документ
+// лыжного события помечен фрагментом skiMark. Ошибка любой страницы — ошибка
+// прогона: неполный набор не возвращается.
 func (s *Source) Fetch(ctx context.Context) ([]ingest.RawDoc, error) {
 	list, err := s.f.Get(ctx, s.listURL, s.delay)
 	if err != nil {
@@ -59,12 +74,33 @@ func (s *Source) Fetch(ctx context.Context) ([]ingest.RawDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(ids) > maxEvents {
-		return nil, fmt.Errorf("в списке %d событий — больше предела %d", len(ids), maxEvents)
-	}
 	docs := []ingest.RawDoc{list}
-	for _, id := range ids {
-		doc, err := s.f.Get(ctx, s.base+id+"/", s.delay)
+	var ski []string
+	if s.skiListURL != "" {
+		skiList, err := s.f.Get(ctx, s.skiListURL, s.delay)
+		if err != nil {
+			return nil, fmt.Errorf("список лыж: %w", err)
+		}
+		skiIDs, err := listIDs(skiList.Body)
+		if err != nil {
+			return nil, fmt.Errorf("список лыж: %w", err)
+		}
+		docs = append(docs, skiList)
+		for _, id := range skiIDs {
+			if !slices.Contains(ids, id) {
+				ski = append(ski, id)
+			}
+		}
+	}
+	if n := len(ids) + len(ski); n > maxEvents {
+		return nil, fmt.Errorf("в списке %d событий — больше предела %d", n, maxEvents)
+	}
+	for i, id := range slices.Concat(ids, ski) {
+		u := s.base + id + "/"
+		if i >= len(ids) {
+			u += "#" + skiMark
+		}
+		doc, err := s.f.Get(ctx, u, s.delay)
 		if err != nil {
 			return nil, fmt.Errorf("событие %s: %w", id, err)
 		}

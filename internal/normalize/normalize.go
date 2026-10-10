@@ -107,6 +107,41 @@ func Type(s string) event.Type {
 	return event.TypeOther
 }
 
+// skiTypes — подписи дисциплин лыж.
+var skiTypes = map[string]event.Type{
+	"лыжные гонки": event.TypeSki,
+	"лыжероллеры":  event.TypeRollerski,
+}
+
+// SportType — дисциплина по паре «вид спорта — подпись источника». У бега —
+// Type; у лыж — подписи skiTypes. Неизвестная подпись, подпись чужого вида
+// спорта и вид спорта без своих дисциплин дают TypeOther.
+func SportType(sport event.Sport, label string) event.Type {
+	switch sport {
+	case event.SportRunning:
+		return Type(label)
+	case event.SportSkiing:
+		if t, ok := skiTypes[collapseSpaces(yoToE(strings.ToLower(label)))]; ok {
+			return t
+		}
+	}
+	return event.TypeOther
+}
+
+// NumericDistances — Distances без именованных дистанций: для записей не
+// бега, где «марафон» и «полумарафон» — слова названия, а не 42 195 и
+// 21 098 м.
+//
+// Упрощение: текст без единого числа с единицей дистанций не даёт; текст, где
+// такое число есть, но не даёт положительной дистанции («0 км»), разбирается
+// как у бега. Точнее — при переносе правила в сам разбор Distances.
+func NumericDistances(s string) []int {
+	if len(distanceMatches(asciiSpaces(s))) == 0 {
+		return nil
+	}
+	return Distances(s)
+}
+
 var (
 	dmyRe = regexp.MustCompile(`^(\d{1,2})([./])(\d{1,2})([./])(\d{4})$`)
 	isoRe = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})$`)

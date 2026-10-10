@@ -1,0 +1,70 @@
+[
+  {
+    "external_id": "1178",
+    "url": "https://tristyle.club/competition/1178/",
+    "title": "Лыжероллерный марафон",
+    "date": "2026-10-11",
+    "distances": "15 км, 30 км и 45 км.",
+    "city": "",
+    "region": "",
+    "country": "BY",
+    "type": "Лыжероллеры",
+    "address": "деревня Озерщина (Речицкий район)",
+    "timezone": "Europe/Minsk",
+    "sport": "skiing"
+  },
+  {
+    "external_id": "817",
+    "url": "https://tristyle.club/competition/817/",
+    "title": "V этап Кубка «Виктория» — лыжные гонки",
+    "date": "2026-12-19",
+    "distances": "5 км и 10 км свободным стилем.",
+    "city": "Минск",
+    "region": "",
+    "country": "BY",
+    "type": "Лыжные гонки",
+    "address": "Минск, Веснянка",
+    "timezone": "Europe/Minsk",
+    "sport": "skiing"
+  },
+  {
+    "external_id": "818",
+    "url": "https://tristyle.club/competition/818/",
+    "title": "(дата уточняется) VI этап Кубка «Виктория» — лыжные гонки",
+    "date": "2027-01-01",
+    "distances": "5 км и 10 км классическим стилем.",
+    "city": "Минск",
+    "region": "",
+    "country": "BY",
+    "type": "Лыжные гонки",
+    "timezone": "Europe/Minsk",
+    "sport": "skiing"
+  },
+  {
+    "external_id": "819",
+    "url": "https://tristyle.club/competition/819/",
+    "title": "(дата уточняется) VII этап Кубка «Виктория» — лыжные гонки",
+    "date": "2027-02-01",
+    "distances": "10 км и 15 км свободным стилем.",
+    "city": "Минск",
+    "region": "",
+    "country": "BY",
+    "type": "Лыжные гонки",
+    "timezone": "Europe/Minsk",
+    "sport": "skiing"
+  },
+  {
+    "external_id": "820",
+    "url": "https://tristyle.club/competition/820/",
+    "title": "(дата уточняется) VIII этап Кубка «Виктория» — лыжные гонки",
+    "date": "2027-03-01",
+    "distances": "20 км и 30 км.",
+    "city": "",
+    "region": "",
+    "country": "BY",
+    "type": "Лыжные гонки",
+    "address": "Городок Витебской обл",
+    "timezone": "Europe/Minsk",
+    "sport": "skiing"
+  }
+]

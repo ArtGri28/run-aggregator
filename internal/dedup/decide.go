@@ -1,6 +1,10 @@
 package dedup
 
-import "time"
+import (
+	"time"
+
+	"aggregator/internal/event"
+)
 
 // SourceRef — запись источника, вошедшая в событие.
 type SourceRef struct {
@@ -18,6 +22,8 @@ type Side struct {
 	CountryCode string
 	CityKey     string
 	RegURL      string
+	// Sport — код вида спорта; пустой означает бег.
+	Sport event.Sport
 }
 
 // Pair — пара событий. UniquePartner считает Pass (05-05): у каждой
@@ -57,7 +63,7 @@ type Reasons struct {
 	SameCity     bool    `json:"same_city"`
 	// GroupKey — пара записей одного источника допущена по равному group_key.
 	GroupKey bool `json:"group_key,omitempty"`
-	// Gate — почему Separate: country, source, dates, name.
+	// Gate — почему Separate: country, sport, source, dates, name.
 	Gate string `json:"gate,omitempty"`
 	// WouldAuto — пара выполняет все условия автослияния (NameSim не ниже
 	// High без бонуса ссылки, пересечение дат, равный непустой CityKey,
@@ -68,6 +74,8 @@ type Reasons struct {
 
 // Decide решает судьбу пары. Ворота, любое закрытое → Separate:
 //   - country: равный непустой CountryCode (DDP-01);
+//   - sport: один вид спорта; события разных видов спорта — отдельные
+//     события, пары нет и кандидатом она не становится. Пустой код — бег;
 //   - source: записи одного источника по разные стороны — только с равным
 //     непустым GroupKey (DDP-05);
 //   - dates: календарные диапазоны [Start, End или Start] отстоят не больше
@@ -84,6 +92,10 @@ func Decide(p Pair, c Config) (Verdict, Reasons) {
 	a, b := p.A, p.B
 	if a.CountryCode == "" || a.CountryCode != b.CountryCode {
 		r.Gate = "country"
+		return Separate, r
+	}
+	if event.SportOf(string(a.Sport)) != event.SportOf(string(b.Sport)) {
+		r.Gate = "sport"
 		return Separate, r
 	}
 	ok, byGroup := sourcesAllowed(a.Sources, b.Sources)

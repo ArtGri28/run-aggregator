@@ -1,6 +1,7 @@
 package event
 
 import (
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -63,5 +64,58 @@ func TestSports(t *testing.T) {
 		if got := SportOf(in); got != want {
 			t.Errorf("SportOf(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestSportTypes — перечень дисциплин по видам спорта (D-11) и его согласие с
+// форматом колонки events.event_type (миграция 00009).
+func TestSportTypes(t *testing.T) {
+	const format = `^[a-z][a-z_]{1,31}$`
+	sql, err := migrations.FS.ReadFile("00009_event_type_format.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(sql), "'"+format+"'") {
+		t.Fatalf("в миграции 00009 нет выражения '%s'", format)
+	}
+	re := regexp.MustCompile(format)
+
+	want := map[Sport][]Type{
+		SportRunning: {"road", "trail", "cross", "track", "obstacle", "other"},
+		SportSkiing:  {"ski", "rollerski", "other"},
+	}
+	if !reflect.DeepEqual(SportTypes, want) {
+		t.Fatalf("SportTypes = %v, want %v", SportTypes, want)
+	}
+	owner := map[Type]Sport{}
+	for sport, types := range SportTypes {
+		if _, ok := SportByCode(sport); !ok {
+			t.Errorf("%s: вида спорта нет в справочнике", sport)
+		}
+		for _, typ := range types {
+			if !re.MatchString(string(typ)) {
+				t.Errorf("%s/%s: значение не проходит формат колонки", sport, typ)
+			}
+			if TypeFor(sport, typ) != typ {
+				t.Errorf("TypeFor(%s, %s) = %s", sport, typ, TypeFor(sport, typ))
+			}
+			if prev, ok := owner[typ]; ok && typ != TypeOther {
+				t.Errorf("дисциплина %s — у двух видов спорта: %s и %s", typ, prev, sport)
+			}
+			owner[typ] = sport
+		}
+	}
+	// Дисциплина чужого вида спорта, неизвестная и вид спорта без своих
+	// дисциплин — other.
+	for _, c := range []struct {
+		sport Sport
+		typ   Type
+	}{{SportRunning, TypeSki}, {SportSkiing, TypeRoad}, {SportSkiing, "biathlon"}, {SportSwimming, TypeRoad}, {SportSwimming, TypeSki}} {
+		if got := TypeFor(c.sport, c.typ); got != TypeOther {
+			t.Errorf("TypeFor(%s, %s) = %s, want other", c.sport, c.typ, got)
+		}
+	}
+	if TypeFor(SportSwimming, TypeOther) != TypeOther {
+		t.Error("other допустим у любого вида спорта")
 	}
 }

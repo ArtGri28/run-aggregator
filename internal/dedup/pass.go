@@ -200,7 +200,7 @@ func rejectedRoots(ctx context.Context, tx *store.Store) (map[[2]int64]bool, err
 func side(e *store.DedupEvent) Side {
 	s := Side{
 		EventID: e.ID, Title: e.Title, Start: e.Start,
-		CountryCode: e.CountryCode, CityKey: e.CityKey, RegURL: e.RegURL,
+		CountryCode: e.CountryCode, CityKey: e.CityKey, RegURL: e.RegURL, Sport: e.Sport,
 	}
 	if e.End != nil {
 		s.End = *e.End

@@ -389,3 +389,27 @@ func TestDecideOffNeverAuto(t *testing.T) {
 	}
 	t.Logf("OFFNEVERAUTO cases=%d would_auto=%d", n, would)
 }
+
+// TestDecideSport — D-13: события разных видов спорта — отдельные события.
+func TestDecideSport(t *testing.T) {
+	for _, c := range []Config{DefaultConfig(), autoOn()} {
+		p := same()
+		p.B.Sport = event.SportSkiing
+		if v, r := Decide(p, c); v != Separate || r.Gate != "sport" || r.WouldAuto {
+			t.Errorf("AutoMerge %v, бег и лыжи: %v %+v; want separate, gate sport, WouldAuto false", c.AutoMerge, v, r)
+		}
+		p.A.Sport = event.SportSwimming
+		if v, r := Decide(p, c); v != Separate || r.Gate != "sport" {
+			t.Errorf("AutoMerge %v, плавание и лыжи: %v %+v; want separate, gate sport", c.AutoMerge, v, r)
+		}
+		// Один вид спорта — прежний вердикт; пустой код означает бег.
+		want, wantR := Decide(same(), c)
+		for _, sports := range [][2]event.Sport{{"", event.SportRunning}, {event.SportRunning, ""}, {event.SportSkiing, event.SportSkiing}} {
+			p := same()
+			p.A.Sport, p.B.Sport = sports[0], sports[1]
+			if v, r := Decide(p, c); v != want || r != wantR {
+				t.Errorf("AutoMerge %v, виды спорта %q: %v %+v; want %v %+v", c.AutoMerge, sports, v, r, want, wantR)
+			}
+		}
+	}
+}
