@@ -1,9 +1,9 @@
-# Phase 15: Catalog Quality - Discussion Log
+# Phase 16: Catalog Quality - Discussion Log
 
-> **Audit trail only.** Не использовать как вход для планирования и исполнения. Решения — в `15-CONTEXT.md`.
+> **Audit trail only.** Не использовать как вход для планирования и исполнения. Решения — в `16-CONTEXT.md`.
 
 **Date:** 2026-10-10
-**Phase:** 15-catalog-quality
+**Phase:** 16-catalog-quality
 **Areas discussed:** Метрики качества, «Сообщить об ошибке», «Предложить старт», Вход и экраны
 
 ---
