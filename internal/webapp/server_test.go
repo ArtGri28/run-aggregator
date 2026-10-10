@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,6 +24,7 @@ import (
 	"aggregator/internal/ingest/sources/marathonec"
 	"aggregator/internal/store"
 	"aggregator/internal/store/storetest"
+	"aggregator/web"
 )
 
 // Тесты API на фикстуре Марафонца (как internal/bot/bot_test.go): «сегодня»
@@ -154,8 +158,114 @@ func TestAuthRequired(t *testing.T) {
 	if code := r.errCode(1, "/api/v1/nope", http.StatusNotFound); code != "not_found" {
 		t.Fatalf("неизвестный путь: %q, want not_found", code)
 	}
-	if resp, _ := r.get("/", ""); resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("корень: code=%d, want 404", resp.StatusCode)
+	// Статика без заголовка — 200; API статикой не перекрыт.
+	if resp, _ := r.get("/", ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("корень: code=%d, want 200", resp.StatusCode)
+	}
+	if resp, _ := r.get("/api/v1/nope", ""); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/api/v1/nope без заголовка: code=%d, want 401", resp.StatusCode)
+	}
+}
+
+// secretLikeRE — строки, похожие на ключ или токен бота.
+var secretLikeRE = regexp.MustCompile(`[0-9a-fA-F]{32,}|\d{6,}:[A-Za-z0-9_-]{30,}`)
+
+func TestStatic(t *testing.T) {
+	r := newRig(t, nil) // до базы статика не доходит
+	resp, body := r.get("/", "")
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		t.Fatalf("GET /: code=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	for _, want := range []string{`lang="ru"`, "telegram-web-app.js", `type="module"`, "app.js", `name="viewport"`} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("index.html без %q:\n%s", want, body)
+		}
+	}
+	if m := secretLikeRE.FindString(string(body)); m != "" {
+		t.Fatalf("index.html: строка, похожая на ключ: %q", m)
+	}
+	for k, want := range map[string]string{
+		"Content-Security-Policy": csp,
+		"X-Content-Type-Options":  "nosniff",
+		"Referrer-Policy":         "no-referrer",
+		"Cache-Control":           staticCacheControl,
+	} {
+		if got := resp.Header.Get(k); got != want {
+			t.Fatalf("%s = %q, want %q", k, got, want)
+		}
+	}
+	if !strings.Contains(csp, "default-src 'self'") || strings.Contains(csp, "unsafe-inline") || strings.Contains(csp, "unsafe-eval") {
+		t.Fatalf("csp = %q", csp)
+	}
+
+	// Файлы с правильным типом; неизвестный путь — index.html (hash-маршруты).
+	resp, body = r.get("/app.js", "")
+	if ct := resp.Header.Get("Content-Type"); resp.StatusCode != http.StatusOK || !(strings.HasPrefix(ct, "application/javascript") || strings.HasPrefix(ct, "text/javascript")) {
+		t.Fatalf("GET /app.js: code=%d type=%q", resp.StatusCode, ct)
+	}
+	if resp.Header.Get("Cache-Control") != staticCacheControl || !strings.Contains(string(body), "hashchange") {
+		t.Fatalf("GET /app.js: Cache-Control=%q body=%q", resp.Header.Get("Cache-Control"), body[:min(len(body), 80)])
+	}
+	resp, _ = r.get("/app.css", "")
+	if ct := resp.Header.Get("Content-Type"); resp.StatusCode != http.StatusOK || !strings.HasPrefix(ct, "text/css") {
+		t.Fatalf("GET /app.css: code=%d type=%q", resp.StatusCode, ct)
+	}
+	index, _ := fs.ReadFile(web.FS, "static/index.html")
+	for _, p := range []string{"/nope", "/event/5", "/catalog/", "/screens/", "/screens"} {
+		resp, body = r.get(p, "")
+		if resp.StatusCode != http.StatusOK || !bytes.Equal(body, index) || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+			t.Fatalf("GET %s: code=%d type=%q, want index.html", p, resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+	}
+	// Лог статики — в том же формате, что у API, без пути запроса.
+	if logs := r.logs.String(); !strings.Contains(logs, `route=/ status=200`) || strings.Contains(logs, "/nope") {
+		t.Fatalf("лог статики:\n%s", logs)
+	}
+}
+
+// TestStaticSources — состав и гигиена файлов web/static: только ожидаемые
+// типы; в скриптах нет innerHTML/eval, незащищённых ссылок и строк, похожих
+// на ключи; localStorage — только в screens/filters.js (D-10).
+func TestStaticSources(t *testing.T) {
+	allowed := map[string]bool{".html": true, ".css": true, ".js": true, ".svg": true}
+	forbidden := []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "http://", "initDataUnsafe"}
+	var files int
+	err := fs.WalkDir(web.FS, "static", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		files++
+		if !allowed[path.Ext(p)] {
+			t.Errorf("%s: неожиданный тип файла", p)
+		}
+		src, err := fs.ReadFile(web.FS, p)
+		if err != nil {
+			return err
+		}
+		text := string(src)
+		if m := secretLikeRE.FindString(text); m != "" {
+			t.Errorf("%s: строка, похожая на ключ: %q", p, m)
+		}
+		if path.Ext(p) != ".js" {
+			return nil
+		}
+		// Единственный допустимый «http://» — пространство имён SVG для createElementNS.
+		scan := strings.ReplaceAll(text, "http://www.w3.org/2000/svg", "")
+		for _, bad := range forbidden {
+			if strings.Contains(scan, bad) {
+				t.Errorf("%s: содержит %q", p, bad)
+			}
+		}
+		if strings.Contains(text, "localStorage") && p != "static/screens/filters.js" {
+			t.Errorf("%s: localStorage вне screens/filters.js", p)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files < 9 {
+		t.Fatalf("файлов статики %d, want ≥ 9", files)
 	}
 }
 

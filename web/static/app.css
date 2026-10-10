@@ -1,0 +1,185 @@
+/* Тёмная природная тема «Где старт?»: сине-графитовый фон, лаймовый акцент.
+   Значения по умолчанию — тёмные; при светлой схеме Telegram app.js
+   переопределяет фоновые и текстовые переменные из themeParams. */
+:root {
+  --bg: #0f1a24;
+  --bg-2: #182634;
+  --bg-3: #213344;
+  --text: #e8eef2;
+  --hint: #8da0b1;
+  --link: #9fe0ff;
+  --accent: #b9f23a;
+  --accent-text: #0f1a24;
+  --border: #2a3d50;
+  --danger: #ff8a80;
+  --ski: #8fd3ff;
+  --tap: 44px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+a { color: var(--link); }
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.screen > * + * { margin-top: 12px; }
+
+h1, h2, h3 { margin: 0; line-height: 1.2; }
+h1 { font-size: 28px; }
+h2 { font-size: 20px; }
+h3 { font-size: 15px; color: var(--hint); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+p { margin: 0; }
+
+.brand { padding: 16px 0 4px; }
+.brand .slogan { color: var(--hint); margin-top: 4px; }
+.brand .accent { color: var(--accent); }
+
+.hint { color: var(--hint); font-size: 14px; }
+.danger { color: var(--danger); }
+
+/* Кнопки и плитки */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn-block { width: 100%; }
+.btn-row { display: flex; gap: 8px; }
+.btn-row .btn { flex: 1; }
+
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tile .title { font-weight: 600; }
+.tile .count { color: var(--hint); font-size: 14px; }
+.tile .soon { margin-left: auto; font-size: 12px; color: var(--hint); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+.tile:disabled { opacity: .55; cursor: default; }
+
+/* Значок вида спорта / дисциплины на цветной плашке */
+.plaque {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg-3);
+  color: var(--accent);
+}
+.plaque svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.plaque-skiing { color: var(--ski); }
+.plaque-lg { width: 64px; height: 64px; border-radius: 18px; }
+.plaque-lg svg { width: 38px; height: 38px; }
+
+/* Каталог */
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-2);
+  color: var(--text);
+  text-decoration: none;
+}
+.item .body { min-width: 0; flex: 1; }
+.item .meta { color: var(--hint); font-size: 13px; }
+.item .name { font-weight: 600; overflow-wrap: anywhere; }
+.item .dist { color: var(--hint); font-size: 13px; }
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* Фильтры */
+.field { display: flex; flex-direction: column; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+select, input[type="search"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+}
+input[type="search"]::placeholder { color: var(--hint); }
+
+/* Карточка */
+.card-head { display: flex; gap: 14px; align-items: flex-start; }
+.card-head h2 { overflow-wrap: anywhere; }
+.rows { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; gap: 10px; }
+.row .k { flex: none; width: 96px; color: var(--hint); font-size: 14px; }
+.row .v { min-width: 0; overflow-wrap: anywhere; }
+.desc { white-space: pre-line; overflow-wrap: anywhere; }
+.fav { color: var(--accent); font-size: 14px; }
+
+/* Заглушка и ошибки */
+.stub { text-align: center; padding: 48px 0; }
+.stub .mark { font-size: 48px; color: var(--accent); }
+.notice { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-2); }
+.notice > * + * { margin-top: 10px; }

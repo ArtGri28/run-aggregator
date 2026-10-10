@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,11 +22,14 @@ import (
 	"aggregator/internal/event"
 	"aggregator/internal/normalize"
 	"aggregator/internal/store"
+	"aggregator/web"
 )
 
 // API только чтения (этап 2 плана Phase 15): meta, events, events/{id},
 // cities, cities/suggest. Все маршруты — за Middleware; SQL здесь нет, всё
-// через *store.Store. Контракты ответов — раздел 5 плана.
+// через *store.Store. Контракты ответов — раздел 5 плана. Статика Mini App
+// (этап 3) отдаётся из web.FS на всех остальных путях без проверки initData:
+// он нужен только API.
 
 const (
 	// defaultLimit и maxLimit — размер страницы по умолчанию и предел (D-11).
@@ -42,6 +47,13 @@ const (
 	cacheControl = "private, max-age=60"
 	// shutdownGrace — предел ожидания текущих запросов при остановке.
 	shutdownGrace = 10 * time.Second
+	// staticCacheControl — статика перепроверяется при каждом открытии.
+	// Упрощение: без хеша версии в имени файла; при росте трафика — хеш в
+	// имени и долгий max-age.
+	staticCacheControl = "no-cache"
+	// csp — политика содержимого страницы: свои файлы, скрипт Telegram,
+	// запросы только к своему origin, без inline-скриптов и стилей.
+	csp = "default-src 'self'; script-src 'self' https://telegram.org; connect-src 'self'; img-src 'self' data:; style-src 'self'"
 )
 
 var (
@@ -80,7 +92,31 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 	handle("GET /api/v1/cities", srv.cities)
 	handle("GET /api/v1/cities/suggest", srv.suggest)
 	handle("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, http.StatusNotFound, "not_found") })
+	mux.Handle("/", srv.logged(static()))
 	return mux
+}
+
+// static — файлы Mini App из web.FS; путь без файла (маршруты hash-роутера,
+// корень) → index.html. Заголовки защиты и Cache-Control — на каждом ответе.
+func static() http.Handler {
+	files, err := fs.Sub(web.FS, "static")
+	if err != nil {
+		panic(err) // каталог встроен на этапе сборки
+	}
+	server := http.FileServerFS(files)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Cache-Control", staticCacheControl)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy", csp)
+		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		if st, err := fs.Stat(files, name); name == "" || err != nil || st.IsDir() {
+			http.ServeFileFS(w, r, files, "index.html")
+			return
+		}
+		server.ServeHTTP(w, r)
+	})
 }
 
 // NewServer — http.Server с таймаутами: медленный клиент не держит

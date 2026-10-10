@@ -12,10 +12,12 @@ RUN go mod download
 # Узкий COPY вместо «COPY . .»: в корне репозитория лежит .env с секретами,
 # в слой образа он попасть не должен (образ уезжает на чужой хост).
 # .dockerignore — вторая линия защиты. Миграции встроены в бинарник
-# (migrations/embed.go), каталог нужен только для сборки.
+# (migrations/embed.go), каталог нужен только для сборки. Статика Mini App
+# (web/embed.go) встроена так же.
 COPY cmd ./cmd
 COPY internal ./internal
 COPY migrations ./migrations
+COPY web ./web
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/aggregator ./cmd/aggregator \
  && mkdir -p /out/data/raw
