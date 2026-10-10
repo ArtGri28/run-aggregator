@@ -20,6 +20,17 @@ import (
 // baselineLimit — сколько прогонов ok берётся в базу (MVP.md §5.4).
 const baselineLimit = 7
 
+// watchFuse — предохранитель шага сообщений: больше стольких стартов с
+// изменением или скрытием за один прогон (считаются вместе, по всем будущим
+// стартам каталога, а не только по избранным) — строки очереди пользователям
+// не создаются вовсе.
+//
+// Упрощение: два потолка. Законное массовое изменение или исчезновение
+// (источник перенёс серию стартов) пользователям не сообщается. Частичный сбой
+// источника, скрывший не больше порога стартов, даст подписчикам сообщение
+// «старт пропал из календаря».
+const watchFuse = 20
+
 // errParserPanic — причина failed при панике внутри Parse; стек — в лог.
 var errParserPanic = errors.New("паника парсера")
 
@@ -69,6 +80,11 @@ type Result struct {
 	Fetched, Parsed, Rejected, Expired, OutOfScope int
 	Upserted, Created, Changed, Unchanged          int
 	Missing, Gone                                  int
+	// Шаг сообщений (избранное): WatchChanged — стартов с изменением ссылки,
+	// даты или статуса; WatchGone — скрытых стартов; WatchQueued — созданных
+	// строк очереди; WatchHeld — сумма изменений и скрытий, когда сработал
+	// предохранитель (строк тогда нет), иначе 0.
+	WatchChanged, WatchGone, WatchQueued, WatchHeld int
 }
 
 func (r *Runner) now() time.Time {
@@ -194,6 +210,7 @@ func (r *Runner) Run(ctx context.Context, src Source) (Result, error) {
 	}); err != nil {
 		// Транзакция откатилась: каталог не тронут.
 		res.Upserted, res.Created, res.Changed, res.Unchanged, res.Missing, res.Gone = 0, 0, 0, 0, 0, 0
+		res.WatchChanged, res.WatchGone, res.WatchQueued, res.WatchHeld = 0, 0, 0, 0
 		res, _ = fail(err.Error())
 		return res, fmt.Errorf("%s: %w", code, err)
 	}
@@ -338,7 +355,9 @@ func (r *Runner) Accept(ctx context.Context, src Source, runID int64) (Result, e
 
 // write применяет здоровый прогон в транзакции tx: записи, отметка
 // найденных строк, наблюдение. Ошибка откатывает всё: failed-прогон не
-// применяет ничего (MVP.md §5.4).
+// применяет ничего (MVP.md §5.4). Вокруг — шаг сообщений (watchBefore, watch):
+// он только читает итог записи и наблюдения и пишет строки очереди, а его
+// ошибка из write не возвращается.
 func (r *Runner) write(ctx context.Context, tx *store.Store, sourceID, runID int64, recs []SourceEvent, prepared []Prepared, now time.Time, res *Result) error {
 	// Запись прогонов всех источников, проход дедупликации и слияния идут
 	// под одной блокировкой: без тупиков и гонки за поля общего события.
@@ -347,6 +366,7 @@ func (r *Runner) write(ctx context.Context, tx *store.Store, sourceID, runID int
 	if err := tx.LockDedup(ctx); err != nil {
 		return fmt.Errorf("запись: %w", err)
 	}
+	before := r.watchBefore(ctx, tx, runID, now)
 	if err := r.apply(ctx, tx, sourceID, runID, prepared, res); err != nil {
 		return fmt.Errorf("запись: %w", err)
 	}
@@ -364,7 +384,85 @@ func (r *Runner) write(ctx context.Context, tx *store.Store, sourceID, runID int
 	if err := r.observe(ctx, tx, sourceID, runID, now, res); err != nil {
 		return fmt.Errorf("наблюдение: %w", err)
 	}
+	r.watch(ctx, tx, runID, now, before, res)
 	return nil
+}
+
+// watchBefore — снимок состояния будущих видимых стартов до применения
+// прогона; nil — снимок не прочитан, шага сообщений в этом прогоне нет.
+// Дата «сегодня» — UTC-дата now, как у наблюдения.
+func (r *Runner) watchBefore(ctx context.Context, tx *store.Store, runID int64, now time.Time) map[int64]event.WatchState {
+	var before map[int64]event.WatchState
+	err := tx.InTx(ctx, func(sp *store.Store) (err error) {
+		before, err = sp.WatchStates(ctx, now.UTC())
+		return err
+	})
+	if err != nil {
+		r.logger().Warn("watch failed", "run_id", runID, "err", err)
+		return nil
+	}
+	return before
+}
+
+// watch — шаг сообщений после наблюдения: снимок «после», перечень стартов
+// снимка «до», скрытых этим прогоном (D-17), сравнение, предохранитель и
+// строки очереди подписчикам — в транзакции прогона.
+//
+// Упрощение: шаг идёт в точке сохранения и прогону не мешает — его ошибка
+// откатывает только шаг и пишется в лог, каталог применяется. Потолок:
+// сообщения этого прогона теряются — следующий прогон этих изменений и
+// скрытий уже не увидит.
+//
+// В лог идут только счётчики: ни названий стартов, ни идентификаторов событий
+// и пользователей.
+func (r *Runner) watch(ctx context.Context, tx *store.Store, runID int64, now time.Time, before map[int64]event.WatchState, res *Result) {
+	if before == nil {
+		return
+	}
+	var changed, gone, queued, held int
+	err := tx.InTx(ctx, func(sp *store.Store) error {
+		after, err := sp.WatchStates(ctx, now.UTC())
+		if err != nil {
+			return err
+		}
+		var lost []int64
+		for id := range before {
+			if _, ok := after[id]; !ok {
+				lost = append(lost, id)
+			}
+		}
+		hidden, err := sp.HiddenEvents(ctx, lost)
+		if err != nil {
+			return err
+		}
+		changes := event.WatchDiff(before, after, hidden)
+		gone = len(hidden)
+		changed = len(changes) - gone
+		if len(changes) > watchFuse {
+			held = len(changes)
+			return nil
+		}
+		// Не больше watchFuse запросов на прогон.
+		for _, c := range changes {
+			n, err := sp.EnqueueChange(ctx, runID, c, now)
+			if err != nil {
+				return err
+			}
+			queued += n
+		}
+		return nil
+	})
+	log := r.logger().With("run_id", runID)
+	switch {
+	case err != nil:
+		log.Warn("watch failed", "err", err)
+		return
+	case held > 0:
+		log.Warn("watch held", "changed", changed, "gone", gone, "queued", 0, "threshold", watchFuse)
+	case changed+gone > 0:
+		log.Info("watch", "changed", changed, "gone", gone, "queued", queued)
+	}
+	res.WatchChanged, res.WatchGone, res.WatchQueued, res.WatchHeld = changed, gone, queued, held
 }
 
 // apply записывает КАЖДУЮ валидную запись прогона, а не только
@@ -441,6 +539,11 @@ func withCounts(metrics []byte, res Result) []byte {
 	_ = json.Unmarshal(metrics, &m)
 	m["created"], m["changed"], m["unchanged"] = res.Created, res.Changed, res.Unchanged
 	m["missing"], m["gone"] = res.Missing, res.Gone
+	// Ключ есть только у прогона со сработавшим предохранителем: по нему бот
+	// сообщает администратору; метрики остальных прогонов прежние.
+	if res.WatchHeld > 0 {
+		m["watch_held"] = res.WatchHeld
+	}
 	// Marshal карты из чисел и вложенных карт не возвращает ошибку.
 	b, _ := json.Marshal(m)
 	return b

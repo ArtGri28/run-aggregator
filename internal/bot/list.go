@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/go-telegram/bot/models"
@@ -21,8 +19,7 @@ import (
 
 const (
 	pageSize   = 8
-	maxListBtn = 64   // рун в кнопке события: клиент всё равно обрезает по ширине экрана
-	maxURLLen  = 2048 // предел Telegram для URL-кнопки
+	maxListBtn = 64 // рун в кнопке события: клиент всё равно обрезает по ширине экрана
 	goneNotice = "Событие больше не доступно"
 )
 
@@ -348,15 +345,9 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 		kb: keyboard(reg, btn(backLabel, callback{Kind: cbPage, Page: page, V: v}))}
 }
 
-// validURL — ссылка, которую можно показать: http/https с хостом, без
-// пробелов и управляющих символов, не длиннее maxURLLen (Pitfall 5).
-func validURL(s string) bool {
-	if s == "" || len(s) > maxURLLen || strings.IndexFunc(s, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
-		return false
-	}
-	u, err := url.Parse(s)
-	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != ""
-}
+// validURL — ссылка, которую можно показать (event.ValidURL): та же проверка,
+// по которой прогон решает, что у старта появилась ссылка.
+func validURL(s string) bool { return event.ValidURL(s) }
 
 // km — километры: целые без дроби, иначе одна цифра после запятой.
 func km(m int) string {
