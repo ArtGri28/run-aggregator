@@ -1,16 +1,20 @@
 // Command aggregator is the single binary for this project (MVP.md §3):
-// subcommands bot, worker, migrate, healthcheck dispatch from one process,
-// one Docker image, different `command`. No CLI framework (MVP.md §3.1).
+// subcommands bot, worker, webapp, migrate, healthcheck dispatch from one
+// process, one Docker image, different `command`. No CLI framework (MVP.md §3.1).
 package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -30,10 +34,11 @@ import (
 	"aggregator/internal/ingest/sources/probeg"
 	"aggregator/internal/ingest/sources/tristyle"
 	"aggregator/internal/store"
+	"aggregator/internal/webapp"
 )
 
 const (
-	usage        = "usage: aggregator <bot|worker|migrate|healthcheck [bot|worker]|unmerge>\n       " + workerUsage + "\n       " + unmergeUsage
+	usage        = "usage: aggregator <bot|worker|webapp|webapp-secret|migrate|healthcheck [bot|worker|webapp]|unmerge>\n       " + workerUsage + "\n       " + unmergeUsage
 	workerUsage  = "usage: aggregator worker [run-once|accept-baseline|sanity-report] --source <код> [--run <id>]"
 	unmergeUsage = "usage: aggregator unmerge [-apply -by <tg_id>] <id слитого события>"
 )
@@ -86,6 +91,10 @@ func main() {
 		err = runWorker(ctx, os.Args[2:])
 	case "unmerge":
 		err = runUnmerge(ctx, os.Args[2:])
+	case "webapp":
+		err = runWebapp(ctx)
+	case "webapp-secret":
+		err = runWebappSecret()
 	default:
 		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
@@ -132,10 +141,10 @@ func runMigrate(ctx context.Context) error {
 	return s.Migrate(ctx)
 }
 
-// runHealthcheck: без аргумента — только БД; bot или worker — БД и отметка
-// компоненты не старше healthMaxAge (docker healthcheck сервиса).
+// runHealthcheck: без аргумента — только БД; bot, worker или webapp — БД и
+// отметка компоненты не старше healthMaxAge (docker healthcheck сервиса).
 func runHealthcheck(ctx context.Context, args []string) error {
-	if len(args) > 1 || (len(args) == 1 && args[0] != "bot" && args[0] != "worker") {
+	if len(args) > 1 || (len(args) == 1 && args[0] != "bot" && args[0] != "worker" && args[0] != "webapp") {
 		return errUsage
 	}
 	dsn, err := databaseURL()
@@ -395,6 +404,82 @@ func sanityReport(ctx context.Context, s *store.Store, code string, runID int64)
 		return fmt.Errorf("%s: снимок прогона %d: %w", code, last.ID, err)
 	}
 	return ingest.SanityReport(os.Stdout, code, last.ID, last.StartedAt, recs)
+}
+
+// webappConfig читает WEBAPP_ADDR (host:port прослушивания во внутренней
+// сети) и WEBAPP_SECRET (производный ключ проверки initData, hex 64 символа;
+// печатает `aggregator webapp-secret`). Ошибка называет переменную, но не
+// повторяет её значение.
+func webappConfig() (addr string, secret []byte, err error) {
+	addr = os.Getenv("WEBAPP_ADDR")
+	if addr == "" {
+		return "", nil, errors.New("WEBAPP_ADDR не задан")
+	}
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return "", nil, errors.New("WEBAPP_ADDR: ожидается host:port")
+	}
+	hexKey := os.Getenv("WEBAPP_SECRET")
+	if hexKey == "" {
+		return "", nil, errors.New("WEBAPP_SECRET не задан")
+	}
+	secret, err = hex.DecodeString(hexKey)
+	if err != nil || len(secret) != sha256.Size {
+		return "", nil, errors.New("WEBAPP_SECRET: ожидается hex из 64 символов")
+	}
+	return addr, secret, nil
+}
+
+// runWebapp — HTTP API Mini App (Phase 15, этап 2) до отмены ctx: отметка
+// webapp в heartbeats, как у bot и worker; остановка ждёт текущие запросы.
+// Токен бота процессу не нужен (D-03). Упрощение: пользователь базы тот же,
+// что у bot и worker (D-04); «webapp пишет только в favorites» держит код,
+// отдельная роль только для чтения — позже отдельным решением.
+func runWebapp(ctx context.Context) error {
+	addr, secret, err := webappConfig()
+	if err != nil {
+		return err
+	}
+	s, err := openStore(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	srv := webapp.NewServer(addr, webapp.New(s, secret, time.Now, slog.Default()))
+
+	// Отказ прослушивания завершает отметки и ожидание сигнала.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		heartbeat.Run(ctx, func(ctx context.Context) error { return s.Beat(ctx, "webapp") }, beatEvery, nil)
+	})
+	wg.Go(func() {
+		<-ctx.Done()
+		if err := webapp.Shutdown(srv); err != nil {
+			slog.Warn("webapp shutdown", "err", err)
+		}
+	})
+	slog.Info("started", "subcommand", "webapp")
+	err = srv.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		err = nil
+	}
+	cancel()
+	wg.Wait() // store закрывается после отметок и остановки сервера
+	slog.Info("stopping", "subcommand", "webapp")
+	return err
+}
+
+// runWebappSecret печатает производный ключ проверки initData из
+// TELEGRAM_BOT_TOKEN одной строкой hex в stdout — значение для WEBAPP_SECRET.
+// Формат токена проверяется, как при старте бота; в лог ничего не пишется.
+func runWebappSecret() error {
+	cfg, err := bot.LoadConfig()
+	if err != nil {
+		return err
+	}
+	fmt.Println(hex.EncodeToString(webapp.SecretFromToken(cfg.Token)))
+	return nil
 }
 
 // unmergeArgs — id слитого события, -apply и -by (tg_id администратора,

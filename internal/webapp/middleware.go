@@ -17,8 +17,8 @@ func TgID(ctx context.Context) (int64, bool) {
 }
 
 // Middleware требует заголовок «Authorization: tma <initData>», проверяет его
-// функцией Verify и кладёт Telegram ID в контекст. Любой отказ — 401 без
-// подробностей; onReject получает код причины для лога (может быть nil).
+// функцией Verify и кладёт Telegram ID в контекст. Любой отказ — 401 с телом
+// {"error":"unauthorized"} без подробностей; onReject получает код причины для лога (может быть nil).
 func Middleware(secret []byte, now func() time.Time, onReject func(code string)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +33,9 @@ func Middleware(secret []byte, now func() time.Time, onReject func(code string))
 				if onReject != nil && errors.As(err, &ae) {
 					onReject(ae.code)
 				}
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				w.WriteHeader(http.StatusUnauthorized)
+				w.Write([]byte(`{"error":"unauthorized"}`))
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, id)))

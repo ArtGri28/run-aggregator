@@ -296,7 +296,7 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 	if e.City != "" {
 		place = esc(e.City, 100)
 	}
-	if a := visibleAddress(e); a != "" {
+	if a := VisibleAddress(e); a != "" {
 		place += ", " + esc(a, 200)
 	}
 	sb.WriteString("📍 " + place + "\n")

@@ -141,8 +141,8 @@ func TestMiddleware(t *testing.T) {
 	}
 	for _, auth := range []string{"", "Bearer " + good, "tma", "tma " + good + "&z=1"} {
 		rec := call(auth)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("%q: code=%d", auth, rec.Code)
+		if rec.Code != http.StatusUnauthorized || rec.Body.String() != `{"error":"unauthorized"}` {
+			t.Fatalf("%q: code=%d body=%q", auth, rec.Code, rec.Body.String())
 		}
 		if strings.Contains(rec.Body.String(), "hmac") || strings.Contains(rec.Body.String(), "scheme") {
 			t.Fatalf("причина отказа ушла клиенту: %q", rec.Body.String())

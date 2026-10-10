@@ -102,12 +102,51 @@ func TestHeartbeatFresh(t *testing.T) {
 	}
 	// Неверный аргумент — usage до обращения к БД.
 	t.Setenv("DATABASE_URL", "")
-	for _, args := range [][]string{{"postgres"}, {"bot", "worker"}} {
+	for _, args := range [][]string{{"postgres"}, {"bot", "worker"}, {"webapp", "bot"}} {
 		if err := runHealthcheck(context.Background(), args); !errors.Is(err, errUsage) {
 			t.Fatalf("healthcheck %v: %v, want errUsage", args, err)
 		}
 	}
-	if err := runHealthcheck(context.Background(), []string{"bot"}); err == nil || errors.Is(err, errUsage) {
-		t.Fatalf("healthcheck bot без DATABASE_URL: %v, want ошибка окружения", err)
+	for _, c := range []string{"bot", "webapp"} {
+		if err := runHealthcheck(context.Background(), []string{c}); err == nil || errors.Is(err, errUsage) {
+			t.Fatalf("healthcheck %s без DATABASE_URL: %v, want ошибка окружения", c, err)
+		}
+	}
+}
+
+// Phase 15: конфигурация webapp проверяется до БД; ошибка называет
+// переменную и не повторяет её значение.
+func TestWebappConfig(t *testing.T) {
+	const key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	for _, c := range []struct{ addr, secret, wantErr string }{
+		{"127.0.0.1:8080", key, ""},
+		{"", key, "WEBAPP_ADDR"},
+		{"8080", key, "WEBAPP_ADDR"},
+		{"127.0.0.1:8080", "", "WEBAPP_SECRET"},
+		{"127.0.0.1:8080", "zz" + key[2:], "WEBAPP_SECRET"},
+		{"127.0.0.1:8080", key[:62], "WEBAPP_SECRET"},
+	} {
+		t.Setenv("WEBAPP_ADDR", c.addr)
+		t.Setenv("WEBAPP_SECRET", c.secret)
+		addr, secret, err := webappConfig()
+		if c.wantErr == "" {
+			if err != nil || addr != c.addr || len(secret) != 32 {
+				t.Fatalf("%q/%q: addr=%q len=%d err=%v", c.addr, c.secret, addr, len(secret), err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), c.wantErr) || strings.Contains(err.Error(), "abcdef") || strings.Contains(err.Error(), "8080") {
+			t.Fatalf("%q/%q: %v, want ошибка %s без значения", c.addr, c.secret, err, c.wantErr)
+		}
+	}
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("WEBAPP_ADDR", "")
+	if err := runWebapp(context.Background()); err == nil || !strings.Contains(err.Error(), "WEBAPP_ADDR") || strings.Contains(err.Error(), "DATABASE_URL") {
+		t.Fatalf("runWebapp = %v; want ошибка WEBAPP_ADDR до БД", err)
+	}
+	// webapp-secret: формат токена проверяется как при старте бота; на выходе — hex 64.
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	if err := runWebappSecret(); err == nil || !strings.Contains(err.Error(), "TELEGRAM_BOT_TOKEN") {
+		t.Fatalf("webapp-secret без токена: %v", err)
 	}
 }

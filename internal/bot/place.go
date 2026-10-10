@@ -11,11 +11,11 @@ import (
 // республика) как отдельное слово: у границ слова — не буква.
 var areaWordRE = regexp.MustCompile(`(?i)(^|[^\p{L}])(район|р-н|р-он|область|обл|край|округ|республика|респ)($|[^\p{L}])`)
 
-// visibleAddress — часть events.address, которую показывает бот: без частей,
+// VisibleAddress — часть events.address, которую показывает бот: без частей,
 // состоящих только из района или области (пользователь видит город, а не
 // административное деление), и без названия области события. Улица, дом и
 // другие уточнения остаются. В БД адрес не меняется.
-func visibleAddress(e event.Event) string {
+func VisibleAddress(e event.Event) string {
 	var keep []string
 	for _, p := range strings.Split(e.Address, ",") {
 		p = strings.TrimSpace(p)

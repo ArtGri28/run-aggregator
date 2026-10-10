@@ -228,8 +228,8 @@ func TestVisibleAddress(t *testing.T) {
 		{"пусто", "", "", ""},
 		{"пробелы и пустые части", "", " , Барановичский район, ", ""},
 	} {
-		if got := visibleAddress(event.Event{Region: tt.region, Address: tt.address}); got != tt.want {
-			t.Errorf("%s: visibleAddress(%q) = %q, want %q", tt.name, tt.address, got, tt.want)
+		if got := VisibleAddress(event.Event{Region: tt.region, Address: tt.address}); got != tt.want {
+			t.Errorf("%s: VisibleAddress(%q) = %q, want %q", tt.name, tt.address, got, tt.want)
 		}
 	}
 }
