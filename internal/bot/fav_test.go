@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -603,4 +604,72 @@ func TestFavMessageKeyboard(t *testing.T) {
 			t.Errorf("%s: текст %q, клавиатура %q", data, c.Form["text"], kbLines(t, c))
 		}
 	}
+}
+
+// TestS51FavMenu — S-51: строка «⭐ Избранное» в главном меню видна всем, стоит
+// после рядов видов спорта и перед настройками; вход в раздел и возврат.
+// Эталоны s51_* написаны вручную по контракту.
+func TestS51FavMenu(t *testing.T) {
+	s, api, b := skiBot(t)
+	ctx := context.Background()
+	filtersV(t, b)
+	startSnapless(t, b, api) // первый /start — предложение анкеты, дальше — меню
+
+	// 1. /start: меню новым сообщением, избранное между видами спорта и настройками.
+	startSnap(t, b, api, "s51_menu")
+	menu := api.of("sendMessage")[0]
+	checkMenuFav := func(step string, c call) {
+		t.Helper()
+		ds := datas(t, c)
+		i := slices.Index(ds, "w:o")
+		if i < 1 || i+1 >= len(ds) || ds[i+1] != "s:o" || !strings.HasPrefix(ds[i-1], "f:a:") {
+			t.Errorf("%s: кнопки %v, want w:o после видов спорта и перед s:o", step, ds)
+		}
+	}
+	checkMenuFav("шаг 1", menu)
+
+	// 2. «m»: то же меню правкой.
+	menuBack := func() { matchSnapshot(t, "s51_menu_back", edited(t, "m", raw(b, api, 42, "m"))) }
+	menuBack()
+
+	// 3. Будущих лыжных событий нет: один вид спорта, избранное второй строкой.
+	b.Now = func() time.Time { return time.Date(2027, 3, 2, 12, 0, 0, 0, time.UTC) }
+	startSnap(t, b, api, "s51_one_sport")
+	b.Now = func() time.Time { return fixtureNow }
+
+	// 5. Бот с группой поддержки: пять строк, последняя — поддержка.
+	startSnap(t, newSupportBot(t, api, s), api, "s51_support")
+	support := api.of("sendMessage")[0]
+	checkMenuFav("шаг 5", support)
+	if ds := datas(t, support); ds[len(ds)-1] != "h:o" || strings.Count(kbLines(t, support), "\n") != 5 {
+		t.Errorf("шаг 5: кнопки %v, want пять строк, последняя h:o", ds)
+	}
+
+	// 4. Три вида спорта: избранное после второго ряда. Плавание включено
+	// только на время теста, у него одно будущее событие.
+	storetest.EnableSport(t, event.SportSwimming)
+	e := &event.Event{Title: "Проба swimming", TitleNorm: "проба swimming", StartDate: fixtureToday.AddDate(0, 0, 5),
+		CountryCode: "RU", Type: event.TypeOther, Sport: event.SportSwimming, Status: event.StatusScheduled, Distances: []event.Distance{{Meters: 1000}}}
+	if _, err := s.SaveEvent(ctx, e); err != nil {
+		t.Fatalf("SaveEvent: %v", err)
+	}
+	startSnap(t, b, api, "s51_three")
+	checkMenuFav("шаг 4", api.of("sendMessage")[0])
+	storetest.DisableSport(t, event.SportSwimming)
+
+	// 6. Избранного нет: строка открывает пустой раздел; «m» возвращает в меню.
+	favSnap(t, b, api, 42, &menu, "w:o", "s51_empty")
+	menuBack()
+
+	// 7. В избранном 110: раздел со стартом; «m» возвращает в меню.
+	favPut(t, 110)
+	favSnap(t, b, api, 42, &menu, "w:o", "s51_section")
+	menuBack()
+
+	// 8. Каталог пуст: строка избранного в меню есть.
+	b2 := newTestBot(t, api, storetest.Open(t))
+	startSnapless(t, b2, api)
+	api.reset()
+	b2.api.ProcessUpdate(ctx, startUpdate(42))
+	checkMenuFav("шаг 8", api.of("sendMessage")[0])
 }

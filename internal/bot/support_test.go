@@ -331,12 +331,12 @@ func TestS26SupportEntry(t *testing.T) {
 	_, api, b := supportCountryEnv(t)
 	until := fixtureNow.Add(awaitSupportFor)
 
-	// 1. Главное меню из четырёх кнопок; отметки ещё нет.
+	// 1. Главное меню из пяти кнопок; отметки ещё нет.
 	seedSkipped(t, b, api, 1001)
 	menu := startAs(t, b, api, 1001)
 	matchSnapshot(t, "s26_menu", renderCall(t, menu))
-	if got := datas(t, menu); len(got) != 4 || got[3] != "h:o" {
-		t.Fatalf("кнопки меню: %v, want четыре, последняя h:o", got)
+	if got := datas(t, menu); len(got) != 5 || got[4] != "h:o" {
+		t.Fatalf("кнопки меню: %v, want пять, последняя h:o", got)
 	}
 	if !noAwaiting(t, 1001) {
 		t.Fatalf("/start поставил отметку: %s", supportState(t))
@@ -399,10 +399,10 @@ func TestS29SupportCancel(t *testing.T) {
 		return c
 	}
 
-	// 1. «Отмена»: правка на главное меню из четырёх кнопок, отметки нет, текст идёт в поиск.
+	// 1. «Отмена»: правка на главное меню из пяти кнопок, отметки нет, текст идёт в поиск.
 	feed(b, api, commandUpdate(1001, "/support"))
 	cancel := step(t, b, api, 1001, "h:x", "s29_cancel")
-	if got := datas(t, cancel); len(got) != 4 || got[3] != "h:o" {
+	if got := datas(t, cancel); len(got) != 5 || got[4] != "h:o" {
 		t.Fatalf("меню после «Отмены»: %v", got)
 	}
 	if !noAwaiting(t, 1001) {
@@ -508,7 +508,7 @@ func TestS35SupportDisabled(t *testing.T) {
 	logs := captureLogs(t)
 	seedSkipped(t, b, api, 1001)
 
-	// 1. Главное меню из трёх кнопок — побайтно как прежний эталон.
+	// 1. Главное меню из четырёх кнопок — побайтно как прежний эталон.
 	menu := renderCall(t, startAs(t, b, api, 1001))
 	matchSnapshot(t, "s35_menu", menu)
 	matchSnapshot(t, "s18_start_skipped", menu)

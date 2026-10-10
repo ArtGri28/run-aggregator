@@ -1060,8 +1060,9 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 }
 
 // mainMenu — главное меню: кнопки видов спорта sports по две в ряд (вход в
-// поиск выбранного вида спорта), ниже настройки и профиль; при включённой
-// поддержке — кнопка «💬 Поддержка». Текст один при любом составе кнопок.
+// поиск выбранного вида спорта), ниже избранное (видно всем), настройки и
+// профиль; при включённой поддержке — кнопка «💬 Поддержка». Текст один при
+// любом составе кнопок.
 func mainMenu(sports []event.SportInfo, support bool) screen {
 	var rows []row
 	for i, sp := range sports {
@@ -1070,7 +1071,8 @@ func mainMenu(sports []event.SportInfo, support bool) screen {
 		}
 		rows[len(rows)-1].add(sp.Emoji+" "+sp.Title, callback{Kind: cbSport, Value: string(sp.Code)})
 	}
-	rows = append(rows, btn("⚙️ Мои настройки", callback{Kind: cbSettings}), btn("👤 Мой профиль", callback{Kind: cbProfile}))
+	rows = append(rows, btn("⭐ Избранное", callback{Kind: cbFavOpen}),
+		btn("⚙️ Мои настройки", callback{Kind: cbSettings}), btn("👤 Мой профиль", callback{Kind: cbProfile}))
 	if support {
 		rows = append(rows, btn("💬 Поддержка", callback{Kind: cbSupport}))
 	}

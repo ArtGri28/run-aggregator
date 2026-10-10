@@ -22,7 +22,7 @@ func TestStartScreen(t *testing.T) {
 	if len(s) != 1 || !strings.HasPrefix(s[0].Form["text"], "🏁 <b>Где старт?</b>\nЛюбительские старты в разных городах\n\nСобрали старты из разных календарей") {
 		t.Fatalf("приветствие: %+v", s)
 	}
-	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:a:running", "s:o", "u:o"}) || s[0].button(t, "🏃 Бег") != "f:a:running" {
+	if got := datas(t, s[0]); !reflect.DeepEqual(got, []string{"f:a:running", "w:o", "s:o", "u:o"}) || s[0].button(t, "🏃 Бег") != "f:a:running" {
 		t.Errorf("кнопки: %v", got)
 	}
 }

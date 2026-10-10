@@ -8,5 +8,6 @@ parse_mode: HTML
 ---
 [🏃 Бег] → f:a:running:v1 | [⛷ Лыжи] → f:a:skiing:v1
 [🏊 Плавание] → f:a:swimming:v1
+[⭐ Избранное] → w:o
 [⚙️ Мои настройки] → s:o:v1
 [👤 Мой профиль] → u:o

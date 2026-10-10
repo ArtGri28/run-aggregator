@@ -5,13 +5,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"slices"
 	"sort"
 	"testing"
 )
 
-// uxContracts — контракты экранов: Phase 8, Phase 9 (D-16), Phase 11, Phase 13 и Phase 14. Сценарии
-// всех сливаются в одно множество; номера не повторяются. minScenarios — порог
+// uxContracts — контракты экранов: Phase 8, Phase 9 (D-16), Phase 11, Phase 13 и Phase 14.
+// Сценарии всех сливаются в одно множество; номера не повторяются. minScenarios — порог
 // числа сценариев каждого контракта: пустой разбор не должен пройти молча.
 var uxContracts = []string{
 	"../../.planning/phases/08-telegram-bot-ux/08-UX-CONTRACT.md",
@@ -23,12 +22,6 @@ var uxContracts = []string{
 
 var minScenarios = []int{17, 8, 10, 8, 10}
 
-// pendingScenarios — сценарии контракта Phase 14, тесты которых создают
-// следующие планы фазы: они временно исключены из сравнения с тестами и из
-// требования эталона. Перечень сокращается с каждым планом и снимается, когда
-// готов сценарий S-51.
-var pendingScenarios = []string{"51"}
-
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")
 	scenarioTestRE     = regexp.MustCompile(`(?m)^func (TestS([0-9]{2})[A-Za-z0-9]*)\(t \*testing\.T\)`)
@@ -39,8 +32,7 @@ var (
 // (Phase 8, Phase 9, Phase 11, Phase 13 и Phase 14) равно множеству тестов
 // TestSxx…; у каждого сценария есть хотя бы один эталон sxx_*, а тестов и
 // эталонов сценариев, которых нет ни в одном контракте, нет. Лишние и
-// отсутствующие сценарии перечисляются в ошибке. Исключение временное:
-// сценарии pendingScenarios считаются в пороге, но с тестами не сравниваются.
+// отсутствующие сценарии перечисляются в ошибке. Исключений нет.
 func TestContractCoverage(t *testing.T) {
 	all := map[string]string{} // номер сценария → имя теста по контрактам
 	counts := make([]int, len(uxContracts))
@@ -57,9 +49,6 @@ func TestContractCoverage(t *testing.T) {
 				t.Errorf("S-%s: сценарий есть в двух контрактах или дважды — %s и %s", m[1], prev, m[2])
 			}
 			counts[i]++
-			if slices.Contains(pendingScenarios, m[1]) {
-				continue
-			}
 			all[m[1]] = m[2]
 		}
 	}

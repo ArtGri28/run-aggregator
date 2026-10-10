@@ -325,8 +325,8 @@ func TestS36SportMenu(t *testing.T) {
 			}
 		}
 	}
-	if got := datas(t, four); len(want) != 4 || !reflect.DeepEqual(got, append(want, "s:o", "u:o")) {
-		t.Errorf("шаг 8: кнопки %v, want виды спорта %v, настройки и профиль", got, want)
+	if got := datas(t, four); len(want) != 4 || !reflect.DeepEqual(got, append(want, "w:o", "s:o", "u:o")) {
+		t.Errorf("шаг 8: кнопки %v, want виды спорта %v, избранное, настройки и профиль", got, want)
 	}
 
 	// Кнопка вида спорта открывает его сводку.
@@ -768,7 +768,7 @@ func TestS43SportStale(t *testing.T) {
 	b.Now = func() time.Time { return time.Date(2027, 3, 2, 12, 0, 0, 0, time.UTC) }
 	pressSnap(t, b, api, "f:a:skiing", "s43_no_events")
 	wantStored(t, "шаг 4", `{"sport":"skiing"}`, 4)
-	if got, want := datas(t, press(t, b, api, "m")), []string{"f:a:running", "s:o", "u:o"}; !reflect.DeepEqual(got, want) {
+	if got, want := datas(t, press(t, b, api, "m")), []string{"f:a:running", "w:o", "s:o", "u:o"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("шаг 4: кнопки меню %v, want %v", got, want)
 	}
 	b.Now = func() time.Time { return fixtureNow }

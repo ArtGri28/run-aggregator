@@ -572,16 +572,16 @@ func TestS23Profile(t *testing.T) {
 	if !isMainMenu(menu) || uData(t, menu, "👤 Мой профиль") != "u:o" {
 		t.Fatalf("главное меню без кнопки профиля: %v", menu.buttons(t))
 	}
-	if got := datas(t, menu); !reflect.DeepEqual(got, []string{"f:a:running", "s:o", "u:o"}) {
+	if got := datas(t, menu); !reflect.DeepEqual(got, []string{"f:a:running", "w:o", "s:o", "u:o"}) {
 		t.Errorf("кнопки главного меню: %v", got)
 	}
 	p1 := step(t, b, api, 42, "u:o", "s23_profile_from_menu")
 	if after := dbState(t); after != before {
 		t.Errorf("просмотр профиля изменил данные:\n%s\n%s", before, after)
 	}
-	// 7. «Назад» — главное меню правкой, три кнопки.
+	// 7. «Назад» — главное меню правкой, четыре кнопки.
 	back := step(t, b, api, 42, uData(t, p1, "⬅️ Назад"), "s23_back")
-	if got := datas(t, back); !reflect.DeepEqual(got, []string{"f:a:running", "s:o", "u:o"}) {
+	if got := datas(t, back); !reflect.DeepEqual(got, []string{"f:a:running", "w:o", "s:o", "u:o"}) {
 		t.Errorf("кнопки главного меню после «Назад»: %v", got)
 	}
 
