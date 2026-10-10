@@ -11,4 +11,5 @@ parse_mode: HTML
 🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
 ---
 [🔗 Регистрация] → url:https://myrace.info/events/2159
+[⭐ В избранное] → w:a:110
 [⬅️ Назад] → p:1:v1

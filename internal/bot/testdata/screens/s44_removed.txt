@@ -1,0 +1,11 @@
+method: editMessageReplyMarkup
+parse_mode: 
+---
+
+---
+[🔗 Регистрация] → url:https://myrace.info/events/2159
+[⭐ В избранное] → w:a:110
+[⬅️ Назад] → p:1:v1
+method: answerCallbackQuery
+text: Убрано из избранного
+show_alert: 

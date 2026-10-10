@@ -1,0 +1,15 @@
+method: editMessageText
+parse_mode: HTML
+---
+🏔 <b>Кросс памяти Серафима и Георгия Знаменских</b>
+
+📅 2 октября 2026
+📍 Чулково
+📏 1 · 2 · 3 · 4 · 5 · 6 · 8 км
+🏔 Трейл
+
+🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
+---
+[🔗 Регистрация] → url:https://myrace.info/events/2159
+[✖️ Убрать из избранного] → w:x:110
+[⬅️ Назад] → w:p:1

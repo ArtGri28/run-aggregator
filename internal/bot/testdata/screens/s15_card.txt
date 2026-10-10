@@ -8,6 +8,7 @@ parse_mode: HTML
 📏 10 км
 🛣 Шоссе
 ---
+[⭐ В избранное] → w:a:1
 [⬅️ Назад] → p:1:v2
 method: answerCallbackQuery
 text: 

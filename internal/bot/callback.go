@@ -39,6 +39,10 @@ import (
 //	u:a:<g|a|k|c|s>:<w|e>:v<P>       показать вопрос (w — анкета, e — правка ответа)
 //	u:s:<поле>:<значение>:<w|e>:v<P> сохранить ответ
 //	h:<o|r|x>                        поддержка: открыть из меню / ответить / отмена (без версии)
+//	w:o                      избранное: раздел, страница 1 (без версии: от фильтров не зависит)
+//	w:p:<стр>                страница раздела
+//	w:e:<id>:<стр>           карточка из раздела
+//	w:<n|a|x>:<id>           карточка новым сообщением / добавить / убрать
 //
 // Версия — всегда последнее поле. f: без версии — формат до Phase 8 (кнопки
 // старых сообщений): разбирается с Legacy и считается устаревшим; encode его
@@ -86,6 +90,13 @@ const (
 	cbSupportCancel // h:x
 
 	cbSport // f:a
+
+	cbFavOpen // w:o
+	cbFavPage // w:p
+	cbFavCard // w:e
+	cbFavShow // w:n
+	cbFavAdd  // w:a
+	cbFavDel  // w:x
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -168,6 +179,10 @@ var fLetters = map[cbKind]string{cbSummary: "s", cbDate: "d", cbPeriod: "w", cbC
 // Кнопки поддержки не меняют ни профиль, ни фильтры, поэтому версии у них нет.
 var hKinds = map[string]cbKind{"o": cbSupport, "r": cbSupportReply, "x": cbSupportCancel}
 var hLetters = map[cbKind]string{cbSupport: "o", cbSupportReply: "r", cbSupportCancel: "x"}
+
+// Кнопки избранного с одним идентификатором события.
+var wKinds = map[string]cbKind{"n": cbFavShow, "a": cbFavAdd, "x": cbFavDel}
+var wLetters = map[cbKind]string{cbFavShow: "n", cbFavAdd: "a", cbFavDel: "x"}
 
 var dKinds = map[string]cbKind{"m": cbDupeAsk, "y": cbDupeYes, "n": cbDupeNo, "x": cbDupeRej, "s": cbDupeSkip}
 var dLetters = map[cbKind]string{cbDupeAsk: "m", cbDupeYes: "y", cbDupeNo: "n", cbDupeRej: "x", cbDupeSkip: "s"}
@@ -384,6 +399,27 @@ func parseCallback(data string) (callback, error) {
 			}
 		}
 		return callback{}, errCallback
+	case "w":
+		switch {
+		case len(p) == 2 && p[1] == "o":
+			return callback{Kind: cbFavOpen}, nil
+		case len(p) == 3 && p[1] == "p":
+			page, err := num(p[2], 1, maxPage)
+			return callback{Kind: cbFavPage, Page: int(page)}, err
+		case len(p) == 4 && p[1] == "e":
+			id, err := num(p[2], 1, math.MaxInt64)
+			if err != nil {
+				return callback{}, err
+			}
+			page, err := num(p[3], 1, maxPage)
+			return callback{Kind: cbFavCard, ID: id, Page: int(page)}, err
+		case len(p) == 3:
+			if k, ok := wKinds[p[1]]; ok {
+				id, err := num(p[2], 1, math.MaxInt64)
+				return callback{Kind: k, ID: id}, err
+			}
+		}
+		return callback{}, errCallback
 	}
 	return callback{}, errCallback
 }
@@ -463,6 +499,14 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("u:s:%s:%s:%s:v%d", c.Field, c.Value, c.Mode, c.V)
 	case cbSupport, cbSupportReply, cbSupportCancel:
 		s = "h:" + hLetters[c.Kind]
+	case cbFavOpen:
+		s = "w:o"
+	case cbFavPage:
+		s = fmt.Sprintf("w:p:%d", c.Page)
+	case cbFavCard:
+		s = fmt.Sprintf("w:e:%d:%d", c.ID, c.Page)
+	case cbFavShow, cbFavAdd, cbFavDel:
+		s = fmt.Sprintf("w:%s:%d", wLetters[c.Kind], c.ID)
 	default:
 		return "", errCallback
 	}

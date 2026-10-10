@@ -233,7 +233,16 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 	if loadFilters(raw, b.today()).Country == allCountries {
 		style = placeWithCountry
 	}
-	return cardScreen(e, srcs, c.Page, v, style), v, true
+	sc = cardScreen(e, srcs, c.Page, v, style)
+	// Строка избранного — перед строкой возврата (она всегда последняя).
+	fav, err := b.Store.IsFavorite(ctx, tgID, e.ID)
+	if err != nil {
+		b.logger().Error("is favorite", "err", err)
+		return screen{}, 0, false
+	}
+	rows := sc.kb.InlineKeyboard
+	sc.kb.InlineKeyboard = slices.Insert(rows, len(rows)-1, []models.InlineKeyboardButton{favBtn(e.ID, fav)})
+	return sc, v, true
 }
 
 func goneScreen(page, v int) screen {

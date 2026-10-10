@@ -268,3 +268,52 @@ func TestCallbackSport(t *testing.T) {
 		}
 	}
 }
+
+// TestFavCallbacks — кнопки избранного w: (14-UX-CONTRACT.md, раздел 4): шесть
+// видов собираются и разбираются обратно; всё вне грамматики — ошибка разбора.
+func TestFavCallbacks(t *testing.T) {
+	kinds := map[cbKind]bool{}
+	for _, s := range []string{
+		"w:o", "w:p:1", "w:p:10000", "w:e:1:1", "w:e:9223372036854775807:10000",
+		"w:n:5", "w:a:5", "w:x:5", "w:n:9223372036854775807", "w:a:9223372036854775807", "w:x:9223372036854775807",
+	} {
+		c, err := parseCallback(s)
+		if err != nil {
+			t.Fatalf("parseCallback(%q): %v", s, err)
+		}
+		if got, err := c.encode(); err != nil || got != s || c.Legacy || c.V != 0 {
+			t.Fatalf("encode(parse(%q)) = %q, %v; want the same", s, got, err)
+		}
+		if len(s) > maxCallbackBytes {
+			t.Errorf("%q длиннее %d байт", s, maxCallbackBytes)
+		}
+		kinds[c.Kind] = true
+	}
+	for _, k := range []cbKind{cbFavOpen, cbFavPage, cbFavCard, cbFavShow, cbFavAdd, cbFavDel} {
+		if !kinds[k] {
+			t.Errorf("вид кнопки %d не разобран ни из одной строки", k)
+		}
+	}
+	// Самая длинная кнопка — w:e с наибольшими id и страницей.
+	if longest, err := (callback{Kind: cbFavCard, ID: math.MaxInt64, Page: maxPage}).encode(); err != nil || len(longest) != 29 {
+		t.Errorf("самая длинная кнопка %q (%d байт), %v; want 29 байт", longest, len(longest), err)
+	}
+	for _, bad := range []string{
+		"w", "w:", "w:a", "w:a:", "w:a:0", "w:a:01", "w:a:-1", "w:a:+1", "w:a:abc", "w:a:1.5", "w:a:9223372036854775808",
+		"w:e:110", "w:e::1", "w:e:110:0", "w:e:110:01", "w:e:110:10001", "w:e:0:1", "w:e:110:1:1",
+		"w:p", "w:p:0", "w:p:01", "w:p:-1", "w:p:10001", "w:p:1:1",
+		"w:z:1", "w:o:1", "w:O", "W:o", "w:a:110:v1", "w:e:110:1:v1", "w:p:1:v1", "w:o:v1", "w:n", "w:x", "w:n:0", "w:x:0", " w:o", "w:o ",
+	} {
+		if c, err := parseCallback(bad); err == nil {
+			t.Errorf("parseCallback(%q) = %+v, want error", bad, c)
+		}
+	}
+	for _, c := range []callback{
+		{Kind: cbFavPage}, {Kind: cbFavPage, Page: maxPage + 1}, {Kind: cbFavCard, ID: 1}, {Kind: cbFavCard, Page: 1},
+		{Kind: cbFavAdd}, {Kind: cbFavDel, ID: -1}, {Kind: cbFavShow},
+	} {
+		if s, err := c.encode(); err == nil {
+			t.Errorf("encode(%+v) = %q, want error", c, s)
+		}
+	}
+}

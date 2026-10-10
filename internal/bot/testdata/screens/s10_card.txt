@@ -11,4 +11,5 @@ parse_mode: HTML
 🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
 ---
 [🔗 Регистрация] → url:https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026
+[⭐ В избранное] → w:a:52
 [⬅️ Назад] → p:2:v1

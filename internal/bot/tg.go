@@ -223,6 +223,21 @@ func (b *Bot) show(ctx context.Context, q *models.CallbackQuery, sc screen) erro
 	return fmt.Errorf("edit message: %w", err)
 }
 
+// showKeyboard правит только клавиатуру сообщения, текст не трогает.
+// «message is not modified» — успех; иная ошибка возвращается, новое
+// сообщение взамен не шлётся.
+func (b *Bot) showKeyboard(ctx context.Context, chatID int64, msgID int, kb *models.InlineKeyboardMarkup) error {
+	err := withRetry(ctx, func() error {
+		_, err := b.api.EditMessageReplyMarkup(ctx, &tgbot.EditMessageReplyMarkupParams{ChatID: chatID, MessageID: msgID, ReplyMarkup: kb})
+		return err
+	})
+	if kind, _ := classify(err); kind == kindNone || kind == kindNotModified {
+		return nil
+	}
+	b.logKind(err, "editMessageReplyMarkup")
+	return fmt.Errorf("edit keyboard: %w", err)
+}
+
 // answer отвечает на callback (текст — всплывающее уведомление); ошибка
 // (например, устаревший callback) только в лог уровня Debug.
 func (b *Bot) answer(ctx context.Context, q *models.CallbackQuery, notice string) {

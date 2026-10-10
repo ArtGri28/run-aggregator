@@ -1,0 +1,3 @@
+method: answerCallbackQuery
+text: В избранном уже 50 стартов — это предел. Уберите лишний, чтобы добавить новый
+show_alert: 

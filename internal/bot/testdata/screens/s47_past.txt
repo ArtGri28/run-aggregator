@@ -1,0 +1,3 @@
+method: answerCallbackQuery
+text: Старт уже прошёл
+show_alert: 

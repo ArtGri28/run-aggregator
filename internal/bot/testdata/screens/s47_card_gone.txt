@@ -1,0 +1,6 @@
+method: editMessageText
+parse_mode: HTML
+---
+Событие больше не доступно
+---
+[⬅️ Назад] → w:p:1

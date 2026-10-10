@@ -1,0 +1,3 @@
+method: answerCallbackQuery
+text: Добавлено в избранное. Сообщу об изменениях и напомню за 7 дней до старта
+show_alert: 

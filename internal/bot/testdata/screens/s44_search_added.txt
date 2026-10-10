@@ -1,0 +1,10 @@
+method: editMessageReplyMarkup
+parse_mode: 
+---
+
+---
+[✖️ Убрать из избранного] → w:x:135
+[⬅️ Назад] → g:b:v2
+method: answerCallbackQuery
+text: Добавлено в избранное. Сообщу об изменениях и напомню за 7 дней до старта
+show_alert: 
