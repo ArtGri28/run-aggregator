@@ -330,10 +330,10 @@ func TestStaticSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if files < 13 {
-		t.Fatalf("файлов статики %d, want ≥ 13", files)
+	if files < 14 {
+		t.Fatalf("файлов статики %d, want ≥ 14", files)
 	}
-	for _, p := range []string{"static/screens/favorites.js", "static/screens/profile.js", "static/screens/calendar.js"} {
+	for _, p := range []string{"static/row.js", "static/screens/favorites.js", "static/screens/profile.js", "static/screens/calendar.js"} {
 		if _, err := fs.Stat(web.FS, p); err != nil {
 			t.Errorf("%s: %v", p, err)
 		}

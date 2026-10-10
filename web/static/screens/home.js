@@ -1,33 +1,26 @@
-// Главная: бренд, виды спорта с числом будущих стартов (из meta), входы в
-// каталог, фильтры, календарь, избранное и профиль.
+// Главная: герой, чипы направлений, плитки разделов и три ближайших старта
+// по текущим фильтрам.
 
-import { meta } from '../api.js';
-import { el, plural, showError } from '../ui.js';
-import { plaque } from '../icons.js';
-import { loadFilters, saveFilters } from './filters.js';
+import { get, meta } from '../api.js';
+import { el, showError } from '../ui.js';
+import { glyph } from '../icons.js';
+import { row } from '../row.js';
+import { directions, loadFilters, toQuery } from './filters.js';
 
 export const back = null;
 
-function sportTile(s) {
-  return el('button', {
-    type: 'button', class: 'tile',
-    onclick: () => {
-      saveFilters({ ...loadFilters(), sport: s.code, dist: [], type: '' });
-      window.location.hash = '#/catalog';
-    },
-  }, plaque(s.code, ''), el('span', {},
-    el('div', { class: 'title', text: s.title }),
-    el('div', { class: 'count', text: `${s.count} ${plural(s.count, 'старт', 'старта', 'стартов')}` })));
-}
-
-function linkTile(title, href) {
-  return el('a', { class: 'tile', href }, el('span', { class: 'title', text: title }));
+function tile(name, title, sub, href) {
+  return el('a', { class: 'tile', href }, glyph(name), el('span', { class: 'title', text: title }), el('span', { class: 'sub', text: sub }));
 }
 
 export async function render(box) {
-  box.replaceChildren(el('header', { class: 'brand' },
-    el('h1', {}, 'Где ', el('span', { class: 'accent', text: 'старт?' })),
-    el('p', { class: 'slogan', text: 'Все старты в одном месте' })));
+  // Поле текстового поиска героя появится вместе с поиском каталога — см.
+  // пометку в screens/catalog.js; до тех пор здесь только кнопка.
+  box.replaceChildren(el('section', { class: 'hero' },
+    el('p', { class: 'eyebrow', text: 'Каталог спортивных событий' }),
+    el('h1', { text: 'Найди свой следующий старт' }),
+    el('p', { class: 'sub', text: 'Старты России и Беларуси — от городских забегов до трейлов' }),
+    el('div', { class: 'find' }, el('a', { class: 'btn btn-primary', href: '#/catalog', text: 'Найти старт ↗' }))));
   let m;
   try {
     m = await meta();
@@ -36,13 +29,31 @@ export async function render(box) {
     return;
   }
   if (!box.isConnected) return;
-  // Как в меню бота: бег показывается всегда, остальные виды — только с
-  // будущими стартами.
-  const sports = m.sports.filter((s) => s.code === 'running' || s.count > 0);
-  box.append(el('h3', { text: 'Виды спорта' }), el('div', { class: 'tiles' }, ...sports.map(sportTile)));
-  box.append(el('div', { class: 'btn-row' },
-    el('a', { class: 'btn btn-primary', href: '#/catalog', text: 'Все старты' }),
-    el('a', { class: 'btn', href: '#/filters', text: 'Фильтры' })));
-  box.append(el('h3', { text: 'Разделы' }),
-    el('div', { class: 'tiles' }, linkTile('Календарь', '#/calendar'), linkTile('Избранное', '#/favorites'), linkTile('Профиль', '#/profile')));
+  const f = loadFilters();
+  const list = el('ul', { class: 'list' });
+  const foot = el('div', {});
+
+  let seq = 0;
+  async function load() {
+    const my = ++seq;
+    foot.replaceChildren();
+    try {
+      const data = await get('events', { ...toQuery(f), limit: 3 });
+      if (my !== seq || !box.isConnected) return;
+      list.replaceChildren(...data.items.map((it) => row(it, m)));
+      if (!data.items.length) list.append(el('li', { class: 'hint', text: 'По этим фильтрам стартов пока нет.' }));
+    } catch (e) {
+      if (my === seq && box.isConnected) showError(foot, e, load);
+    }
+  }
+
+  box.append(el('h2', { text: 'Выбери направление' }), directions(m, f, load),
+    el('div', { class: 'tiles' },
+      tile('clock', 'Ближайшие старты', 'По дате', '#/catalog'),
+      tile('calendar', 'Календарь', 'Планируй сезон', '#/calendar'),
+      tile('heart', 'Избранное', 'Твои события', '#/favorites'),
+      tile('sliders', 'Фильтры', 'Настрой поиск', '#/filters')),
+    el('div', { class: 'bar' }, el('h2', { text: 'Ближайшие старты' }), el('a', { href: '#/catalog', text: 'Весь каталог →' })),
+    list, foot);
+  load();
 }

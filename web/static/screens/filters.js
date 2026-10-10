@@ -1,12 +1,14 @@
 // Экран фильтров и состояние фильтров каталога. Состояние живёт только на
 // клиенте (D-10) под одним ключом localStorage; в базу не пишется. Это
-// единственный модуль, который обращается к localStorage.
+// единственный модуль, который обращается к localStorage. Здесь же ряд
+// чипов направлений (вид спорта и дисциплина) для главной и каталога.
 
 import { get, meta } from '../api.js';
-import { el, flag, showError } from '../ui.js';
+import { el, flag, heading, showError } from '../ui.js';
+import { icon } from '../icons.js';
 
 const KEY = 'gde-start.filters.v1';
-const ALL_COUNTRIES = '*';
+export const ALL_COUNTRIES = '*';
 // Упрощение: страна по умолчанию продублирована на клиенте (у сервера —
 // DefaultCountry бота); при её смене — отдать в meta.
 const DEFAULT_COUNTRY = 'RU';
@@ -26,6 +28,13 @@ export function loadFilters() {
 
 export function saveFilters(f) {
   try { localStorage.setItem(KEY, JSON.stringify(f)); } catch { /* хранилище недоступно — фильтры живут до перезагрузки */ }
+  // Пилюля страны в шапке показывает то же состояние.
+  window.dispatchEvent(new Event('filters'));
+}
+
+// resetFilters — фильтры по умолчанию.
+export function resetFilters() {
+  saveFilters({ ...DEFAULTS, dist: [], periods: [] });
 }
 
 // toQuery — параметры GET /events и /cities по контракту: город только со
@@ -42,46 +51,77 @@ export function toQuery(f) {
 
 const PERIOD_LABEL = { cm: 'этот месяц', nm: 'следующий месяц' };
 
-// summary — строка активных фильтров для каталога по справочникам meta.
-export function summary(f, m) {
-  const parts = [];
+// parts — подписи активных фильтров по справочникам meta.
+function parts(f, m) {
+  const out = [];
   const sport = m.sports.find((s) => s.code === f.sport);
-  if (sport) parts.push(sport.title);
+  if (sport) out.push(sport.title);
   if (f.country === ALL_COUNTRIES) {
-    parts.push('все страны');
+    out.push('все страны');
   } else {
     const c = m.countries.find((x) => x.code === f.country);
-    parts.push(c ? c.name : f.country);
-    if (f.city) parts.push(f.cityName || f.city);
+    out.push(c ? c.name : f.country);
+    if (f.city) out.push(f.cityName || f.city);
   }
   if (f.periods.length) {
-    parts.push(f.periods.map((p) => PERIOD_LABEL[p] || (m.months.find((x) => x.code === p) || {}).label || p).join(', '));
+    out.push(f.periods.map((p) => PERIOD_LABEL[p] || (m.months.find((x) => x.code === p) || {}).label || p).join(', '));
   }
   if (sport && f.dist.length) {
     const b = m.buckets[f.sport] || [];
-    parts.push(f.dist.map((i) => (b[i] || {}).label || '').filter(Boolean).join(', '));
+    out.push(f.dist.map((i) => (b[i] || {}).label || '').filter(Boolean).join(', '));
   }
   if (sport && f.type) {
     const t = (m.types[f.sport] || []).find((x) => x.code === f.type);
-    if (t) parts.push(t.label);
+    if (t) out.push(t.label);
   }
-  return parts.join(' · ');
+  return out;
 }
 
-// chips — ряд переключателей; multi — несколько активных.
+// filterTags — активные фильтры мелкими чипами.
+export function filterTags(f, m) {
+  return el('div', { class: 'tags' }, ...parts(f, m).map((text) => el('span', { class: 'tag', text })));
+}
+
+// chips — ряд переключателей; multi — несколько активных; у варианта может
+// быть значок icon.
 function chips(options, selected, multi, onChange) {
   const row = el('div', { class: 'chips', role: 'group' });
   for (const o of options) {
     const pressed = multi ? selected.includes(o.value) : selected === o.value;
     row.append(el('button', {
-      type: 'button', class: 'chip', 'aria-pressed': String(pressed), text: o.label,
+      type: 'button', class: 'chip', 'aria-pressed': String(pressed),
       onclick: () => {
         if (multi) onChange(pressed ? selected.filter((v) => v !== o.value) : [...selected, o.value]);
         else onChange(pressed ? '' : o.value);
       },
-    }));
+    }, o.icon, o.label));
   }
   return row;
+}
+
+// directions — чипы направлений: «Все» и виды спорта (как в меню бота: бег
+// всегда, остальные — только с будущими стартами), ниже — дисциплины
+// выбранного вида. Выбор пишется в фильтры f; onChange — после записи.
+export function directions(m, f, onChange) {
+  const box = el('div', { class: 'field' });
+  const set = (patch) => {
+    Object.assign(f, patch);
+    saveFilters(f);
+    draw();
+    onChange();
+  };
+  function draw() {
+    const sports = m.sports.filter((s) => s.code === 'running' || s.count > 0);
+    box.replaceChildren(chips([{ value: '', label: 'Все' }, ...sports.map((s) => ({ value: s.code, label: s.title, icon: icon(s.code, '') }))],
+      f.sport, false, (v) => set({ sport: v, dist: [], type: '' })));
+    const types = (f.sport && m.types[f.sport]) || [];
+    if (types.length) {
+      box.append(chips(types.map((t) => ({ value: t.code, label: t.label, icon: icon(f.sport, t.code) })),
+        f.type, false, (v) => set({ type: v })));
+    }
+  }
+  draw();
+  return box;
 }
 
 function field(title, ...children) {
@@ -160,8 +200,8 @@ export async function render(box) {
 
   function draw() {
     box.replaceChildren();
-    box.append(el('div', { class: 'bar' }, el('h2', { text: 'Фильтры' }),
-      el('button', { type: 'button', class: 'btn', text: 'Сбросить', onclick: () => { Object.assign(f, DEFAULTS, { dist: [], periods: [] }); saveFilters(f); draw(); } })));
+    box.append(heading('Настрой поиск', 'Фильтры',
+      el('button', { type: 'button', class: 'pill', text: 'Сбросить', onclick: () => { Object.assign(f, DEFAULTS, { dist: [], periods: [] }); saveFilters(f); draw(); } })));
 
     box.append(field('Вид спорта', chips([{ value: '', label: 'Все' }, ...m.sports.map((s) => ({ value: s.code, label: `${s.emoji} ${s.title}` }))],
       f.sport, false, (v) => update({ sport: v, dist: [], type: '' }))));

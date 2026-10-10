@@ -1,6 +1,6 @@
 // Общие помощники экранов: создание узлов (только textContent и атрибуты —
 // данные каталога приходят из внешних источников), даты, флаги, дистанции,
-// заглушка вне Telegram и показ ошибок API.
+// заголовок экрана, короткие сообщения, заглушка вне Telegram и показ ошибок API.
 
 import { ApiError } from './api.js';
 
@@ -35,10 +35,8 @@ export function ruDate(iso) {
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
-// shortDate — «02.10» из YYYY-MM-DD.
-export function shortDate(iso) {
-  return iso.slice(8, 10) + '.' + iso.slice(5, 7);
-}
+// MON — месяц тремя буквами для плашки даты.
+export const MON = ['ЯНВ', 'ФЕВ', 'МАР', 'АПР', 'МАЙ', 'ИЮН', 'ИЮЛ', 'АВГ', 'СЕН', 'ОКТ', 'НОЯ', 'ДЕК'];
 
 // flag — флаг из кода ISO alpha-2 (региональные индикаторы), '' для иного.
 export function flag(code) {
@@ -51,11 +49,6 @@ export function km(m) {
   return m % 1000 === 0 ? String(m / 1000) : (m / 1000).toFixed(1).replace('.', ',');
 }
 
-// kmList — «5/10/21 км», '' без дистанций.
-export function kmList(meters) {
-  return meters && meters.length ? meters.map(km).join('/') + ' км' : '';
-}
-
 // plural — форма слова по числу: plural(5, 'старт', 'старта', 'стартов').
 export function plural(n, one, few, many) {
   const a = Math.abs(n) % 100;
@@ -66,7 +59,33 @@ export function plural(n, one, few, many) {
   return many;
 }
 
-export const STATUS_LABEL ={ cancelled: 'Отменён', postponed: 'Перенесён' };
+// events — «1 событие», «2 события», «5 событий».
+export function events(n) {
+  return `${n} ${plural(n, 'событие', 'события', 'событий')}`;
+}
+
+// heading — заголовок экрана: надзаголовок, заголовок и действия справа.
+export function heading(eyebrow, title, ...actions) {
+  return el('div', { class: 'head' },
+    el('div', {}, el('p', { class: 'eyebrow', text: eyebrow }), el('h1', { text: title })),
+    el('div', { class: 'actions' }, ...actions));
+}
+
+// toast — короткое сообщение над нижней панелью; гаснет само.
+let toastTimer = 0;
+export function toast(text) {
+  let node = document.getElementById('toast');
+  if (!node) {
+    node = el('div', { id: 'toast', class: 'toast', role: 'status' });
+    document.body.append(node);
+  }
+  node.textContent = text;
+  node.hidden = !text;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { node.hidden = true; }, 5000);
+}
+
+export const STATUS_LABEL = { cancelled: 'Отменён', postponed: 'Перенесён' };
 
 // statusBadge — пометка отменённого/перенесённого старта или null.
 export function statusBadge(status) {
@@ -76,10 +95,11 @@ export function statusBadge(status) {
 
 // stub — заглушка: страница открыта не из Telegram или initData отклонён.
 export function stub(root) {
+  document.body.classList.add('stubbed'); // без шапки и нижней панели
   root.replaceChildren(el('div', { class: 'stub screen' },
     el('div', { class: 'mark', text: '🏁' }),
     el('h1', { text: 'Где старт?' }),
-    el('p', { class: 'slogan hint', text: 'Все старты в одном месте' }),
+    el('p', { class: 'slogan', text: 'Все старты в одном месте.' }),
     el('p', { text: 'Откройте приложение из Telegram.' })));
 }
 

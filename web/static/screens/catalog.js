@@ -1,52 +1,69 @@
-// Каталог: страница выдачи GET /events по сохранённым фильтрам, кнопка «Ещё»
-// подгружает следующую страницу. Состав строки — как у кнопки списка бота:
-// дата, флаг и город, название; плюс значок вида спорта и дистанции.
+// Каталог: чипы направлений, активные фильтры, страница выдачи GET /events по
+// сохранённым фильтрам; кнопка «Ещё» подгружает следующую страницу.
 
 import { get, meta } from '../api.js';
-import { el, flag, kmList, shortDate, showError, statusBadge } from '../ui.js';
-import { plaque } from '../icons.js';
-import { loadFilters, summary, toQuery } from './filters.js';
+import { el, events, heading, showError } from '../ui.js';
+import { glyph } from '../icons.js';
+import { row } from '../row.js';
+import { directions, filterTags, loadFilters, resetFilters, toQuery } from './filters.js';
 
 export const back = '#/';
 
-// item — строка списка стартов; её же показывает список дня календаря.
-export function item(it) {
-  const place = [shortDate(it.start_date), [flag(it.country_code), it.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
-  return el('li', {}, el('a', { class: 'item', href: '#/event/' + it.id },
-    plaque(it.sport, ''),
-    el('span', { class: 'body' },
-      el('div', { class: 'meta', text: place }),
-      el('div', { class: 'name' }, statusBadge(it.status), statusBadge(it.status) ? ' ' : null, it.title),
-      it.distances.length ? el('div', { class: 'dist', text: kmList(it.distances) }) : null)));
-}
-
 export async function render(box) {
   box.replaceChildren();
+  let m;
+  try {
+    m = await meta();
+  } catch (e) {
+    if (box.isConnected) showError(box, e, () => render(box));
+    return;
+  }
+  if (!box.isConnected) return;
   const f = loadFilters();
-  const title = el('h2', { text: 'Каталог' });
-  const line = el('p', { class: 'hint' });
-  const list = el('ul', { class: 'list' });
+  const line = el('p', { class: 'hint', role: 'status' });
+  const list = el('ul', { class: 'list list-2' });
   const more = el('button', { type: 'button', class: 'btn btn-block', text: 'Ещё', hidden: true, onclick: () => load() });
   const foot = el('div', {});
-  box.append(el('div', { class: 'bar' }, title, el('a', { class: 'btn', href: '#/filters', text: 'Фильтры' })), line, list, foot, more);
+  const tags = el('div', {});
 
   let page = 1;
+  let seq = 0;
   async function load() {
+    const my = seq;
     more.disabled = true;
     try {
-      const [m, data] = await Promise.all([meta(), get('events', { ...toQuery(f), page })]);
-      if (!box.isConnected) return;
-      title.textContent = `Найдено: ${data.total}`;
-      line.textContent = summary(f, m) || 'Фильтры не заданы';
+      const data = await get('events', { ...toQuery(f), page });
+      if (my !== seq || !box.isConnected) return;
+      line.textContent = `Найдено ${events(data.total)}`;
       if (page === 1 && !data.items.length) list.append(el('li', { class: 'hint', text: 'По этим фильтрам стартов пока нет.' }));
-      for (const it of data.items) list.append(item(it));
+      for (const it of data.items) list.append(row(it, m));
       page = data.page + 1;
       more.hidden = data.page >= data.pages;
     } catch (e) {
-      if (box.isConnected) showError(foot, e, load);
+      if (my === seq && box.isConnected) showError(foot, e, load);
     } finally {
       more.disabled = false;
     }
   }
-  load();
+  // reload — выдача с первой страницы после смены направления.
+  function reload() {
+    seq++;
+    page = 1;
+    more.hidden = true;
+    list.replaceChildren();
+    foot.replaceChildren();
+    tags.replaceChildren(filterTags(f, m));
+    load();
+  }
+
+  box.append(heading('Открой новое', 'Каталог стартов',
+    el('a', { class: 'pill', href: '#/filters' }, glyph('sliders'), 'Фильтры'),
+    el('button', { type: 'button', class: 'pill', text: 'Сбросить', onclick: () => { resetFilters(); render(box); } })),
+  // Место поля текстового поиска (этап 6): input type="search" с подписью
+  // «Название, город, страна…» добавляется сюда, перед чипами направлений,
+  // а его значение — параметром запроса events в load(). Тогда же поле с
+  // подписью «Город, соревнование или дистанция…» встаёт в герой главной
+  // перед кнопкой «Найти старт» и ведёт в каталог с тем же значением.
+  directions(m, f, reload), tags, line, list, foot, more);
+  reload();
 }

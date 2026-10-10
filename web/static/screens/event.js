@@ -2,9 +2,10 @@
 // Кнопка «Регистрация» — только при registration_url; кнопка избранного
 // задаёт состояние (PUT/DELETE идемпотентны) и сразу его показывает.
 
-import { del, get, meta, put } from '../api.js';
-import { el, errorText, flag, km, link, ruDate, showError, statusBadge } from '../ui.js';
+import { get, meta } from '../api.js';
+import { el, flag, km, link, ruDate, showError, statusBadge } from '../ui.js';
 import { plaque } from '../icons.js';
+import { toggleFav } from '../row.js';
 
 export const back = '#/catalog';
 
@@ -32,24 +33,9 @@ function favControl(c, m, mark) {
   };
   btn.addEventListener('click', async () => {
     btn.disabled = true;
-    note.textContent = '';
-    try {
-      if (fav) {
-        await del('favorites/' + c.id);
-        fav = false;
-      } else {
-        const { outcome } = await put('favorites/' + c.id);
-        if (outcome === 'limit') {
-          note.textContent = `В избранном уже ${m.limits.favorites} стартов — это предел. Уберите лишний, чтобы добавить новый.`;
-        } else if (outcome === 'past') {
-          note.textContent = 'Старт уже прошёл.';
-        } else {
-          fav = true;
-        }
-      }
-    } catch (e) {
-      note.textContent = errorText(e, 'Не удалось сохранить. Повторите позже.');
-    }
+    const res = await toggleFav(c.id, fav, m.limits.favorites);
+    fav = res.fav;
+    note.textContent = res.note;
     paint();
     btn.disabled = false;
   });
@@ -71,10 +57,11 @@ export async function render(box, id) {
   const sport = m.sports.find((s) => s.code === c.sport);
   const kind = (sport && sport.code !== 'running' ? sport.title + ' · ' : '') + c.type_label;
 
-  const mark = el('p', { class: 'fav', text: '★ В избранном' });
-  box.append(el('div', { class: 'card-head' }, plaque(c.sport, c.type, true),
+  const mark = el('p', { class: 'fav', text: '♥ В избранном' });
+  const card = el('div', { class: 'card' }, el('div', { class: 'card-head' }, plaque(c.sport, c.type, true),
     el('div', {}, el('h2', {}, statusBadge(c.status), statusBadge(c.status) ? ' ' : null, c.title),
       el('p', { class: 'hint', text: kind }), mark)));
+  box.append(card);
 
   let when = ruDate(c.start_date);
   if (c.end_date && c.end_date !== c.start_date) when += ' – ' + ruDate(c.end_date);
@@ -83,9 +70,9 @@ export async function render(box, id) {
   rows.append(row('Страна', [flag(c.country_code), c.country_name].filter(Boolean).join(' ')));
   rows.append(row('Место', [c.city || 'город не указан', c.address].filter(Boolean).join(', ')));
   if (c.distances.length) rows.append(row('Дистанции', distances(c.distances)));
-  box.append(rows);
+  card.append(rows);
 
-  if (c.description) box.append(el('p', { class: 'desc', text: c.description }));
+  if (c.description) card.append(el('p', { class: 'desc', text: c.description }));
 
   if (c.sources.length) {
     const links = [];
@@ -93,7 +80,7 @@ export async function render(box, id) {
       if (i) links.push(', ');
       links.push(s.url ? link(s.url, s.name) : s.name);
     });
-    box.append(row(c.sources.length > 1 ? 'Источники' : 'Источник', ...links));
+    card.append(row(c.sources.length > 1 ? 'Источники' : 'Источник', ...links));
   }
 
   if (c.registration_url) {
