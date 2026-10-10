@@ -153,7 +153,7 @@ export async function render(box, param) {
   }
 
   const input = el('input', {
-    type: 'search', placeholder: 'Название, город, страна…', 'aria-label': 'Поиск стартов',
+    type: 'search', placeholder: 'Название или город…', 'aria-label': 'Поиск стартов',
     enterkeyhint: 'search', autocomplete: 'off', maxlength: '64',
     oninput: () => {
       clear.hidden = !input.value;

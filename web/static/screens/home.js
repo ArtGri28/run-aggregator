@@ -17,7 +17,7 @@ function tile(name, title, sub, href) {
 export async function render(box) {
   // Поле героя ведёт в каталог с набранным запросом; пустое — просто в каталог.
   const query = el('input', {
-    type: 'search', placeholder: 'Город, соревнование или дистанция…', 'aria-label': 'Поиск стартов',
+    type: 'search', placeholder: 'Название или город…', 'aria-label': 'Поиск стартов',
     enterkeyhint: 'search', autocomplete: 'off', maxlength: '64',
   });
   const find = (e) => {
