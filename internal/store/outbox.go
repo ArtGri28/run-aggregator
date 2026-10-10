@@ -208,3 +208,106 @@ func (s *Store) PruneOutbox(ctx context.Context, before time.Time) (int, error) 
 	}
 	return int(cmd.RowsAffected()), nil
 }
+
+// Виды строк очереди, которые создаёт бот (строки об изменениях создаёт
+// прогон — event.KindChange и event.KindGone).
+const (
+	OutboxReminder = "reminder" // напоминание о старте за семь дней (N-2)
+	OutboxFuse     = "fuse"     // сообщение администратору о предохранителе (N-3)
+)
+
+// ReminderCandidate — пара «пользователь — корневой старт», о которой пора
+// напомнить. Title нужен боту, чтобы отсеять дату-заглушку.
+type ReminderCandidate struct {
+	TgID      int64
+	EventID   int64
+	Title     string
+	StartDate time.Time
+}
+
+// ReminderCandidates — кандидаты на напоминание: пользователи, чьё избранное
+// (в том числе через слитое событие) ведёт к корневому событию, которое видно
+// в выдаче, имеет статус «состоится» и начинается ровно через days дней после
+// today, при этом запись избранного сделана строго раньше момента. Один
+// кандидат на пару «пользователь — корень». Условия о дате-заглушке в запросе
+// нет: заглушки отсеивает event.DateTBD в боте. Только читает.
+func (s *Store) ReminderCandidates(ctx context.Context, today time.Time, days int, moment time.Time) ([]ReminderCandidate, error) {
+	q := `
+		SELECT u.tg_id, e.id, e.title, e.start_date
+		FROM events e
+		CROSS JOIN LATERAL (
+			SELECT DISTINCT f.tg_id FROM favorites f JOIN events fe ON fe.id = f.event_id
+			WHERE ` + favRoot + ` = e.id AND f.created_at < $3::timestamptz) u` + futureListed() + `
+		  AND e.start_date = $1::date + $2::int AND e.status = $4::text
+		ORDER BY u.tg_id, e.id`
+	rows, err := s.db.Query(ctx, q, dateOnly(today), days, moment, string(event.StatusScheduled))
+	if err != nil {
+		return nil, fmt.Errorf("reminder candidates: %w", err)
+	}
+	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ReminderCandidate, error) {
+		var c ReminderCandidate
+		err := row.Scan(&c.TgID, &c.EventID, &c.Title, &c.StartDate)
+		return c, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reminder candidates: %w", err)
+	}
+	return out, nil
+}
+
+// EnqueueReminders записывает по строке вида reminder на кандидата. Ключ
+// повтора — корневое событие и дата старта: повторная запись той же пары
+// «пользователь — ключ» строки не добавляет, а перенесённый старт получает
+// новое напоминание. Содержимого у строки нет: экран собирается при отправке.
+// Возвращает число созданных строк.
+//
+// Упрощение: строка со ссылкой на событие. При схеме с внешними ключами вставка
+// ждёт, пока запись прогона, держащая строку этого события, не завершит
+// транзакцию; потолок — секунды на запись одного прогона, шаг отправки на это
+// время стоит (14-SCHEMA.md, раздел «Блокировки»).
+func (s *Store) EnqueueReminders(ctx context.Context, cs []ReminderCandidate, now time.Time) (int, error) {
+	if len(cs) == 0 {
+		return 0, nil
+	}
+	tgs, evs, keys := make([]int64, len(cs)), make([]int64, len(cs)), make([]string, len(cs))
+	for i, c := range cs {
+		tgs[i], evs[i] = c.TgID, c.EventID
+		keys[i] = fmt.Sprintf("%s:%d:%s", OutboxReminder, c.EventID, c.StartDate.Format(time.DateOnly))
+	}
+	const q = `
+		INSERT INTO outbox (tg_id, kind, event_id, dedup_key, created_at)
+		SELECT c.tg_id, $4::text, c.event_id, c.key, $5::timestamptz
+		FROM unnest($1::bigint[], $2::bigint[], $3::text[]) AS c(tg_id, event_id, key)
+		ON CONFLICT (tg_id, dedup_key) DO NOTHING`
+	cmd, err := s.db.Exec(ctx, q, tgs, evs, keys, OutboxReminder, now)
+	if err != nil {
+		return 0, fmt.Errorf("enqueue reminders: %w", err)
+	}
+	return int(cmd.RowsAffected()), nil
+}
+
+// EnqueueFuseNotices записывает по строке вида fuse каждому администратору из
+// admins на каждый прогон, завершённый не раньше since, в метриках которого
+// есть число watch_held (сработал предохранитель шага сообщений). Ключ
+// повтора — номер прогона: повторный вызов строк не добавляет. Содержимое —
+// код источника, номер прогона и число. Идентификаторы не больше нуля
+// пропускаются. Возвращает число созданных строк.
+func (s *Store) EnqueueFuseNotices(ctx context.Context, admins []int64, since, now time.Time) (int, error) {
+	if len(admins) == 0 {
+		return 0, nil
+	}
+	const q = `
+		INSERT INTO outbox (tg_id, kind, dedup_key, payload, created_at)
+		SELECT a.tg_id, $3::text, $3::text || ':' || r.id::text,
+		       jsonb_build_object('source', s.code, 'run', r.id, 'held', (r.metrics->>'watch_held')::int), $4::timestamptz
+		FROM ingest_runs r JOIN sources s ON s.id = r.source_id
+		CROSS JOIN unnest($1::bigint[]) AS a(tg_id)
+		WHERE r.finished_at >= $2::timestamptz AND jsonb_typeof(r.metrics->'watch_held') = 'number' AND a.tg_id > 0
+		ORDER BY r.id, a.tg_id
+		ON CONFLICT (tg_id, dedup_key) DO NOTHING`
+	cmd, err := s.db.Exec(ctx, q, admins, since, OutboxFuse, now)
+	if err != nil {
+		return 0, fmt.Errorf("enqueue fuse notices: %w", err)
+	}
+	return int(cmd.RowsAffected()), nil
+}

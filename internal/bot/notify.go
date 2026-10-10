@@ -2,8 +2,12 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"html"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,13 +15,15 @@ import (
 	"aggregator/internal/store"
 )
 
-// Отправка сообщений пользователям из очереди outbox (Phase 14,
-// 14-UX-CONTRACT.md, раздел «Отправка»): сообщение об изменении избранного
-// старта (N-1) и о старте, пропавшем из календаря (N-4). Строки пишет
-// применение прогона источника; отправляет только бот — цикл Notifier.Run
-// запускается в процессе бота, у воркера Telegram нет. Текст сообщения в
-// очереди не хранится: он собирается при отправке из строки события и
-// содержимого строки очереди.
+// Отправка сообщений из очереди outbox (Phase 14, 14-UX-CONTRACT.md, разделы
+// «Отправка» и «Напоминание»): сообщение об изменении избранного старта (N-1),
+// напоминание за семь дней (N-2), сообщение администратору о предохранителе
+// (N-3) и о старте, пропавшем из календаря (N-4). Строки об изменениях пишет
+// применение прогона источника; напоминания и сообщения о предохранителе
+// создаёт служебная часть шага — они зависят от времени; отправляет только
+// бот — цикл Notifier.Run запускается в процессе бота, у воркера Telegram
+// нет. Текст сообщения в очереди не хранится: он собирается при отправке из
+// строки события и содержимого строки очереди.
 const (
 	// notifyEvery — период шага: один шаг — не больше одного сообщения, то есть не
 	// больше одного сообщения в секунду на весь бот (потолок 3600 в час).
@@ -40,6 +46,20 @@ const (
 	// очистка).
 	choresEvery = time.Minute
 
+	// remindHour — час напоминания по Москве: напоминание создаётся в день «за
+	// remindDays дней до старта» с этого часа и до конца суток (D-09).
+	remindHour = 10
+	remindDays = 7
+	// fuseWindow — за какой срок ищутся прогоны со сработавшим предохранителем.
+	fuseWindow = 24 * time.Hour
+	// fuseThreshold — порог предохранителя шага сообщений прогона, как он назван
+	// в тексте N-3.
+	//
+	// Упрощение: число продублировано — watchFuse в internal/ingest не
+	// экспортируется, а запись прогона по условиям фазы не меняется; при смене
+	// порога править оба места.
+	fuseThreshold = 20
+
 	// Ночь по Москве: с nightFrom часов (включительно) до nightTo часов (не
 	// включительно) сообщения уходят сразу, но без звука (D-13).
 	nightFrom = 23
@@ -51,6 +71,7 @@ const (
 	notifyOpenLabel  = "📋 Открыть старт"
 	notifyTBDMark    = " (дата уточняется)"
 	notifyLinkLine   = "🔗 Ссылка: не было → появилась"
+	notifyRemindHead = "⏰ <b>Через 7 дней старт</b>"
 )
 
 // statusLabels — подписи статусов в строке «было → стало».
@@ -205,18 +226,83 @@ func (n *Notifier) settle(ctx context.Context, row store.OutboxRow, err error, n
 }
 
 // chores — служебная часть шага: закрывает просроченные сообщения об
-// изменениях и о пропавших стартах и удаляет строки старше срока хранения.
-// Ошибка пишется в лог и отправку не останавливает; в лог идут только счётчики.
+// изменениях и о пропавших стартах, удаляет строки старше срока хранения,
+// создаёт напоминания и сообщения администраторам о предохранителе. Ошибка
+// пишется в лог и отправку не останавливает; в лог идут только счётчики и
+// названия шагов, без текста ошибки: она может содержать значения из базы.
 func (n *Notifier) chores(ctx context.Context, now time.Time) {
 	b := n.b
-	expired, err1 := b.Store.ExpireOutbox(ctx, []string{event.KindChange, event.KindGone}, now.Add(-notifyMaxAge), now)
-	pruned, err2 := b.Store.PruneOutbox(ctx, now.Add(-notifyKeep))
-	if err := errors.Join(err1, err2); err != nil {
-		b.logger().Warn("notify chores failed", "err", err)
+	var failed []string
+	do := func(step string, f func() (int, error)) int {
+		c, err := f()
+		if err != nil {
+			failed = append(failed, step)
+		}
+		return c
 	}
-	if expired > 0 || pruned > 0 {
-		b.logger().Info("notify chores", "expired", expired, "pruned", pruned)
+	expired := do("expire", func() (int, error) {
+		return b.Store.ExpireOutbox(ctx, []string{event.KindChange, event.KindGone}, now.Add(-notifyMaxAge), now)
+	})
+	pruned := do("prune", func() (int, error) { return b.Store.PruneOutbox(ctx, now.Add(-notifyKeep)) })
+	reminders := do("remind", func() (int, error) { return n.remind(ctx, now) })
+	fuse := do("fuse", func() (int, error) { return n.fuse(ctx, now) })
+	if len(failed) > 0 {
+		b.logger().Warn("notify chores failed", "steps", strings.Join(failed, ","))
 	}
+	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 {
+		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse)
+	}
+}
+
+// dayOf — календарная дата момента по Москве как полночь UTC (как Bot.today,
+// но от переданного момента: шаг работает с одним значением часов).
+func (n *Notifier) dayOf(now time.Time) time.Time {
+	y, m, d := now.In(n.b.loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// remind создаёт напоминания (D-09…D-11). Условие по часам бота: по Москве
+// уже наступил remindHour — до конца суток вызов повторяется каждую служебную
+// минуту, повтор безвреден (строка на пару «пользователь — ключ» одна), а
+// пользователь, добавивший старт позже этого часа, под условие не попадает.
+// Бот, начавший работать позже этого часа, создаёт напоминания при первом же
+// шаге; бот, не работавший весь день, — нет. Кандидатов отбирает база, заглушки
+// отсеивает event.DateTBD — единственная реализация признака.
+//
+// Упрощение: ключ напоминания — корневое событие и дата старта. Слияние
+// избранного старта с другим после отправки напоминания в тот же день меняет
+// корень и даёт второе напоминание о том же старте; потолок — одно лишнее
+// напоминание на такое слияние, автослияние выключено. Убирается учётом
+// напоминаний по всей группе слитых событий.
+//
+// Упрощение: вставка строк со ссылкой на событие при схеме с внешними ключами
+// ждёт конца записи прогона, держащей это событие; потолок — секунды на запись
+// одного прогона, шаг отправки на это время стоит.
+func (n *Notifier) remind(ctx context.Context, now time.Time) (int, error) {
+	local := now.In(n.b.loc)
+	moment := time.Date(local.Year(), local.Month(), local.Day(), remindHour, 0, 0, 0, n.b.loc)
+	if now.Before(moment) {
+		return 0, nil
+	}
+	cands, err := n.b.Store.ReminderCandidates(ctx, n.dayOf(now), remindDays, moment)
+	if err != nil {
+		return 0, err
+	}
+	keep := cands[:0]
+	for _, c := range cands {
+		if !event.DateTBD(c.Title) {
+			keep = append(keep, c)
+		}
+	}
+	return n.b.Store.EnqueueReminders(ctx, keep, now)
+}
+
+// fuse создаёт каждому администратору из перечня бота сообщение о прогоне,
+// завершённом за последние fuseWindow, у которого сработал предохранитель.
+// Пользователям сообщений нет; без администраторов в конфигурации — тоже.
+func (n *Notifier) fuse(ctx context.Context, now time.Time) (int, error) {
+	admins := slices.Sorted(maps.Keys(n.b.admins))
+	return n.b.Store.EnqueueFuseNotices(ctx, admins, now.Add(-fuseWindow), now)
 }
 
 // prepared — итог подготовки: экран либо исход, с которым строка закрывается
@@ -237,6 +323,12 @@ type prepared struct {
 // слитое после записи в очередь событие даёт сообщение о корневом.
 func (n *Notifier) prepare(ctx context.Context, row store.OutboxRow, now time.Time) (prepared, error) {
 	b := n.b
+	switch row.Kind {
+	case store.OutboxReminder:
+		return n.prepareReminder(ctx, row, now)
+	case store.OutboxFuse:
+		return prepareFuse(row), nil
+	}
 	if (row.Kind != event.KindChange && row.Kind != event.KindGone) || row.EventID == 0 {
 		return prepared{close: store.OutboxRejected}, nil
 	}
@@ -297,6 +389,65 @@ func (n *Notifier) prepare(ctx context.Context, row store.OutboxRow, now time.Ti
 	return prepared{sc: changeMessage(e, lines)}, nil
 }
 
+// prepareReminder — подготовка напоминания: условия проверяются заново по
+// текущему состоянию. Старт в избранном пользователя, виден, не прошёл, вид
+// спорта включён — иначе строка закрывается как «убран» либо «недоступен»;
+// статус «состоится», дата не заглушка и до старта по-прежнему ровно remindDays
+// дней — иначе «условие больше не выполняется». Строка, созданная перед
+// полуночью и не успевшая уйти, наутро закрывается: до старта уже шесть дней.
+// Срок годности 72 часа на напоминание не распространяется.
+func (n *Notifier) prepareReminder(ctx context.Context, row store.OutboxRow, now time.Time) (prepared, error) {
+	b := n.b
+	if row.EventID == 0 {
+		return prepared{close: store.OutboxRejected}, nil
+	}
+	root, err := b.Store.RootEventID(ctx, row.EventID)
+	if errors.Is(err, store.ErrNotFound) {
+		return prepared{close: store.OutboxUnavailable}, nil
+	}
+	if err != nil {
+		return prepared{}, err
+	}
+	fav, err := b.Store.IsFavorite(ctx, row.TgID, root)
+	if err != nil {
+		return prepared{}, err
+	}
+	if !fav {
+		return prepared{close: store.OutboxUnfollowed}, nil
+	}
+	e, err := b.Store.GetEvent(ctx, root)
+	if errors.Is(err, store.ErrNotFound) {
+		return prepared{close: store.OutboxUnavailable}, nil
+	}
+	if err != nil {
+		return prepared{}, err
+	}
+	today := n.dayOf(now)
+	sport, _ := event.SportByCode(e.Sport)
+	if !e.IsListed || e.MergedIntoID != nil || !sport.Enabled || e.StartDate.Before(today) {
+		return prepared{close: store.OutboxUnavailable}, nil
+	}
+	if e.Status != event.StatusScheduled || event.DateTBD(e.Title) || !e.StartDate.Equal(today.AddDate(0, 0, remindDays)) {
+		return prepared{close: store.OutboxStale}, nil
+	}
+	return prepared{sc: reminderMessage(e)}, nil
+}
+
+// prepareFuse — подготовка сообщения администратору о предохранителе: у строки
+// нет события и нет условий, которые проверяются заново; нечитаемое содержимое
+// закрывает строку.
+func prepareFuse(row store.OutboxRow) prepared {
+	var p struct {
+		Source string `json:"source"`
+		Run    int64  `json:"run"`
+		Held   int    `json:"held"`
+	}
+	if json.Unmarshal(row.Payload, &p) != nil || p.Source == "" || p.Run <= 0 || p.Held <= 0 {
+		return prepared{close: store.OutboxRejected}
+	}
+	return prepared{sc: fuseMessage(p.Source, p.Run, p.Held)}
+}
+
 // changeLines — строки «было → стало» сообщения об изменении в постоянном
 // порядке: ссылка, дата, статус. false — сказать нечего либо статус неизвестен:
 // строку не прочитать.
@@ -352,6 +503,24 @@ func changeMessage(e event.Event, lines []string) screen {
 	return screen{
 		text: notifyChangeHead + "\n\n" + startHead(e, true) + "\n\n" + strings.Join(lines, "\n"),
 		kb:   keyboard(btn(notifyOpenLabel, callback{Kind: cbFavShow, ID: e.ID}), row{favBtn(e.ID, true)}),
+	}
+}
+
+// reminderMessage — сообщение N-2: заголовок, шапка старта (название и дата из
+// текущего состояния корневого события) и те же две кнопки, что у N-1.
+func reminderMessage(e event.Event) screen {
+	return screen{
+		text: notifyRemindHead + "\n\n" + startHead(e, false),
+		kb:   keyboard(btn(notifyOpenLabel, callback{Kind: cbFavShow, ID: e.ID}), row{favBtn(e.ID, true)}),
+	}
+}
+
+// fuseMessage — сообщение N-3 администратору о сработавшем предохранителе:
+// обычный текст без клавиатуры, получателя не называет.
+func fuseMessage(source string, run int64, held int) screen {
+	return screen{
+		text:  fmt.Sprintf("Источник %s, прогон %d: стартов с изменением или скрытием — %d, порог — %d. Сообщения пользователям не созданы.", source, run, held, fuseThreshold),
+		plain: true,
 	}
 }
 

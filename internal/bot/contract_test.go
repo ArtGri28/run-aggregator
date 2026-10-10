@@ -27,7 +27,7 @@ var minScenarios = []int{17, 8, 10, 8, 10}
 // следующие планы фазы: они временно исключены из сравнения с тестами и из
 // требования эталона. Перечень сокращается с каждым планом и снимается, когда
 // готов сценарий S-51.
-var pendingScenarios = []string{"50", "51", "52"}
+var pendingScenarios = []string{"51"}
 
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")

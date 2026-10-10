@@ -823,3 +823,532 @@ func mustDate(t *testing.T, s string) time.Time {
 	}
 	return d
 }
+
+// Напоминание за семь дней и сообщение администратору о предохранителе
+// (14-UX-CONTRACT.md, сценарии S-50 и S-52). Эталоны testdata/screens/s50_* и
+// s52_* написаны вручную по контракту; главного меню в них нет. Время
+// подставное (Bot.Now).
+
+// msk — момент по Москве: сентябрь и октябрь 2026, если месяц не назван.
+func (r *notifyRig) msk(mon time.Month, day, hour, min int) time.Time {
+	return time.Date(2026, mon, day, hour, min, 0, 0, r.b.loc)
+}
+
+// remindStart — исходное состояние сценария S-50: старт 110 (2 октября 2026) в
+// избранном пользователя 42 с 24 сентября, очередь пуста.
+func (r *notifyRig) remindStart(t *testing.T) {
+	t.Helper()
+	r.reset(t)
+	dbExec(t, `DELETE FROM favorites`)
+	dbExec(t, `INSERT INTO favorites (tg_id, event_id, created_at) VALUES (42, 110, $1)`, time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC))
+}
+
+// reminders — число строк очереди вида reminder.
+func reminders(t *testing.T) string {
+	t.Helper()
+	return dbScalar(t, `SELECT count(*)::text FROM outbox WHERE kind = 'reminder'`)
+}
+
+// lastRow — id последней строки очереди вида kind.
+func lastRow(t *testing.T, kind string) int64 {
+	t.Helper()
+	var id int64
+	if _, err := fmt.Sscan(dbScalar(t, `SELECT COALESCE(max(id), 0)::text FROM outbox WHERE kind = $1`, kind), &id); err != nil || id == 0 {
+		t.Fatalf("строки вида %s нет: %v", kind, err)
+	}
+	return id
+}
+
+// TestRemindTracer — сквозной путь напоминания: день «за семь дней», 10:00 по
+// Москве → служебная часть шага создаёт строку → тот же шаг отправляет N-2 с
+// двумя кнопками → строка отмечена отправленной; следующие шаги ничего не
+// создают и не шлют.
+func TestRemindTracer(t *testing.T) {
+	r := newNotifyRig(t)
+	r.remindStart(t)
+	r.at(r.msk(time.September, 25, 10, 0))
+	c := r.sent(t, "10:00")
+	if got := datas(t, c); strings.Join(got, " ") != "w:n:110 w:x:110" || c.Form["chat_id"] != "42" {
+		t.Errorf("сообщение: кнопки %v, получатель %s; want w:n:110 w:x:110 и 42", got, c.Form["chat_id"])
+	}
+	if reminders(t) != "1" || rowState(t, lastRow(t, "reminder")) != "sent" {
+		t.Errorf("строк напоминания %s, состояние %s; want одна и sent", reminders(t), rowState(t, lastRow(t, "reminder")))
+	}
+	again := 0
+	for _, at := range []time.Time{r.msk(time.September, 25, 10, 1), r.msk(time.September, 25, 11, 0)} {
+		r.at(at)
+		again += len(r.step())
+	}
+	if reminders(t) != "1" || again != 0 {
+		t.Errorf("повторные шаги: строк %s, вызовов %d; want 1 и 0", reminders(t), again)
+	}
+	if !t.Failed() {
+		t.Logf("TRACER remind=sent calls=1 again=%d", again)
+	}
+}
+
+// TestS50Reminder — S-50: напоминание за семь дней.
+func TestS50Reminder(t *testing.T) {
+	r := newNotifyRig(t)
+	ctx := context.Background()
+	sep := func(day, h, m int) time.Time { return r.msk(time.September, day, h, m) }
+	title := dbScalar(t, `SELECT title FROM events WHERE id = 110`)
+	restore := func() {
+		dbExec(t, `UPDATE events SET status = 'scheduled', is_listed = true, title = $1, start_date = '2026-10-02' WHERE id = 110`, title)
+	}
+	t.Cleanup(restore)
+
+	// 1. 09:59 — строк и вызовов нет.
+	r.remindStart(t)
+	r.at(sep(25, 9, 59))
+	r.silent(t, "шаг 1")
+	if reminders(t) != "0" {
+		t.Errorf("шаг 1: строк напоминания %s, want 0", reminders(t))
+	}
+
+	// 2. 10:00 — одна строка и одно напоминание с двумя кнопками.
+	r.at(sep(25, 10, 0))
+	msg := r.sent(t, "шаг 2")
+	matchSnapshot(t, "s50_reminder", renderCall(t, msg))
+	plain(t, msg)
+	checkCallbackLengths(t, msg)
+	if ds := datas(t, msg); strings.Join(ds, " ") != "w:n:110 w:x:110" || msg.Form["chat_id"] != "42" || msg.Form["disable_notification"] != "" {
+		t.Errorf("шаг 2: кнопки %v, получатель %s, без звука %q", ds, msg.Form["chat_id"], msg.Form["disable_notification"])
+	}
+	if reminders(t) != "1" || rowState(t, lastRow(t, "reminder")) != "sent" {
+		t.Errorf("шаг 2: строк %s, состояние %s", reminders(t), rowState(t, lastRow(t, "reminder")))
+	}
+
+	// 4. Пользователь 43 добавил старт в 10:01 — напоминания нет.
+	dbExec(t, `INSERT INTO favorites (tg_id, event_id, created_at) VALUES (43, 110, $1)`, sep(25, 10, 1))
+	r.at(sep(25, 10, 2))
+	r.silent(t, "шаг 4")
+
+	// 3. Следующие шаги в тот же день и на следующий — повтора нет.
+	for _, at := range []time.Time{sep(25, 10, 3), sep(25, 12, 0), sep(25, 23, 59), sep(26, 10, 0), sep(26, 11, 0)} {
+		r.at(at)
+		r.silent(t, "шаг 3, "+at.Format("02.01 15:04"))
+	}
+	if reminders(t) != "1" {
+		t.Errorf("шаги 3 и 4: строк напоминания %s, want 1", reminders(t))
+	}
+
+	// 5. Старт с датой-заглушкой: кандидатом запрос его вернёт, строку не создаёт и
+	// напоминание не уходит — отсев делает event.DateTBD.
+	r.remindStart(t)
+	dbExec(t, `DELETE FROM favorites`)
+	dbExec(t, `INSERT INTO favorites (tg_id, event_id, created_at) VALUES (42, 136, $1)`, time.Date(2026, 12, 1, 9, 0, 0, 0, time.UTC))
+	dec := time.Date(2026, 12, 25, 10, 0, 0, 0, r.b.loc)
+	r.at(dec)
+	cands, err := r.s.ReminderCandidates(ctx, r.n.dayOf(dec), remindDays, dec)
+	if err != nil || len(cands) != 1 || cands[0].EventID != 136 {
+		t.Fatalf("шаг 5: кандидаты %+v, %v; want один — старт 136 (отсев заглушек не дело запроса)", cands, err)
+	}
+	r.silent(t, "шаг 5")
+	if reminders(t) != "0" {
+		t.Errorf("шаг 5: строк напоминания %s, want 0", reminders(t))
+	}
+	// Название с пометкой при точной дате — тот же признак (потолок Q-3).
+	r.remindStart(t)
+	dbExec(t, `UPDATE events SET title = title || ' (дата уточняется)' WHERE id = 110`)
+	r.at(sep(25, 10, 0))
+	r.silent(t, "шаг 5, пометка в названии")
+	if reminders(t) != "0" {
+		t.Errorf("шаг 5, пометка в названии: строк %s, want 0", reminders(t))
+	}
+	restore()
+
+	// 6. Отменённый и перенесённый старт (Q-11) — напоминания нет.
+	for _, st := range []event.Status{event.StatusCancelled, event.StatusPostponed} {
+		r.remindStart(t)
+		storetest.SetStatus(t, 110, st)
+		r.at(sep(25, 10, 0))
+		r.silent(t, "шаг 6, "+string(st))
+		if reminders(t) != "0" {
+			t.Errorf("шаг 6, %s: строк напоминания %s, want 0", st, reminders(t))
+		}
+	}
+	restore()
+
+	// Скрытый старт и выключенный вид спорта — напоминания нет.
+	r.remindStart(t)
+	storetest.HideEvent(t, 110)
+	r.at(sep(25, 10, 0))
+	r.silent(t, "скрытый старт")
+	restore()
+	r.remindStart(t)
+	dbExec(t, `DELETE FROM favorites`)
+	dbExec(t, `INSERT INTO favorites (tg_id, event_id, created_at) VALUES (42, 136, $1)`, time.Date(2026, 12, 1, 9, 0, 0, 0, time.UTC))
+	dbExec(t, `UPDATE events SET title = 'Лыжный старт' WHERE id = 136`)
+	storetest.DisableSport(t, event.SportSkiing)
+	r.at(dec)
+	r.silent(t, "выключенный вид спорта")
+	storetest.EnableSport(t, event.SportSkiing)
+	if reminders(t) != "0" {
+		t.Errorf("скрытый старт и выключенный вид спорта: строк %s, want 0", reminders(t))
+	}
+
+	// 7. Дата изменена после напоминания — за семь дней до новой придёт второе.
+	r.remindStart(t)
+	r.at(sep(25, 10, 0))
+	r.sent(t, "шаг 7, первое")
+	dbExec(t, `UPDATE events SET start_date = '2026-10-09' WHERE id = 110`)
+	r.at(r.msk(time.October, 2, 10, 0))
+	second := r.sent(t, "шаг 7, второе")
+	matchSnapshot(t, "s50_reminder_new_date", renderCall(t, second))
+	if reminders(t) != "2" {
+		t.Errorf("шаг 7: строк напоминания %s, want 2", reminders(t))
+	}
+	r.silent(t, "шаг 7, повтор")
+	restore()
+
+	// 8. Бот заработал в 15:00 — напоминание уходит в 15:00; заработал на следующий
+	// день — напоминания нет.
+	r.remindStart(t)
+	r.at(sep(25, 15, 0))
+	late := r.sent(t, "шаг 8, 15:00")
+	matchSnapshot(t, "s50_reminder", renderCall(t, late))
+	r.remindStart(t)
+	r.at(sep(26, 10, 0))
+	r.silent(t, "шаг 8, на следующий день")
+	if reminders(t) != "0" {
+		t.Errorf("шаг 8: строк напоминания %s, want 0", reminders(t))
+	}
+
+	// 9. Старт убран до 10:00 — строки нет; убран между созданием строки и
+	// отправкой — вызова нет, строка закрыта.
+	r.remindStart(t)
+	dbExec(t, `DELETE FROM favorites`)
+	r.at(sep(25, 10, 0))
+	r.silent(t, "шаг 9, убран до 10:00")
+	if reminders(t) != "0" {
+		t.Errorf("шаг 9: строк напоминания %s, want 0", reminders(t))
+	}
+	for _, tc := range []struct {
+		name, outcome string
+		change        func()
+	}{
+		{"убран", "closed:unfollowed", func() { dbExec(t, `DELETE FROM favorites`) }},
+		{"скрыт", "closed:unavailable", func() { storetest.HideEvent(t, 110) }},
+		{"дата изменена", "closed:stale", func() { dbExec(t, `UPDATE events SET start_date = '2026-10-10' WHERE id = 110`) }},
+		{"отменён", "closed:stale", func() { storetest.SetStatus(t, 110, event.StatusCancelled) }},
+		{"заглушка", "closed:stale", func() {
+			dbExec(t, `UPDATE events SET title = title || ' (дата уточняется)' WHERE id = 110`)
+		}},
+	} {
+		r.remindStart(t)
+		now := sep(25, 10, 0)
+		r.at(now)
+		r.n.chores(ctx, now) // строка создана, но не отправлена
+		if reminders(t) != "1" || rowState(t, lastRow(t, "reminder")) != "pending" {
+			t.Fatalf("шаг 9, %s: строк %s, состояние %s; want одна pending", tc.name, reminders(t), rowState(t, lastRow(t, "reminder")))
+		}
+		tc.change()
+		r.silent(t, "шаг 9, "+tc.name)
+		if got := rowState(t, lastRow(t, "reminder")); got != tc.outcome {
+			t.Errorf("шаг 9, %s: строка %s, want %s", tc.name, got, tc.outcome)
+		}
+		restore()
+	}
+
+	// Строка создана в 23:59 и не ушла до полуночи: наутро вызова нет, строка закрыта —
+	// до старта уже шесть дней.
+	r.remindStart(t)
+	r.n.chores(ctx, sep(25, 23, 59))
+	r.at(sep(26, 0, 1))
+	r.silent(t, "после полуночи")
+	if got := rowState(t, lastRow(t, "reminder")); got != "closed:stale" {
+		t.Errorf("после полуночи: строка %s, want closed:stale", got)
+	}
+
+	// Напоминание после 23:00 уходит без звука.
+	r.remindStart(t)
+	r.at(sep(25, 23, 30))
+	if c := r.sent(t, "23:30"); c.Form["disable_notification"] != "true" {
+		t.Errorf("23:30: без звука = %q, want true", c.Form["disable_notification"])
+	}
+
+	// Ответ 429: строка не потеряна, после срока уходит один раз.
+	r.remindStart(t)
+	limited := false
+	r.reply = func(_ call, _ int) string {
+		if !limited {
+			limited = true
+			return apiErr(429, "Too Many Requests: retry after 30", 30)
+		}
+		return ""
+	}
+	r.at(sep(25, 10, 0))
+	if calls := r.step(); len(calls) != 1 || rowState(t, lastRow(t, "reminder")) != "pending" {
+		t.Fatalf("429: вызовы %q, строка %s; want один вызов и pending", methods(calls), rowState(t, lastRow(t, "reminder")))
+	}
+	r.at(sep(25, 10, 0).Add(29 * time.Second))
+	r.silent(t, "429, до срока")
+	r.at(sep(25, 10, 0).Add(30 * time.Second))
+	r.sent(t, "429, после срока")
+	r.silent(t, "429, повтор")
+	if rowState(t, lastRow(t, "reminder")) != "sent" || reminders(t) != "1" {
+		t.Errorf("429: строка %s, строк %s; want sent и 1", rowState(t, lastRow(t, "reminder")), reminders(t))
+	}
+}
+
+// TestS52WatchFuse — S-52: сработавший предохранитель сообщает администраторам
+// и ничего не шлёт пользователям.
+func TestS52WatchFuse(t *testing.T) {
+	r := newNotifyRig(t)
+	if got := dbScalar(t, `SELECT r.id || ' ' || s.code FROM ingest_runs r JOIN sources s ON s.id = r.source_id ORDER BY r.id LIMIT 1`); got != "1 marathonec" {
+		t.Fatalf("первый прогон каталога %q, want «1 marathonec»", got)
+	}
+	r.b.admins[7001], r.b.admins[7002] = true, true
+	dbExec(t, `UPDATE ingest_runs SET finished_at = $1, metrics = metrics || '{"watch_held": 23}'::jsonb WHERE id = 1`, fixtureNow.Add(-time.Hour))
+	fuseRows := func() string {
+		return dbScalar(t, `SELECT count(*)::text FROM outbox WHERE kind = 'fuse'`)
+	}
+
+	// 1. Каждому из двух администраторов — одно сообщение обычным текстом, по
+	// одному за шаг; строк об изменениях нет. Ответ 403 от первого не мешает второму.
+	r.reset(t)
+	r.reply = func(c call, _ int) string {
+		if c.Form["chat_id"] == "7001" {
+			return errBlocked
+		}
+		return ""
+	}
+	first := r.step()
+	if len(first) != 1 || first[0].Form["chat_id"] != "7001" {
+		t.Fatalf("шаг 1: вызовы %q, want один — первому администратору", methods(first))
+	}
+	var blockedRow int64
+	if _, err := fmt.Sscan(dbScalar(t, `SELECT id::text FROM outbox WHERE kind = 'fuse' AND tg_id = 7001`), &blockedRow); err != nil {
+		t.Fatal(err)
+	}
+	if got := rowState(t, blockedRow); got != "closed:blocked" {
+		t.Errorf("шаг 1: строка первого администратора %s, want closed:blocked", got)
+	}
+	r.reply = nil
+	second := r.sent(t, "шаг 1, второй администратор")
+	if second.Form["chat_id"] != "7002" {
+		t.Errorf("шаг 1: получатель %s, want 7002", second.Form["chat_id"])
+	}
+	matchSnapshot(t, "s52_fuse", renderCall(t, second))
+	plain(t, second)
+	if second.Form["parse_mode"] != "" || second.Form["reply_markup"] != "" || second.Form["disable_notification"] != "" {
+		t.Errorf("шаг 1: форма %v; want обычный текст без клавиатуры и со звуком", second.Form)
+	}
+	for _, bad := range []string{"7001", "7002", "администратор"} {
+		if strings.Contains(second.Form["text"], bad) {
+			t.Errorf("шаг 1: в тексте %q получатель %q", second.Form["text"], bad)
+		}
+	}
+	// Без блокировки оба администратора получают одно и то же сообщение, по одному за шаг.
+	dbExec(t, `DELETE FROM outbox`)
+	r.n = NewNotifier(r.b)
+	a, b := r.sent(t, "шаг 1, первый"), r.sent(t, "шаг 1, второй")
+	if a.Form["chat_id"] != "7001" || b.Form["chat_id"] != "7002" || a.Form["text"] != b.Form["text"] {
+		t.Errorf("шаг 1: получатели %s и %s; want 7001 и 7002 с одним текстом", a.Form["chat_id"], b.Form["chat_id"])
+	}
+	matchSnapshot(t, "s52_fuse", renderCall(t, a))
+
+	// 2. Следующие шаги и служебные минуты — повтора нет. 3. Пользователям — ничего;
+	// строк об изменениях и о пропавших стартах от прогона нет.
+	for i := 1; i <= 3; i++ {
+		r.at(fixtureNow.Add(time.Duration(i) * 2 * time.Minute))
+		r.silent(t, fmt.Sprintf("шаг 2, +%d мин", i*2))
+	}
+	if fuseRows() != "2" || dbScalar(t, `SELECT count(*)::text FROM outbox WHERE kind <> 'fuse'`) != "0" {
+		t.Errorf("шаг 3: строк fuse %s, прочих %s; want 2 и 0", fuseRows(), dbScalar(t, `SELECT count(*)::text FROM outbox WHERE kind <> 'fuse'`))
+	}
+	if dbScalar(t, `SELECT count(*)::text FROM outbox WHERE kind = 'fuse' AND tg_id IN (42, 43)`) != "0" {
+		t.Error("шаг 3: сообщение о предохранителе создано пользователю")
+	}
+
+	// 4. Администраторов в конфигурации нет — строк и сообщений нет.
+	r.reset(t)
+	delete(r.b.admins, 7001)
+	delete(r.b.admins, 7002)
+	r.silent(t, "шаг 4")
+	if fuseRows() != "0" {
+		t.Errorf("шаг 4: строк fuse %s, want 0", fuseRows())
+	}
+	r.b.admins[7001], r.b.admins[7002] = true, true
+
+	// 5. Прогон, завершённый больше 24 часов назад, — сообщений нет; ровно 24 часа — есть.
+	r.reset(t)
+	dbExec(t, `UPDATE ingest_runs SET finished_at = $1 WHERE id = 1`, fixtureNow.Add(-24*time.Hour-time.Second))
+	r.silent(t, "шаг 5")
+	if fuseRows() != "0" {
+		t.Errorf("шаг 5: строк fuse %s, want 0", fuseRows())
+	}
+	dbExec(t, `UPDATE ingest_runs SET finished_at = $1 WHERE id = 1`, fixtureNow.Add(-24*time.Hour))
+	r.n = NewNotifier(r.b)
+	r.sent(t, "шаг 5, ровно 24 часа")
+
+	// Нечитаемое содержимое закрывает строку без вызова.
+	r.reset(t)
+	bad := notifyPutRaw(t, 7001, "fuse", 52, `{"source":"marathonec"}`, fixtureNow)
+	dbExec(t, `UPDATE outbox SET event_id = NULL WHERE id = $1`, bad)
+	dbExec(t, `UPDATE ingest_runs SET finished_at = $1 WHERE id = 1`, fixtureNow.Add(-48*time.Hour))
+	r.silent(t, "нечитаемая строка")
+	if got := rowState(t, bad); got != "closed:rejected" {
+		t.Errorf("нечитаемая строка: %s, want closed:rejected", got)
+	}
+}
+
+// TestNotifyPrivacy — в логе отправки и служебной части только вид сообщения,
+// исход и счётчики (FAV-11): после сообщений четырёх видов, ответа 403, закрытия
+// без отправки, сбоя до вызова Bot API и шага служебной части в логе нет
+// названий стартов, идентификаторов событий и пользователей и текста сообщений.
+func TestNotifyPrivacy(t *testing.T) {
+	r := newNotifyRig(t)
+	logs := captureLogs(t)
+	const user, blocked, stranger, admin = 424242, 535353, 616161, 646464
+	r.b.admins[admin] = true
+	r.reset(t)
+	dbExec(t, `DELETE FROM favorites`)
+	created := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	for _, f := range [][2]int64{{user, 52}, {user, 110}, {user, 135}, {blocked, 52}} {
+		dbExec(t, `INSERT INTO favorites (tg_id, event_id, created_at) VALUES ($1, $2, $3)`, f[0], f[1], created)
+	}
+	dbExec(t, `UPDATE ingest_runs SET finished_at = $1, metrics = metrics || '{"watch_held": 23}'::jsonb WHERE id = 1`, r.msk(time.September, 25, 9, 0))
+	storetest.HideEvent(t, 135)
+	at := r.msk(time.September, 25, 11, 0)
+	r.at(at)
+
+	// Сообщения четырёх видов: об изменении, о пропавшем старте, напоминание, о предохранителе.
+	notifyPut(t, user, event.Change{EventID: 52, Link: true}, at)
+	notifyPut(t, user, event.Change{EventID: 135, Gone: true}, at)
+	var texts []string
+	for range 8 {
+		for _, c := range r.step() {
+			texts = append(texts, c.Form["text"])
+		}
+	}
+	if len(texts) != 4 {
+		t.Fatalf("отправлено сообщений %d, want 4 (изменение, пропажа, напоминание, предохранитель): %q", len(texts), texts)
+	}
+
+	// 403, закрытие без отправки, сбой до вызова.
+	r.reply = func(c call, _ int) string {
+		if c.Form["chat_id"] == "535353" {
+			return errBlocked
+		}
+		return ""
+	}
+	notifyPut(t, blocked, event.Change{EventID: 52, Link: true}, at)
+	r.step()
+	notifyPut(t, stranger, event.Change{EventID: 52, Link: true}, at)
+	r.step()
+	notifyPut(t, user, event.Change{EventID: 52, Link: true}, at)
+	breakFavorites(t)
+	r.at(at.Add(2 * time.Minute)) // и служебная часть с ошибкой
+	r.step()
+	repairFavorites(t)
+
+	// Служебная часть с просроченной строкой: счётчики.
+	r.reply = nil
+	notifyPut(t, user, event.Change{EventID: 52, Link: true}, at.Add(-73*time.Hour))
+	r.at(at.Add(10 * time.Minute))
+	r.step()
+
+	out := logs.String()
+	for _, want := range []string{
+		"msg=notify kind=change outcome=sent", "msg=notify kind=gone outcome=sent", "msg=notify kind=reminder outcome=sent",
+		"msg=notify kind=fuse outcome=sent", "outcome=blocked", "outcome=unfollowed", "outcome=released",
+		`msg="notify chores" expired=0 pruned=0 reminders=1 fuse=1`, "msg=\"notify chores failed\" steps=remind", "expired=1",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("в логе нет %q:\n%s", want, out)
+		}
+	}
+	// Только известные ключи: вид, исход, счётчики, названия шагов.
+	keyRE := regexp.MustCompile(`([A-Za-z_]+)=`)
+	allowed := map[string]bool{"time": true, "level": true, "msg": true, "kind": true, "outcome": true, "closed": true,
+		"cause": true, "expired": true, "pruned": true, "reminders": true, "fuse": true, "steps": true,
+		"method": true} // method — запись самого вызова Bot API о 403: только имя метода
+	for _, m := range keyRE.FindAllStringSubmatch(out, -1) {
+		if !allowed[m[1]] {
+			t.Errorf("в логе ключ %q:\n%s", m[1], out)
+		}
+	}
+	// Ни названий, ни идентификаторов, ни текста сообщений.
+	leaks := []string{"424242", "535353", "616161", "646464", "tg_id", "event_id", "chat_id", "w:n:", "w:x:", "marathonec", "Изменения", "Через 7", "пропал", "порог"}
+	for _, id := range []int{52, 110, 135} {
+		leaks = append(leaks, dbScalar(t, `SELECT title FROM events WHERE id = $1`, id), fmt.Sprintf("=%d", id), fmt.Sprintf("event=%d", id))
+	}
+	for _, text := range texts {
+		for _, line := range strings.Split(text, "\n") {
+			if len([]rune(line)) >= 8 {
+				leaks = append(leaks, line)
+			}
+		}
+	}
+	for _, leak := range leaks {
+		if strings.Contains(out, leak) {
+			t.Errorf("в логе есть %q:\n%s", leak, out)
+		}
+	}
+}
+
+// TestNotifyStop — цикл завершается после отмены контекста; шаг, начатый до
+// отмены, доводит строку до отметки отправки (вызов Bot API удерживается
+// каналом, а не ожиданием времени); после отмены новые шаги не начинаются.
+func TestNotifyStop(t *testing.T) {
+	if notifyStepMax >= 20*time.Second {
+		t.Errorf("предел шага %v не меньше срока остановки контейнера (20 с)", notifyStepMax)
+	}
+	r := newNotifyRig(t)
+	r.reset(t)
+	link := event.Change{EventID: 52, Link: true}
+	started, next := notifyPut(t, 42, link, fixtureNow), notifyPut(t, 43, link, fixtureNow)
+	entered, release := make(chan struct{}), make(chan struct{})
+	r.reply = func(_ call, n int) string {
+		if n == 1 {
+			close(entered)
+			<-release
+		}
+		return ""
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		r.n.Run(ctx)
+		close(done)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		close(release)
+		t.Fatal("шаг не дошёл до вызова Bot API")
+	}
+
+	// Отмена приходит во время вызова: цикл ждёт, строка взята, но не отмечена.
+	cancel()
+	select {
+	case <-done:
+		t.Fatal("цикл завершился, не дождавшись начатого шага")
+	default:
+	}
+	if got := rowState(t, started); got != "claimed" {
+		t.Errorf("во время вызова строка %s, want claimed", got)
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("цикл не завершился после ответа Bot API")
+	}
+	if a, b := rowState(t, started), rowState(t, next); a != "sent" || b != "pending" {
+		t.Errorf("после остановки строки %s и %s; want sent и pending — новые шаги не начинаются", a, b)
+	}
+	if n := len(r.api.of("sendMessage")); n != 1 {
+		t.Errorf("отправлено сообщений %d, want 1", n)
+	}
+
+	// Контекст уже отменён: цикл возвращается сразу, ни одной строки не берёт.
+	r.api.reset()
+	r.n.Run(ctx)
+	if rowState(t, next) != "pending" || r.api.total() != 0 {
+		t.Errorf("после отмены: строка %s, вызовов %d; want pending и 0", rowState(t, next), r.api.total())
+	}
+}
