@@ -10,6 +10,11 @@
 # отметке компоненты в heartbeats). Строка postgres_image — образ работающего
 # контейнера БД: id, совпадает ли с ним тег postgres:17 на хосте (tag=same|differs)
 # и дайджест реестра; на итог проверки не влияет.
+# Mini App (Phase 15): строка webapp_profile=on|off — включён ли профиль webapp (сервис
+# caddy есть в конфигурации или контейнер webapp/caddy существует). При on compose-state
+# требует ещё webapp (healthy) и caddy (running). Раздел «Опубликованные порты»: порты
+# есть только у caddy и только 80/tcp и 443/tcp; при off опубликованных портов нет вовсе.
+# Логи caddy не печатаются: в них имя домена.
 set -u
 export LC_ALL=C
 
@@ -24,14 +29,20 @@ sec() { printf '\n== %s ==\n' "$1"; }
 sec "Состояние сервисов"
 docker compose -f "$F" ps -a
 STATES=$(docker compose -f "$F" ps -a --format '{{.Service}} {{.State}} {{.Health}} {{.ExitCode}}' 2>/dev/null)
+WP=off
+if docker compose -f "$F" config --services 2>/dev/null | grep -qx caddy; then WP=on; fi
+if echo "$STATES" | grep -Eq '^(webapp|caddy) '; then WP=on; fi
+echo "webapp_profile=$WP"
 if [ -z "$STATES" ]; then
   echo "CHECK compose-state: manual"
 else
-  echo "$STATES" | awk '$1=="postgres" && $2=="running" && $3=="healthy" {a=1}
+  echo "$STATES" | awk -v wp="$WP" '$1=="postgres" && $2=="running" && $3=="healthy" {a=1}
                         $1=="bot" && $2=="running" && $3=="healthy" {b=1}
                         $1=="worker" && $2=="running" && $3=="healthy" {w=1}
                         $1=="migrate" && $2=="exited" && $NF==0 {m=1}
-                        END {exit !(a && b && w && m)}'
+                        $1=="webapp" && $2=="running" && $3=="healthy" {x=1}
+                        $1=="caddy" && $2=="running" {c=1}
+                        END {exit !(a && b && w && m && (wp != "on" || (x && c)))}'
   res compose-state $?
 fi
 # tag=same выставляется только после успешного сравнения; контейнера нет — id=none.
@@ -56,6 +67,24 @@ if echo "$PUB" | grep -Eq ':[1-9][0-9]*$'; then RC=1; else RC=0; fi
 res port-not-published $RC
 if ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq ':5432$'; then RC=1; else RC=0; fi
 res port-not-listening $RC
+
+sec "Опубликованные порты"
+# Строки «<сервис> <порт хоста>/<протокол>» из колонки Ports (опубликованный порт содержит
+# «->»); адреса не печатаются, окружение контейнеров не читается.
+PUBS=$(docker compose -f "$F" ps -a --format '{{.Service}} {{.Ports}}' 2>/dev/null | awk '{
+  for (i = 2; i <= NF; i++) if ($i ~ /->/) { p = $i; sub(/,$/, "", p); sub(/->.*\//, "/", p); sub(/^.*:/, "", p); print $1, p }
+}' | sort -u)
+if [ -n "$PUBS" ]; then echo "$PUBS" | sed 's/^/published=/'; else echo "published=none"; fi
+if [ -n "$PUBS" ] && echo "$PUBS" | grep -vq '^caddy '; then RC=1; else RC=0; fi
+res ports-only-caddy $RC
+# on: у caddy ровно 80/tcp и 443/tcp; off: опубликованных портов нет вовсе.
+if [ "$WP" = on ]; then
+  [ "$(echo "$PUBS" | grep '^caddy ')" = "caddy 443/tcp
+caddy 80/tcp" ]
+else
+  [ -z "$PUBS" ]
+fi
+res ports-caddy-80-443 $?
 
 sec "Владельцы и права (runagg не может подменить)"
 # own <путь> <владелец:группа права>
@@ -112,6 +141,10 @@ sec "Логи bot (последние 15 строк)"
 docker compose -f "$F" logs --no-color --tail 15 bot 2>&1
 sec "Логи worker (последние 15 строк)"
 docker compose -f "$F" logs --no-color --tail 15 worker 2>&1
+if [ "$WP" = on ]; then
+  sec "Логи webapp (последние 15 строк)"
+  docker compose -f "$F" logs --no-color --tail 15 webapp 2>&1
+fi
 
 echo
 if [ -z "$FAILS" ]; then

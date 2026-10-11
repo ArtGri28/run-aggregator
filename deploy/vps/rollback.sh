@@ -20,6 +20,11 @@ PREV=$(grep -m1 '^IMAGE_PREV=' "$D/.env" | cut -d= -f2- || true)
 docker image inspect --format '{{.Id}}' "aggregator:$PREV" >/dev/null 2>&1 \
   || { echo "STOP: образа aggregator:$PREV на хосте нет"; exit 1; }
 
+# Подсказка (D-21); сам скрипт .env в этой части не правит.
+if grep -Eq '^COMPOSE_PROFILES=(.*,)?webapp(,.*)?$' "$D/.env"; then
+  echo "Внимание: включён профиль webapp. Если в образе aggregator:$PREV нет подкоманды webapp, контейнер webapp будет перезапускаться — до отката уберите COMPOSE_PROFILES из .env (deploy/README.md, Phase 15)."
+fi
+
 printf 'Откат с %s на %s. Введите слово ROLLBACK: ' "${CUR:-(нет)}" "$PREV"
 read -r ANS
 [ "$ANS" = ROLLBACK ] || { echo "Отменено, хост не изменён."; exit 1; }

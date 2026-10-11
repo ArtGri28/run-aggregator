@@ -8,6 +8,8 @@
 # Имеющийся на хосте образ postgres:17 выкат не обновляет (pull только когда образа
 # нет): новый образ под тем же тегом пересоздал бы контейнер БД. Смена образа
 # postgres — отдельная процедура runbook.
+# При включённом профиле webapp (COMPOSE_PROFILES в .env) так же, до запуска сервисов,
+# проверяется образ caddy из compose-файла: есть на хосте — pull пропускается.
 set -euo pipefail
 umask 077
 export LC_ALL=C
@@ -61,6 +63,15 @@ start() {
   elif ! docker compose -f "$F" pull postgres; then
     echo "Не удалось получить postgres:17. Запасной путь — перенос образа с Mac, см. deploy/README.md."
     return 1
+  fi
+  if docker compose -f "$F" config --services | grep -qx caddy; then
+    CADDY=$(docker compose -f "$F" config --images | grep -m1 '^caddy[:@]') || return 1
+    if docker image inspect --format '{{.Id}}' "$CADDY" >/dev/null 2>&1; then
+      echo "caddy image: local, pull skipped"
+    elif ! docker compose -f "$F" pull caddy; then
+      echo "Не удалось получить образ caddy (профиль webapp включён). Сервисы не переключались: повторите позже либо уберите COMPOSE_PROFILES из .env, см. deploy/README.md."
+      return 1
+    fi
   fi
   docker compose -f "$F" up -d --wait postgres && docker compose -f "$F" up -d
 }

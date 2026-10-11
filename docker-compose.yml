@@ -1,9 +1,13 @@
-# Production-состав MVP.md §10.2 (PRD-01): postgres, одноразовый migrate, bot, worker.
+# Production-состав MVP.md §10.2 (PRD-01): postgres, одноразовый migrate, bot, worker;
+# за профилем webapp (Phase 15, D-19) — webapp (API и статика Mini App) и caddy (HTTPS).
 # Лежит на VPS в /opt/aggregator рядом с .env (права 600); значения секретов
 # подставляются из .env интерполяцией ${VAR}, в этом файле их нет.
 #
-# Наружу ничего не публикуется: порты Docker обходят ufw, а PostgreSQL нужна
-# только соседним контейнерам по внутренней сети проекта.
+# Наружу публикуются только 80/tcp и 443/tcp сервиса caddy и только при включённом
+# профиле webapp (строка COMPOSE_PROFILES=webapp в .env); без неё состав прежний и
+# наружу не публикуется ничего. Порт PostgreSQL не публикуется никогда: порты Docker
+# обходят ufw, а база нужна только соседним контейнерам по внутренней сети проекта.
+# caddy подключён только к сети edge и видит один webapp; postgres ему недоступен.
 # Каждому сервису передаются только нужные ему переменные (общий файл
 # переменных не подключается): токен бота есть только у bot, контакт владельца
 # только у worker. healthcheck bot и worker — по отметке компоненты в таблице
@@ -16,8 +20,8 @@
 #
 # Пароль Postgres действует только при первой инициализации тома: смена в .env
 # без ALTER ROLE приведёт к отказу аутентификации.
-# Тома pgdata и raw НЕ удаляются никогда (без флага -v у down): бэкапов до
-# Phase 6 нет. Откат образа — сменой IMAGE_TAG в .env.
+# Тома pgdata, raw и caddy_data (сертификаты) НЕ удаляются никогда (без флага -v
+# у down): бэкапов до Phase 6 нет. Откат образа — сменой IMAGE_TAG в .env.
 name: aggregator
 
 x-logging: &log
@@ -126,6 +130,56 @@ services:
       OWNER_CONTACT: ${OWNER_CONTACT:?задайте OWNER_CONTACT в .env}
       RAW_DIR: /data/raw
 
+  # Mini App (Phase 15): токен бота, ADMIN_TG_IDS, OWNER_CONTACT и DEDUP_* сервису не
+  # передаются; наружу он не слушает (expose, не ports), TLS — на caddy.
+  webapp:
+    <<: *app
+    command: ["webapp"]
+    profiles: ["webapp"]
+    environment:
+      # Упрощение: тот же пользователь БД, что у bot и worker (D-04); отдельная роль — позже.
+      <<: *db-env
+      WEBAPP_ADDR: 0.0.0.0:8080
+      # Пусто при включённом профиле — процесс завершится с ошибкой, называющей переменную.
+      WEBAPP_SECRET: ${WEBAPP_SECRET:-}
+    expose: ["8080"]
+    networks: [default, edge]
+    # Больше 10 с, которые сервер ждёт текущие запросы при остановке.
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "/aggregator", "healthcheck", "webapp"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # Reverse proxy (D-01): сам получает и продлевает сертификат для WEBAPP_DOMAIN и
+  # проксирует на webapp. Образ зафиксирован тегом и дайджестом (D-21). Запускается без
+  # файла конфигурации; журнал запросов не ведётся.
+  caddy:
+    image: caddy:2.11.7@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    command: ["caddy", "reverse-proxy", "--from", "${WEBAPP_DOMAIN:-localhost}", "--to", "webapp:8080"]
+    profiles: ["webapp"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    ports: ["80:80", "443:443"]
+    networks: [edge]
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      webapp:
+        condition: service_healthy
+    logging: *log
+
+networks:
+  edge:
+
 volumes:
   pgdata:
   raw:
+  caddy_data:
+  caddy_config:

@@ -37,6 +37,24 @@ if [ -f "$D/.env" ]; then
   for k in POSTGRES_PASSWORD TELEGRAM_BOT_TOKEN ADMIN_TG_IDS OWNER_CONTACT IMAGE_TAG; do
     if grep -q "^$k=." "$D/.env"; then echo "$k: есть"; else echo "$k: нет"; fi
   done
+  # Mini App (Phase 15): ключи необязательные; проверяется только формат, значения не печатаются.
+  for k in COMPOSE_PROFILES WEBAPP_SECRET WEBAPP_DOMAIN; do
+    if grep -q "^$k=." "$D/.env"; then echo "$k: есть"; else echo "$k: нет (Mini App выключен)"; fi
+  done
+  if grep -q '^WEBAPP_SECRET=.' "$D/.env" && ! grep -Eq '^WEBAPP_SECRET=[0-9A-Fa-f]{64}$' "$D/.env"; then
+    echo "ВНИМАНИЕ: WEBAPP_SECRET — не 64 hex-символа"
+  fi
+  if grep -q '^WEBAPP_DOMAIN=.' "$D/.env" && ! grep -Eq '^WEBAPP_DOMAIN=[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$' "$D/.env"; then
+    echo "ВНИМАНИЕ: WEBAPP_DOMAIN — не имя хоста"
+  fi
+  if grep -Eq '^COMPOSE_PROFILES=(.*,)?webapp(,.*)?$' "$D/.env"; then
+    echo "профиль webapp: включён"
+    for k in WEBAPP_SECRET WEBAPP_DOMAIN; do
+      grep -q "^$k=." "$D/.env" || echo "ВНИМАНИЕ: профиль webapp включён, а $k не задан"
+    done
+  else
+    echo "профиль webapp: выключен"
+  fi
 else
   echo ".env: нет (будет создан в APPLY)"
 fi
