@@ -4,6 +4,7 @@ parse_mode:
 
 ---
 [⭐ В избранное] → w:a:135
+[📝 Сообщить об ошибке] → q:o:135
 [⬅️ Назад] → w:p:2
 method: answerCallbackQuery
 text: Убрано из избранного

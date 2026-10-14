@@ -11,4 +11,5 @@ parse_mode: HTML
 🔗 Источник: <a href="https://tristyle.club/competition/817/">Tristyle.Клуб</a>
 ---
 [✖️ Убрать из избранного] → w:x:135
+[📝 Сообщить об ошибке] → q:o:135
 [⬅️ Назад] → w:p:2

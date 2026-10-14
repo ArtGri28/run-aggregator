@@ -9,6 +9,7 @@ parse_mode: HTML
 🛣 Шоссе
 ---
 [⭐ В избранное] → w:a:1
+[📝 Сообщить об ошибке] → q:o:1
 [⬅️ Назад] → p:1:v2
 method: answerCallbackQuery
 text: 

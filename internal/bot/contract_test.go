@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// uxContracts — контракты экранов: Phase 8, Phase 9 (D-16), Phase 11, Phase 13 и Phase 14.
+// uxContracts — контракты экранов: Phase 8, Phase 9 (D-16), Phase 11, Phase 13, Phase 14 и Phase 16.
 // Сценарии всех сливаются в одно множество; номера не повторяются. minScenarios — порог
 // числа сценариев каждого контракта: пустой разбор не должен пройти молча.
 var uxContracts = []string{
@@ -18,9 +18,16 @@ var uxContracts = []string{
 	"../../.planning/phases/11-support-chat/11-UX-CONTRACT.md",
 	"../../.planning/phases/13-skiing/13-UX-CONTRACT.md",
 	"../../.planning/phases/14-favorites/14-UX-CONTRACT.md",
+	"../../.planning/phases/16-catalog-quality/16-UX-CONTRACT.md",
 }
 
-var minScenarios = []int{17, 8, 10, 8, 10}
+var minScenarios = []int{17, 8, 10, 8, 10, 3}
+
+// pendingScenarios — сценарии контракта, чей план ещё не выполнен (S-55 — 16-03,
+// S-56 — 16-04): пока у такого сценария нет теста, он не требуется ни тестом, ни
+// эталоном. Как только тест появился — проверяется наравне с остальными. Номер
+// убирается отсюда вместе с планом, который добавляет тест.
+var pendingScenarios = map[string]bool{"55": true, "56": true}
 
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")
@@ -28,11 +35,12 @@ var (
 	scenarioSnapshotRE = regexp.MustCompile(`^s([0-9]{2})_.+\.txt$`)
 )
 
-// TestContractCoverage: множество сценариев S-xx пяти контрактов экранов
-// (Phase 8, Phase 9, Phase 11, Phase 13 и Phase 14) равно множеству тестов
-// TestSxx…; у каждого сценария есть хотя бы один эталон sxx_*, а тестов и
+// TestContractCoverage: множество сценариев S-xx шести контрактов экранов
+// (Phase 8, Phase 9, Phase 11, Phase 13, Phase 14 и Phase 16) равно множеству
+// тестов TestSxx…; у каждого сценария есть хотя бы один эталон sxx_*, а тестов и
 // эталонов сценариев, которых нет ни в одном контракте, нет. Лишние и
-// отсутствующие сценарии перечисляются в ошибке. Исключений нет.
+// отсутствующие сценарии перечисляются в ошибке. Исключение одно —
+// pendingScenarios без теста: их эталон считается сценарием вне контракта.
 func TestContractCoverage(t *testing.T) {
 	all := map[string]string{} // номер сценария → имя теста по контрактам
 	counts := make([]int, len(uxContracts))
@@ -73,6 +81,11 @@ func TestContractCoverage(t *testing.T) {
 				t.Errorf("S-%s: два теста — %s и %s", m[2], prev, m[1])
 			}
 			got[m[2]] = m[1]
+		}
+	}
+	for n := range pendingScenarios {
+		if _, ok := got[n]; !ok {
+			delete(all, n)
 		}
 	}
 	if !reflect.DeepEqual(got, all) {

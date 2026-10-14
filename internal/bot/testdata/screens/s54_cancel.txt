@@ -1,0 +1,8 @@
+method: editMessageText
+parse_mode: HTML
+---
+Заявка не отправлена.
+---
+method: answerCallbackQuery
+text: 
+show_alert: 

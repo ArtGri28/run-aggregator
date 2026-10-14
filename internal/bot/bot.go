@@ -28,6 +28,7 @@ type Bot struct {
 
 	api         *tgbot.Bot
 	admins      map[int64]bool
+	adminIDs    []int64 // администраторы в порядке ADMIN_TG_IDS: порядок доставки заявок
 	loc         *time.Location
 	log         *slog.Logger
 	token       string // только для маскирования в логах (redactHandler)
@@ -56,6 +57,9 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	}
 	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc, token: cfg.Token, supportChat: cfg.SupportChatID}
 	for _, id := range cfg.Admins {
+		if !b.admins[id] {
+			b.adminIDs = append(b.adminIDs, id)
+		}
 		b.admins[id] = true
 	}
 
@@ -90,6 +94,11 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		all = append(all,
 			tgbot.WithMessageTextHandler("support", tgbot.MatchTypeCommandStartOnly, b.onSupportCmd),
 			tgbot.WithCallbackQueryDataHandler("h:", tgbot.MatchTypePrefix, b.cb(b.onSupport)))
+	}
+	if b.reportsOn() {
+		// Заявкам некуда уйти без группы и без администраторов: строки в карточке нет,
+		// кнопка q: из старого сообщения — «Кнопка устарела» (onDefault).
+		all = append(all, tgbot.WithCallbackQueryDataHandler("q:", tgbot.MatchTypePrefix, b.cb(b.onReport)))
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {
@@ -312,7 +321,7 @@ func cbPrefix(data string) string {
 	if data == "m" {
 		return "m"
 	}
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h' || data[0] == 'w') {
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h' || data[0] == 'w' || data[0] == 'q') {
 		return data[:1]
 	}
 	return "?"

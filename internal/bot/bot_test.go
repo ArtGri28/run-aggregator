@@ -149,9 +149,11 @@ func (c call) button(t *testing.T, textPrefix string) string {
 
 // newTestBot — бот без группы поддержки: так собираются все тесты, кроме
 // сценариев поддержки (newSupportBot), и этим доказывается «выключено = как раньше».
+// Администратор 1 (как в тестах админских команд) включает заявки об ошибке: строка
+// «📝 Сообщить об ошибке» в карточке есть, как в эталонах Phase 16.
 func newTestBot(t *testing.T, api *fakeAPI, s *store.Store) *Bot {
 	t.Helper()
-	return newBotWith(t, api, s, Config{Token: "123:TEST"})
+	return newBotWith(t, api, s, Config{Token: "123:TEST", Admins: []int64{1}})
 }
 
 func newBotWith(t *testing.T, api *fakeAPI, s *store.Store, cfg Config) *Bot {

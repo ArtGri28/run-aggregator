@@ -43,6 +43,9 @@ import (
 //	w:p:<стр>                страница раздела
 //	w:e:<id>:<стр>           карточка из раздела
 //	w:<n|a|x>:<id>           карточка новым сообщением / добавить / убрать
+//	q:o:<id>                 заявка об ошибке: выбор причины новым сообщением (без версии)
+//	q:r:<id>:<причина>       заявка с причиной (буква из reportReasons)
+//	q:x                      отмена заявки
 //
 // Версия — всегда последнее поле. f: без версии — формат до Phase 8 (кнопки
 // старых сообщений): разбирается с Legacy и считается устаревшим; encode его
@@ -97,6 +100,10 @@ const (
 	cbFavShow // w:n
 	cbFavAdd  // w:a
 	cbFavDel  // w:x
+
+	cbReportOpen   // q:o
+	cbReport       // q:r
+	cbReportCancel // q:x
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -420,6 +427,21 @@ func parseCallback(data string) (callback, error) {
 			}
 		}
 		return callback{}, errCallback
+	case "q":
+		switch {
+		case len(p) == 2 && p[1] == "x":
+			return callback{Kind: cbReportCancel}, nil
+		case len(p) == 3 && p[1] == "o":
+			id, err := num(p[2], 1, math.MaxInt64)
+			return callback{Kind: cbReportOpen, ID: id}, err
+		case len(p) == 4 && p[1] == "r":
+			if _, ok := reasonByLetter(p[3]); !ok {
+				return callback{}, errCallback
+			}
+			id, err := num(p[2], 1, math.MaxInt64)
+			return callback{Kind: cbReport, ID: id, Value: p[3]}, err
+		}
+		return callback{}, errCallback
 	}
 	return callback{}, errCallback
 }
@@ -507,6 +529,12 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("w:e:%d:%d", c.ID, c.Page)
 	case cbFavShow, cbFavAdd, cbFavDel:
 		s = fmt.Sprintf("w:%s:%d", wLetters[c.Kind], c.ID)
+	case cbReportOpen:
+		s = fmt.Sprintf("q:o:%d", c.ID)
+	case cbReport:
+		s = fmt.Sprintf("q:r:%d:%s", c.ID, c.Value)
+	case cbReportCancel:
+		s = "q:x"
 	default:
 		return "", errCallback
 	}

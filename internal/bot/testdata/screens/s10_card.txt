@@ -12,4 +12,5 @@ parse_mode: HTML
 ---
 [🔗 Регистрация] → url:https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026
 [⭐ В избранное] → w:a:52
+[📝 Сообщить об ошибке] → q:o:52
 [⬅️ Назад] → p:2:v1

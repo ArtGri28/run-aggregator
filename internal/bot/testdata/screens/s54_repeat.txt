@@ -1,0 +1,14 @@
+method: editMessageText
+parse_mode: HTML
+---
+📝 <b>Сообщить об ошибке</b>
+
+🏔 <b>Кросс памяти Серафима и Георгия Знаменских</b>
+📅 2 октября 2026
+
+Причина: дата
+Эту заявку уже передал.
+---
+method: answerCallbackQuery
+text: 
+show_alert: 

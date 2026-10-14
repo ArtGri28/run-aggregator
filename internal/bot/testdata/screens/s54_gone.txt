@@ -1,0 +1,8 @@
+method: editMessageText
+parse_mode: 
+---
+Событие больше не доступно
+---
+method: answerCallbackQuery
+text: 
+show_alert: 

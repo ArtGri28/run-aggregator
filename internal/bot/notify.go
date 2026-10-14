@@ -226,8 +226,9 @@ func (n *Notifier) settle(ctx context.Context, row store.OutboxRow, err error, n
 }
 
 // chores — служебная часть шага: закрывает просроченные сообщения об
-// изменениях и о пропавших стартах, удаляет строки старше срока хранения,
-// создаёт напоминания и сообщения администраторам о предохранителе. Ошибка
+// изменениях и о пропавших стартах, удаляет строки очереди, заявок и
+// предложений старше срока хранения, создаёт напоминания и сообщения
+// администраторам о предохранителе. Ошибка
 // пишется в лог и отправку не останавливает; в лог идут только счётчики и
 // названия шагов, без текста ошибки: она может содержать значения из базы.
 func (n *Notifier) chores(ctx context.Context, now time.Time) {
@@ -246,11 +247,12 @@ func (n *Notifier) chores(ctx context.Context, now time.Time) {
 	pruned := do("prune", func() (int, error) { return b.Store.PruneOutbox(ctx, now.Add(-notifyKeep)) })
 	reminders := do("remind", func() (int, error) { return n.remind(ctx, now) })
 	fuse := do("fuse", func() (int, error) { return n.fuse(ctx, now) })
+	reports := do("reports", func() (int, error) { return b.Store.PruneReports(ctx, now.Add(-reportKeep)) })
 	if len(failed) > 0 {
 		b.logger().Warn("notify chores failed", "steps", strings.Join(failed, ","))
 	}
-	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 {
-		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse)
+	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 {
+		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports)
 	}
 }
 

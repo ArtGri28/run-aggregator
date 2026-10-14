@@ -1,0 +1,3 @@
+method: answerCallbackQuery
+text: Событие больше не доступно
+show_alert: 

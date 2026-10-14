@@ -238,7 +238,11 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 		return screen{}, 0, false
 	}
 	rows := sc.kb.InlineKeyboard
-	sc.kb.InlineKeyboard = slices.Insert(rows, len(rows)-1, []models.InlineKeyboardButton{favBtn(e.ID, fav)})
+	add := [][]models.InlineKeyboardButton{{favBtn(e.ID, fav)}}
+	if b.reportsOn() {
+		add = append(add, btn(reportLabel, callback{Kind: cbReportOpen, ID: e.ID}))
+	}
+	sc.kb.InlineKeyboard = slices.Insert(rows, len(rows)-1, add...)
 	return sc, v, true
 }
 
@@ -328,14 +332,7 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 		sb.WriteString("\n" + esc(e.Description, 1000) + "\n")
 	}
 	if len(srcs) > 0 {
-		names := make([]string, len(srcs))
-		for i, s := range srcs {
-			names[i] = html.EscapeString(sourceName(s.Code))
-			if validURL(s.URL) {
-				names[i] = `<a href="` + html.EscapeString(s.URL) + `">` + names[i] + "</a>"
-			}
-		}
-		sb.WriteString("\n🔗 " + plural(len(srcs), "Источник", "Источники", "Источники") + ": " + strings.Join(names, ", "))
+		sb.WriteString("\n" + sourcesLine(srcs))
 	}
 	var reg row
 	if validURL(e.RegistrationURL) {
@@ -343,6 +340,19 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 	}
 	return screen{text: strings.TrimRight(sb.String(), "\n"),
 		kb: keyboard(reg, btn(backLabel, callback{Kind: cbPage, Page: page, V: v}))}
+}
+
+// sourcesLine — строка источников карточки: «🔗 Источник: …», ссылка — только
+// годная; srcs не пуст.
+func sourcesLine(srcs []store.EventSource) string {
+	names := make([]string, len(srcs))
+	for i, s := range srcs {
+		names[i] = html.EscapeString(sourceName(s.Code))
+		if validURL(s.URL) {
+			names[i] = `<a href="` + html.EscapeString(s.URL) + `">` + names[i] + "</a>"
+		}
+	}
+	return "🔗 " + plural(len(srcs), "Источник", "Источники", "Источники") + ": " + strings.Join(names, ", ")
 }
 
 // validURL — ссылка, которую можно показать (event.ValidURL): та же проверка,

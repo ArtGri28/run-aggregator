@@ -1,0 +1,13 @@
+method: editMessageText
+parse_mode: HTML
+---
+📝 <b>Сообщить об ошибке</b>
+
+⛷ <b>V этап Кубка «Виктория» — лыжные гонки</b>
+📅 19 декабря 2026
+
+Можно отправить не больше 10 заявок об ошибках в сутки. Попробуйте позже.
+---
+method: answerCallbackQuery
+text: 
+show_alert: 

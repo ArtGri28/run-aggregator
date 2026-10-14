@@ -1,0 +1,26 @@
+method: sendMessage
+parse_mode: HTML
+---
+📝 <b>Ошибка в карточке</b>
+Причина: дата
+
+🏔 <b>Кросс памяти Серафима и Георгия Знаменских</b>
+📅 2 октября 2026
+Событие: <code>110</code>
+🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
+🔗 Регистрация: https://myrace.info/events/2159
+---
+method: editMessageText
+parse_mode: HTML
+---
+📝 <b>Сообщить об ошибке</b>
+
+🏔 <b>Кросс памяти Серафима и Георгия Знаменских</b>
+📅 2 октября 2026
+
+Причина: дата
+✅ Передал.
+---
+method: answerCallbackQuery
+text: 
+show_alert: 

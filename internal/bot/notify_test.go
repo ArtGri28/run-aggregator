@@ -1099,6 +1099,7 @@ func TestS52WatchFuse(t *testing.T) {
 	if got := dbScalar(t, `SELECT r.id || ' ' || s.code FROM ingest_runs r JOIN sources s ON s.id = r.source_id ORDER BY r.id LIMIT 1`); got != "1 marathonec" {
 		t.Fatalf("первый прогон каталога %q, want «1 marathonec»", got)
 	}
+	delete(r.b.admins, 1) // администратор тестового бота: здесь свои
 	r.b.admins[7001], r.b.admins[7002] = true, true
 	dbExec(t, `UPDATE ingest_runs SET finished_at = $1, metrics = metrics || '{"watch_held": 23}'::jsonb WHERE id = 1`, fixtureNow.Add(-time.Hour))
 	fuseRows := func() string {
@@ -1202,6 +1203,7 @@ func TestNotifyPrivacy(t *testing.T) {
 	r := newNotifyRig(t)
 	logs := captureLogs(t)
 	const user, blocked, stranger, admin = 424242, 535353, 616161, 646464
+	delete(r.b.admins, 1) // администратор тестового бота: здесь свой
 	r.b.admins[admin] = true
 	r.reset(t)
 	dbExec(t, `DELETE FROM favorites`)
@@ -1263,7 +1265,7 @@ func TestNotifyPrivacy(t *testing.T) {
 	// Только известные ключи: вид, исход, счётчики, названия шагов.
 	keyRE := regexp.MustCompile(`([A-Za-z_]+)=`)
 	allowed := map[string]bool{"time": true, "level": true, "msg": true, "kind": true, "outcome": true, "closed": true,
-		"cause": true, "expired": true, "pruned": true, "reminders": true, "fuse": true, "steps": true,
+		"cause": true, "expired": true, "pruned": true, "reminders": true, "fuse": true, "reports": true, "steps": true,
 		"method": true} // method — запись самого вызова Bot API о 403: только имя метода
 	for _, m := range keyRE.FindAllStringSubmatch(out, -1) {
 		if !allowed[m[1]] {
