@@ -287,6 +287,14 @@ func TestStatic(t *testing.T) {
 			t.Fatalf("GET %s: code=%d type=%q, want index.html", p, resp.StatusCode, resp.Header.Get("Content-Type"))
 		}
 	}
+	// Картинка шапки главной (Q-D5): проверяется, когда файл добавлен.
+	if _, err := fs.Stat(web.FS, "static/hero.webp"); err == nil {
+		resp, _ = r.get("/hero.webp", "")
+		if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/webp" ||
+			resp.Header.Get("Content-Security-Policy") != csp || resp.Header.Get("Cache-Control") != staticCacheControl {
+			t.Fatalf("GET /hero.webp: code=%d type=%q", resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+	}
 	// Лог статики — в том же формате, что у API, без пути запроса.
 	if logs := r.logs.String(); !strings.Contains(logs, `route=/ status=200`) || strings.Contains(logs, "/nope") {
 		t.Fatalf("лог статики:\n%s", logs)
@@ -295,9 +303,11 @@ func TestStatic(t *testing.T) {
 
 // TestStaticSources — состав и гигиена файлов web/static: только ожидаемые
 // типы; в скриптах нет innerHTML/eval, незащищённых ссылок и строк, похожих
-// на ключи; localStorage — только в screens/filters.js (D-10).
+// на ключи; localStorage — только в screens/filters.js (D-10); картинка
+// WebP — с заголовком RIFF…WEBP и не больше maxWebP байт.
 func TestStaticSources(t *testing.T) {
-	allowed := map[string]bool{".html": true, ".css": true, ".js": true, ".svg": true}
+	const maxWebP = 200 << 10
+	allowed := map[string]bool{".html": true, ".css": true, ".js": true, ".svg": true, ".webp": true}
 	forbidden := []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "new Function", "http://", "initDataUnsafe"}
 	var files int
 	err := fs.WalkDir(web.FS, "static", func(p string, d fs.DirEntry, err error) error {
@@ -311,6 +321,12 @@ func TestStaticSources(t *testing.T) {
 		src, err := fs.ReadFile(web.FS, p)
 		if err != nil {
 			return err
+		}
+		if path.Ext(p) == ".webp" {
+			if len(src) < 12 || string(src[:4]) != "RIFF" || string(src[8:12]) != "WEBP" || len(src) > maxWebP {
+				t.Errorf("%s: не WebP или больше %d байт (%d)", p, maxWebP, len(src))
+			}
+			return nil
 		}
 		text := string(src)
 		if m := secretLikeRE.FindString(text); m != "" {

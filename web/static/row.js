@@ -3,7 +3,7 @@
 
 import { del, get, put } from './api.js';
 import { el, errorText, km, MON, statusBadge, toast } from './ui.js';
-import { glyph, plaque } from './icons.js';
+import { glyph, icon } from './icons.js';
 
 // Упрощение: список стартов не отдаёт признак избранного, поэтому
 // идентификаторы избранного читаются один раз за сеанс через GET /favorites
@@ -81,9 +81,9 @@ function heart(it, m, known, onChange) {
   return btn;
 }
 
-// row — строка старта: плашка даты, значок вида спорта, название, место,
-// дистанции и сердечко. Сердечко — сосед ссылки, а не её часть: нажатие на
-// него карточку не открывает.
+// row — строка старта: плашка даты, название (у небегового старта — со
+// значком вида спорта, как в строках бота), место, дистанции и сердечко.
+// Сердечко — сосед ссылки, а не её часть: нажатие на него карточку не открывает.
 export function row(it, m, { fav, onChange } = {}) {
   const [y, mo, d] = it.start_date.split('-').map(Number);
   const country = (m.countries.find((c) => c.code === it.country_code) || {}).name || it.country_code;
@@ -94,9 +94,8 @@ export function row(it, m, { fav, onChange } = {}) {
     el('a', { class: 'ev-link', href: '#/event/' + it.id },
       el('span', { class: 'date' },
         el('b', { text: String(d) }), el('span', { class: 'mon', text: MON[mo - 1] }), el('span', { class: 'year', text: String(y) })),
-      plaque(it.sport, ''),
       el('span', { class: 'body' },
-        el('span', { class: 'name' }, badge, badge ? ' ' : null, it.title),
+        el('span', { class: 'name' }, it.sport !== 'running' ? icon(it.sport, '') : null, badge, badge ? ' ' : null, it.title),
         place ? el('span', { class: 'place' }, glyph('pin'), el('span', { text: place })) : null,
         dist.length ? el('span', { class: 'tags' }, ...dist.map((x) => el('span', { class: 'tag', text: km(x) + ' км' }))) : null)),
     heart(it, m, fav, onChange));

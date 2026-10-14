@@ -1,25 +1,30 @@
-/* Тёмная тема «Где старт?»: сине-графитовый фон с осветлением сверху,
-   карточки чуть светлее фона, лаймовый акцент. Узкий экран — одна колонка,
-   широкий — список в две колонки и плитки в ряд. */
+/* Тема «Где старт?» всегда тёмно-зелёная (Q-D1): лесной фон с осветлением
+   сверху, карточки чуть светлее фона, салатовый акцент. --accent — заливка,
+   --accent-ink — акцент как цвет текста и значков. Узкий экран — одна
+   колонка, широкий — список в две колонки и плитки в ряд. */
 :root {
-  --bg: #0b131b;
-  --bg-top: #1a2c3d;
-  --card: #121d28;
-  --card-2: #1b2836;
+  --bg: #0b1a13;
+  --bg-top: #173a2a;
+  --card: #11251b;
+  --card-2: #193326;
   --border: rgba(255, 255, 255, .1);
   --text: #ffffff;
-  --hint: #93a6b8;
-  --link: #c8ff5a;
-  --accent: #c8ff5a;
-  --accent-text: #0b131b;
-  --accent-dim: #1d3320;
-  --coral: #ff5d5d;
-  --danger: #ff8a80;
+  --hint: #a3bcae;
+  --link: #b6f24a;
+  --accent: #b6f24a;
+  --accent-ink: #b6f24a;
+  --accent-text: #0b1a13;
+  --accent-dim: #21401f;
+  --coral: #ff6b6b;
+  --danger: #ff9a8f;
   --ski: #8fd3ff;
-  --ski-dim: #17304a;
-  --plate: #f2f5f7;
-  --plate-text: #0b131b;
-  --plate-hint: #566675;
+  --ski-dim: #163447;
+  --plate: #f1f6ee;
+  --plate-text: #0b1a13;
+  --plate-hint: #4d6357;
+  --hero-fallback: linear-gradient(160deg, #173a2a 0, #1f4a2c 50%, #3d5f23 100%);
+  --hero-pos: center 40%;
+  --nav-bg: rgba(17, 37, 27, .94);
   --tap: 44px;
   --nav: 64px;
   color-scheme: dark;
@@ -64,7 +69,7 @@ p { margin: 0; }
 .brand .logo .ico { width: 22px; height: 22px; stroke-width: 2; }
 .brand .words { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .brand b { font-size: 17px; font-weight: 800; white-space: nowrap; }
-.brand .slogan { color: var(--accent); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand .slogan { color: var(--accent-ink); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .nav {
   position: fixed;
@@ -76,7 +81,8 @@ p { margin: 0; }
   justify-content: center;
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--border);
-  background: var(--card);
+  border-radius: 20px 20px 0 0;
+  background: var(--nav-bg);
 }
 .nav a {
   flex: 1;
@@ -92,12 +98,13 @@ p { margin: 0; }
   font-size: 11px;
   text-decoration: none;
 }
-.nav a .ico { width: 24px; height: 24px; }
-.nav a[aria-current="page"] { color: var(--accent); font-weight: 700; }
+.nav a .ico { width: 48px; height: 30px; padding: 3px 12px; border-radius: 999px; }
+.nav a[aria-current="page"] { color: var(--accent-ink); font-weight: 700; }
+.nav a[aria-current="page"] .ico { background: var(--accent); color: var(--accent-text); }
 
 /* Заголовок экрана: надзаголовок, заголовок, действия справа */
 .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
+.eyebrow { color: var(--accent-ink); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
 .head .eyebrow + h1 { margin-top: 4px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -164,31 +171,57 @@ span.pill { cursor: default; }
   color: var(--text);
   text-decoration: none;
 }
-.tile .ico { width: 24px; height: 24px; color: var(--accent); }
-.tile .title { font-weight: 700; overflow-wrap: anywhere; }
 .tile .sub { color: var(--hint); font-size: 13px; }
-.tile .num { font-size: 26px; font-weight: 800; line-height: 1.1; color: var(--accent); overflow-wrap: anywhere; }
+.tile .num { font-size: 26px; font-weight: 800; line-height: 1.1; color: var(--accent-ink); overflow-wrap: anywhere; }
 .tile .val { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
 
-/* Герой главной. Картинка добавляется одним правилом:
-   .hero { --hero-image: url("/hero.webp"); } — файл web/static/hero.webp;
-   затемнение слева уже лежит поверх. */
+/* Шапка главной: затемнение цвета --bg, картинка web/static/hero.webp и
+   запасной градиент нижним слоем — без файла виден градиент. Узкий экран —
+   во всю ширину, за поля 16 px; текст и поиск — внизу шапки. */
 .hero {
-  padding: 24px 20px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 200px;
+  margin: 0 -16px;
+  padding: 16px;
+  border-radius: 0 0 24px 24px;
   background:
-    linear-gradient(90deg, rgba(11, 19, 27, .94) 0, rgba(11, 19, 27, .72) 55%, rgba(11, 19, 27, .2) 100%),
-    var(--hero-image, linear-gradient(135deg, #1b3147 0, #1f4034 55%, #4d6a2a 100%)) right center / cover no-repeat;
+    linear-gradient(180deg, rgba(11, 26, 19, .35) 0, rgba(11, 26, 19, .7) 45%, rgba(11, 26, 19, .92) 100%),
+    url("/hero.webp") var(--hero-pos) / cover no-repeat,
+    var(--hero-fallback);
+  background-color: var(--bg);
 }
-.hero > * + * { margin-top: 12px; }
-.hero h1 { max-width: 12em; font-size: 32px; }
-.hero .sub { max-width: 28em; color: #d5dee6; }
-.hero .find { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
-.hero .find input { flex: 1 1 220px; width: auto; min-width: 0; max-width: 420px; background: rgba(11, 19, 27, .72); }
-.hero .find .btn { flex: none; }
+.hero .eyebrow { font-size: 11px; }
+.hero h1 { max-width: 14em; font-size: 24px; }
+.hero .sub { max-width: 30em; color: #d6e4da; font-size: 14px; }
+.hero .search { max-width: 520px; }
+.hero .search input, .hero .search .btn { min-height: 48px; }
+.hero .search input { border-color: rgba(255, 255, 255, .18); background: rgba(17, 37, 27, .85); }
 
-/* Значок вида спорта / дисциплины на цветной плашке (вместо фото) */
+/* Круглые кнопки видов спорта (главная) */
+.chips.sports { flex-wrap: nowrap; gap: 12px; overflow-x: auto; }
+.sport {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 64px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sport .ico { width: 56px; height: 56px; padding: 16px; border-radius: 50%; background: var(--card-2); color: var(--accent-ink); }
+.sport[aria-pressed="true"] .ico { background: var(--accent); color: var(--accent-text); }
+
+/* Значок на плашке (профиль) */
 .plaque {
   flex: none;
   display: inline-flex;
@@ -198,10 +231,9 @@ span.pill { cursor: default; }
   height: 44px;
   border-radius: 12px;
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .plaque .ico { width: 26px; height: 26px; }
-.plaque-skiing { background: var(--ski-dim); color: var(--ski); }
 .plaque-lg { width: 64px; height: 64px; border-radius: 18px; }
 .plaque-lg .ico { width: 38px; height: 38px; }
 .plaque-accent { background: var(--accent); color: var(--accent-text); }
@@ -216,24 +248,25 @@ span.pill { cursor: default; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  min-height: 60px;
+  width: 56px;
+  min-height: 68px;
   padding: 6px 0;
   border-radius: 14px;
   background: var(--plate);
   color: var(--plate-text);
   line-height: 1.1;
 }
-.ev .date b { font-size: 21px; font-weight: 800; }
-.ev .date .mon { font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.ev .date b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ev .date .mon { font-size: 11px; font-weight: 700; letter-spacing: .08em; }
 .ev .date .year { font-size: 10px; color: var(--plate-hint); }
 .ev .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .ev .name { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.ev .name .ico { width: 16px; height: 16px; margin-right: 4px; vertical-align: -2px; color: var(--accent-ink); }
 .ev .place { display: flex; align-items: center; gap: 4px; color: var(--hint); font-size: 13px; }
 .ev .place .ico { width: 14px; height: 14px; }
 .ev .place span { min-width: 0; overflow-wrap: anywhere; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.tag { padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-2); color: var(--text); font-size: 12px; white-space: nowrap; }
+.tag { padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--card-2); color: var(--text); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .heart {
   flex: none;
   display: inline-flex;
@@ -284,7 +317,7 @@ span.pill { cursor: default; }
 }
 .cal-day.past { opacity: .4; }
 .cal-day.today { text-decoration: underline; text-underline-offset: 3px; }
-.cal-day.has { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); cursor: pointer; }
+.cal-day.has { border-color: var(--accent); background: var(--accent-dim); color: var(--accent-ink); cursor: pointer; }
 .cal-day.has::after { content: ""; position: absolute; bottom: 5px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .cal-day.sel { background: var(--accent); color: var(--accent-text); }
 
@@ -325,7 +358,9 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 /* Поиск каталога: поле с кнопкой очистки и кнопка отправки */
 .search { display: flex; gap: 8px; }
 .search .box { position: relative; flex: 1; min-width: 0; }
-.search .box input { padding-right: var(--tap); }
+.search .box input { padding-left: 40px; padding-right: var(--tap); }
+.search .box > .ico { position: absolute; left: 12px; top: 50%; width: 20px; height: 20px; margin-top: -10px; color: var(--hint); pointer-events: none; }
+.search .btn { flex: none; }
 .search .clear {
   position: absolute;
   top: 0;
@@ -341,10 +376,29 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
   cursor: pointer;
 }
 
+/* Карточка события: шапка без фото (Q-D2) — градиент, крупный значок вида
+   спорта, плашка даты начала, название внизу */
+.ev-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 180px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--hero-fallback);
+}
+.ev-hero > .ico { position: absolute; right: -12px; top: 12px; width: 140px; height: 140px; color: #ffffff; opacity: .16; }
+.ev-hero > * { position: relative; }
+.ev-hero .stamp { padding: 4px 10px; border-radius: 10px; background: var(--plate); color: var(--plate-text); font-size: 14px; font-weight: 800; text-transform: uppercase; }
+.ev-hero h2 { font-size: 22px; font-weight: 800; color: #ffffff; overflow-wrap: anywhere; }
+.ev-hero .kind { margin-top: 4px; color: #d6e4da; font-size: 14px; }
+.card .fav { color: var(--coral); font-size: 14px; font-weight: 600; }
+
 /* Карточка события и профиль */
-.card-head { display: flex; gap: 14px; align-items: flex-start; }
-.card-head h2 { overflow-wrap: anywhere; }
-.card-head .fav { margin-top: 4px; color: var(--coral); font-size: 14px; font-weight: 600; }
 .rows { display: flex; flex-direction: column; gap: 10px; }
 .row { display: flex; gap: 10px; }
 .row .k { flex: none; width: 96px; color: var(--hint); font-size: 14px; }
@@ -355,7 +409,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 /* Заглушка, сообщения */
 .stub { text-align: center; padding: 48px 0; }
 .stub .mark { font-size: 48px; }
-.stub .slogan { color: var(--accent); }
+.stub .slogan { color: var(--accent-ink); }
 .notice { padding: 16px; border: 1px solid var(--border); border-radius: 18px; background: var(--card); }
 .notice > * + * { margin-top: 10px; }
 .toast {
@@ -373,18 +427,14 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
   font-size: 14px;
 }
 
-@media (max-width: 479px) {
-  .hero .find .btn { flex: 1 0 100%; }
-  .hero .find input { padding-left: 12px; padding-right: 12px; }
-  .hero .find input::placeholder { font-size: 15px; }
-}
 @media (min-width: 640px) {
   .brand .slogan { font-size: 12px; }
   .tiles { grid-template-columns: repeat(4, 1fr); }
-  .hero { padding: 40px 36px; }
-  .hero h1 { font-size: 44px; }
+  .hero { min-height: 220px; margin: 0; padding: 20px; border-radius: 24px; }
+  .hero h1 { font-size: 28px; }
   h1 { font-size: 36px; }
 }
 @media (min-width: 900px) {
   .list-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ev-hero { min-height: 220px; }
 }

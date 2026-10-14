@@ -1,11 +1,11 @@
 // Экран фильтров и состояние фильтров каталога. Состояние живёт только на
 // клиенте (D-10) под одним ключом localStorage; в базу не пишется. Это
 // единственный модуль, который обращается к localStorage. Здесь же ряд
-// чипов направлений (вид спорта и дисциплина) для главной и каталога.
+// направлений (вид спорта и дисциплина) для главной и каталога.
 
 import { get, meta } from '../api.js';
 import { el, flag, heading, showError } from '../ui.js';
-import { icon } from '../icons.js';
+import { glyph, icon } from '../icons.js';
 
 const KEY = 'gde-start.filters.v1';
 export const ALL_COUNTRIES = '*';
@@ -81,13 +81,13 @@ export function filterTags(f, m) {
 }
 
 // chips — ряд переключателей; multi — несколько активных; у варианта может
-// быть значок icon.
-function chips(options, selected, multi, onChange) {
-  const row = el('div', { class: 'chips', role: 'group' });
+// быть значок icon. round — круглые кнопки с подписью снизу (главная).
+function chips(options, selected, multi, onChange, round) {
+  const row = el('div', { class: round ? 'chips sports' : 'chips', role: 'group' });
   for (const o of options) {
     const pressed = multi ? selected.includes(o.value) : selected === o.value;
     row.append(el('button', {
-      type: 'button', class: 'chip', 'aria-pressed': String(pressed),
+      type: 'button', class: round ? 'sport' : 'chip', 'aria-pressed': String(pressed),
       onclick: () => {
         if (multi) onChange(pressed ? selected.filter((v) => v !== o.value) : [...selected, o.value]);
         else onChange(pressed ? '' : o.value);
@@ -97,10 +97,11 @@ function chips(options, selected, multi, onChange) {
   return row;
 }
 
-// directions — чипы направлений: «Все» и виды спорта (как в меню бота: бег
-// всегда, остальные — только с будущими стартами), ниже — дисциплины
-// выбранного вида. Выбор пишется в фильтры f; onChange — после записи.
-export function directions(m, f, onChange) {
+// directions — направления: «Все» и виды спорта (как в меню бота: бег
+// всегда, остальные — только с будущими стартами), ниже — чипы дисциплин
+// выбранного вида. Выбор пишется в фильтры f; onChange — после записи;
+// round — виды спорта круглыми кнопками (главная), иначе чипами.
+export function directions(m, f, onChange, round) {
   const box = el('div', { class: 'field' });
   const set = (patch) => {
     Object.assign(f, patch);
@@ -110,8 +111,8 @@ export function directions(m, f, onChange) {
   };
   function draw() {
     const sports = m.sports.filter((s) => s.code === 'running' || s.count > 0);
-    box.replaceChildren(chips([{ value: '', label: 'Все' }, ...sports.map((s) => ({ value: s.code, label: s.title, icon: icon(s.code, '') }))],
-      f.sport, false, (v) => set({ sport: v, dist: [], type: '' })));
+    box.replaceChildren(chips([{ value: '', label: 'Все', icon: round ? glyph('grid') : null }, ...sports.map((s) => ({ value: s.code, label: s.title, icon: icon(s.code, '') }))],
+      f.sport, false, (v) => set({ sport: v, dist: [], type: '' }), round));
     const types = (f.sport && m.types[f.sport]) || [];
     if (types.length) {
       box.append(chips(types.map((t) => ({ value: t.code, label: t.label, icon: icon(f.sport, t.code) })),

@@ -1,5 +1,5 @@
 // Встроенные SVG-значки: по виду спорта и дисциплине (D-06: вместо фото —
-// значок на цветной плашке) и значки интерфейса. Контуры свои, простые,
+// значок) и значки интерфейса. Контуры свои, простые,
 // 24×24, рисуются обводкой currentColor; цвет и размер задаёт CSS.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -31,7 +31,7 @@ const PATHS = {
   },
 };
 
-// Значки интерфейса: шапка, нижняя панель, плитки, сердечко.
+// Значки интерфейса: шапка, нижняя панель, плитки, сердечко, поиск.
 const GLYPHS = {
   pin: ['M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z', 'M12 11m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0'],
   home: ['M3 11l9-7 9 7', 'M5 10v10h14V10'],
@@ -41,8 +41,8 @@ const GLYPHS = {
   user: ['M12 8m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0', 'M4 21c0-4 3.6-6 8-6s8 2 8 6'],
   sliders: ['M4 7h10', 'M18 7h2', 'M4 17h2', 'M10 17h10', 'M16 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
     'M8 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0'],
-  clock: ['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0', 'M12 7v5l3 2'],
   chevron: ['M6 9l6 6 6-6'],
+  search: ['M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0', 'M20 20l-4-4'],
 };
 
 function svg(paths) {
@@ -68,12 +68,4 @@ export function icon(sport, type) {
 // glyph — <svg> значка интерфейса по имени.
 export function glyph(name) {
   return svg(GLYPHS[name]);
-}
-
-// plaque — значок на плашке; класс плашки зависит от вида спорта.
-export function plaque(sport, type, large) {
-  const box = document.createElement('span');
-  box.className = 'plaque' + (sport === 'skiing' ? ' plaque-skiing' : '') + (large ? ' plaque-lg' : '');
-  box.append(icon(sport, type));
-  return box;
 }

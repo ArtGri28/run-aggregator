@@ -61,7 +61,7 @@ export async function render(box, param) {
       const data = await get('events', { ...toQuery(f), page });
       if (my !== seq || !box.isConnected) return;
       line.textContent = `Найдено ${events(data.total)}`;
-      if (page === 1 && !data.items.length) list.append(el('li', { class: 'hint', text: 'По этим фильтрам стартов пока нет.' }));
+      if (page === 1 && !data.items.length) list.append(el('li', { class: 'notice' }, el('p', { text: 'По этим фильтрам стартов пока нет.' })));
       for (const it of data.items) list.append(row(it, m));
       page = data.page + 1;
       more.hidden = data.page >= data.pages;
@@ -169,7 +169,7 @@ export async function render(box, param) {
   const form = el('form', {
     class: 'search', role: 'search',
     onsubmit: (e) => { e.preventDefault(); apply(); input.blur(); },
-  }, el('div', { class: 'box' }, input, clear), el('button', { type: 'submit', class: 'btn btn-primary', text: 'Найти' }));
+  }, el('div', { class: 'box' }, glyph('search'), input, clear), el('button', { type: 'submit', class: 'btn btn-primary', text: 'Найти' }));
   const dirs = directions(m, f, reload);
 
   box.append(heading('Открой новое', 'Каталог стартов',

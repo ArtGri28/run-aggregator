@@ -1,10 +1,11 @@
 // Карточка события GET /events/{id}: те же поля, что в карточке бота.
+// Шапка — без фото (Q-D2): градиент, значок вида спорта и плашка даты начала.
 // Кнопка «Регистрация» — только при registration_url; кнопка избранного
 // задаёт состояние (PUT/DELETE идемпотентны) и сразу его показывает.
 
 import { get, meta } from '../api.js';
-import { el, flag, km, link, ruDate, showError, statusBadge } from '../ui.js';
-import { plaque } from '../icons.js';
+import { el, flag, km, link, MON, ruDate, showError, statusBadge } from '../ui.js';
+import { icon } from '../icons.js';
 import { toggleFav } from '../row.js';
 
 export const back = '#/catalog';
@@ -13,11 +14,11 @@ function row(key, ...value) {
   return el('div', { class: 'row' }, el('span', { class: 'k', text: key }), el('span', { class: 'v' }, ...value));
 }
 
-// distances — «3 · 10 · 21 км»; с подписями — единица у каждой: «5 км (детский) · 10 км».
+// distances — таблетки «10 км»; с подписями — строка с единицей у каждой:
+// «5 км (детский) · 10 км».
 function distances(list) {
-  const labelled = list.some((d) => d.label);
-  const parts = list.map((d) => km(d.m) + (labelled ? ' км' : '') + (d.label ? ` (${d.label})` : ''));
-  return parts.join(' · ') + (labelled ? '' : ' км');
+  if (!list.some((d) => d.label)) return el('span', { class: 'tags' }, ...list.map((d) => el('span', { class: 'tag', text: km(d.m) + ' км' })));
+  return list.map((d) => km(d.m) + ' км' + (d.label ? ` (${d.label})` : '')).join(' · ');
 }
 
 // favControl — кнопка «В избранное» / «Убрать из избранного» и строка
@@ -57,10 +58,14 @@ export async function render(box, id) {
   const sport = m.sports.find((s) => s.code === c.sport);
   const kind = (sport && sport.code !== 'running' ? sport.title + ' · ' : '') + c.type_label;
 
+  const [y, mo, d] = c.start_date.split('-').map(Number);
+  const badge = statusBadge(c.status);
+  box.append(el('div', { class: 'ev-hero' }, icon(c.sport, c.type),
+    el('span', { class: 'stamp', text: `${d} ${MON[mo - 1]} ${y}` }),
+    el('div', {}, el('h2', {}, badge, badge ? ' ' : null, c.title), el('p', { class: 'kind', text: kind }))));
+
   const mark = el('p', { class: 'fav', text: '♥ В избранном' });
-  const card = el('div', { class: 'card' }, el('div', { class: 'card-head' }, plaque(c.sport, c.type, true),
-    el('div', {}, el('h2', {}, statusBadge(c.status), statusBadge(c.status) ? ' ' : null, c.title),
-      el('p', { class: 'hint', text: kind }), mark)));
+  const card = el('div', { class: 'card' }, mark);
   box.append(card);
 
   let when = ruDate(c.start_date);
