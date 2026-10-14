@@ -77,6 +77,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithMessageTextHandler("runs", tgbot.MatchTypeCommandStartOnly, b.onRuns),
 		tgbot.WithMessageTextHandler("dupes", tgbot.MatchTypeCommandStartOnly, b.onDupes),
 		tgbot.WithMessageTextHandler("stats", tgbot.MatchTypeCommandStartOnly, b.onStats),
+		tgbot.WithMessageTextHandler("quality", tgbot.MatchTypeCommandStartOnly, b.onQuality),
 		tgbot.WithCallbackQueryDataHandler("m", tgbot.MatchTypeExact, b.cb(b.onMenu)),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
 		tgbot.WithCallbackQueryDataHandler("s:", tgbot.MatchTypePrefix, b.cb(b.onSettings)),

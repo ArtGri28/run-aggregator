@@ -23,12 +23,6 @@ var uxContracts = []string{
 
 var minScenarios = []int{17, 8, 10, 8, 10, 3}
 
-// pendingScenarios — сценарии контракта, чей план ещё не выполнен (S-56 — 16-04):
-// пока у такого сценария нет теста, он не требуется ни тестом, ни эталоном. Как
-// только тест появился — проверяется наравне с остальными. Номер убирается отсюда
-// вместе с планом, который добавляет тест.
-var pendingScenarios = map[string]bool{"56": true}
-
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")
 	scenarioTestRE     = regexp.MustCompile(`(?m)^func (TestS([0-9]{2})[A-Za-z0-9]*)\(t \*testing\.T\)`)
@@ -39,8 +33,7 @@ var (
 // (Phase 8, Phase 9, Phase 11, Phase 13, Phase 14 и Phase 16) равно множеству
 // тестов TestSxx…; у каждого сценария есть хотя бы один эталон sxx_*, а тестов и
 // эталонов сценариев, которых нет ни в одном контракте, нет. Лишние и
-// отсутствующие сценарии перечисляются в ошибке. Исключение одно —
-// pendingScenarios без теста: их эталон считается сценарием вне контракта.
+// отсутствующие сценарии перечисляются в ошибке.
 func TestContractCoverage(t *testing.T) {
 	all := map[string]string{} // номер сценария → имя теста по контрактам
 	counts := make([]int, len(uxContracts))
@@ -81,11 +74,6 @@ func TestContractCoverage(t *testing.T) {
 				t.Errorf("S-%s: два теста — %s и %s", m[2], prev, m[1])
 			}
 			got[m[2]] = m[1]
-		}
-	}
-	for n := range pendingScenarios {
-		if _, ok := got[n]; !ok {
-			delete(all, n)
 		}
 	}
 	if !reflect.DeepEqual(got, all) {
