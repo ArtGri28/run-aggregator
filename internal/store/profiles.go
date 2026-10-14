@@ -65,7 +65,7 @@ func scanProfile(row pgx.Row) (p Profile, v int, err error) {
 // здесь, до отправки экрана, чтобы «предложить анкету» случилось ровно один
 // раз на пользователя: offered = true только у вызова, который создал строку
 // (D-06). Повторный /start снимает отметку ожидания города (D-10), а любой
-// /start — отметку «жду обращение» в поддержку (D-09, D-10).
+// /start — отметки «жду обращение» в поддержку (D-09, D-10) и «жду ссылку».
 // Это единственное место, где одна транзакция касается и users, и
 // user_profiles; filters_v возвращается для главного меню, фильтры не меняются.
 func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV int, offered bool, err error) {
@@ -80,7 +80,7 @@ func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV i
 		err := tx.db.QueryRow(ctx, ins, tgID).Scan(&profileV)
 		if err == nil {
 			offered = true
-			return tx.dropSupportAwaiting(ctx, tgID, "start user")
+			return tx.dropAwaiting(ctx, tgID, "start user")
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("start user: create profile: %w", err)
@@ -91,7 +91,7 @@ func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV i
 		if err := tx.db.QueryRow(ctx, clear, tgID).Scan(&profileV); err != nil {
 			return fmt.Errorf("start user: clear awaiting: %w", err)
 		}
-		return tx.dropSupportAwaiting(ctx, tgID, "start user")
+		return tx.dropAwaiting(ctx, tgID, "start user")
 	})
 	if err != nil {
 		return 0, 0, false, err
@@ -99,10 +99,18 @@ func (s *Store) StartUser(ctx context.Context, tgID int64) (filtersV, profileV i
 	return filtersV, profileV, offered, nil
 }
 
-// dropSupportAwaiting снимает отметку «жду обращение» (D-10): StartUser и
-// UpdateProfileAt зовут её в своей транзакции, чтобы режимы «жду город» и
-// «жду обращение» не действовали одновременно. Нет отметки — не ошибка; op —
-// имя вызывающей операции для текста ошибки.
+// dropAwaiting снимает отметки «жду обращение» и «жду ссылку» (D-10, Q-7
+// Phase 16): StartUser и UpdateProfileAt зовут её в своей транзакции, чтобы
+// режимы ввода не действовали одновременно.
+func (s *Store) dropAwaiting(ctx context.Context, tgID int64, op string) error {
+	if err := s.dropSupportAwaiting(ctx, tgID, op); err != nil {
+		return err
+	}
+	return s.dropSuggestAwaiting(ctx, tgID, op)
+}
+
+// dropSupportAwaiting снимает отметку «жду обращение». Нет отметки — не
+// ошибка; op — имя вызывающей операции для текста ошибки.
 func (s *Store) dropSupportAwaiting(ctx context.Context, tgID int64, op string) error {
 	if _, err := s.db.Exec(ctx, `DELETE FROM support_awaiting WHERE tg_id = $1`, tgID); err != nil {
 		return fmt.Errorf("%s: clear support awaiting: %w", op, err)
@@ -134,9 +142,9 @@ func (s *Store) PeekProfile(ctx context.Context, tgID int64) (p Profile, v int, 
 // меняют, иначе кнопка, показанная до ввода города, устарела бы от самого
 // ввода. started_at и completed_at ставятся один раз по метке now.
 // Переходы статусов хранилище не решает — их задаёт бот через fn.
-// Итоговый профиль с отметкой города снимает отметку «жду обращение» в
-// поддержку в той же транзакции, даже если запись профиля не понадобилась
-// (D-10); при ErrStaleProfile и ошибке fn отметка поддержки остаётся.
+// Итоговый профиль с отметкой города снимает отметки «жду обращение» в
+// поддержку и «жду ссылку» в той же транзакции, даже если запись профиля не
+// понадобилась (D-10); при ErrStaleProfile и ошибке fn отметки остаются.
 func (s *Store) UpdateProfileAt(ctx context.Context, tgID int64, wantV int, now time.Time, fn func(Profile) (Profile, error)) (Profile, int, error) {
 	var out Profile
 	var v int
@@ -154,7 +162,7 @@ func (s *Store) UpdateProfileAt(ctx context.Context, tgID int64, wantV int, now 
 		}
 		out, v = cur, curV
 		if !next.AwaitingCityUntil.IsZero() {
-			if err := tx.dropSupportAwaiting(ctx, tgID, "update profile"); err != nil {
+			if err := tx.dropAwaiting(ctx, tgID, "update profile"); err != nil {
 				return err
 			}
 		}

@@ -31,10 +31,10 @@ const (
 // эти значения передаёт бот.
 
 // SupportBegin ставит отметку «жду обращение» до expiresAt (повторный вызов
-// заменяет момент) и снимает отметку ожидания города (D-10): два режима ввода
-// не действуют одновременно. profile_v и updated_at не меняются; нет строки
-// профиля — это не ошибка. Порядок блокировок (профиль, затем отметка
-// поддержки) тот же, что у StartUser и UpdateProfileAt.
+// заменяет момент) и снимает отметки ожидания города (D-10) и ссылки (Q-7
+// Phase 16): режимы ввода не действуют одновременно. profile_v и updated_at не
+// меняются; нет строки профиля — это не ошибка. Порядок блокировок (профиль,
+// отметка поддержки, отметка ссылки) тот же, что у StartUser и UpdateProfileAt.
 func (s *Store) SupportBegin(ctx context.Context, tgID int64, expiresAt time.Time) error {
 	return s.InTx(ctx, func(tx *Store) error {
 		const clearCity = `
@@ -49,7 +49,7 @@ func (s *Store) SupportBegin(ctx context.Context, tgID int64, expiresAt time.Tim
 		if _, err := tx.db.Exec(ctx, upsert, tgID, expiresAt); err != nil {
 			return fmt.Errorf("support begin: %w", err)
 		}
-		return nil
+		return tx.dropSuggestAwaiting(ctx, tgID, "support begin")
 	})
 }
 

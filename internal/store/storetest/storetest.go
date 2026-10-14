@@ -52,7 +52,8 @@ func Open(t testing.TB) *store.Store {
 	defer conn.Close(ctx)
 	const q = `TRUNCATE TABLE sources, ingest_runs, source_events, events,
 		event_distances, dedup_candidates, user_profiles, users, heartbeats, source_alerts,
-		support_messages, support_awaiting RESTART IDENTITY CASCADE`
+		support_messages, support_awaiting, error_reports, start_suggestions, suggest_awaiting
+		RESTART IDENTITY CASCADE`
 	if _, err := conn.Exec(ctx, q); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
