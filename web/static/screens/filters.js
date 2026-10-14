@@ -22,7 +22,7 @@ export function loadFilters() {
   try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { saved = {}; }
   const f = { ...DEFAULTS, ...saved };
   f.dist = Array.isArray(f.dist) ? f.dist.map(Number).filter(Number.isInteger) : [];
-  f.periods = Array.isArray(f.periods) ? f.periods.map(String) : [];
+  f.periods = Array.isArray(f.periods) ? f.periods.map(String).filter((p) => p !== 'cm' && p !== 'nm') : [];
   return f;
 }
 
@@ -49,8 +49,6 @@ export function toQuery(f) {
   return q;
 }
 
-const PERIOD_LABEL = { cm: 'этот месяц', nm: 'следующий месяц' };
-
 // parts — подписи активных фильтров по справочникам meta.
 function parts(f, m) {
   const out = [];
@@ -64,7 +62,7 @@ function parts(f, m) {
     if (f.city) out.push(f.cityName || f.city);
   }
   if (f.periods.length) {
-    out.push(f.periods.map((p) => PERIOD_LABEL[p] || (m.months.find((x) => x.code === p) || {}).label || p).join(', '));
+    out.push(f.periods.map((p) => (m.months.find((x) => x.code === p) || {}).label || p).join(', '));
   }
   if (sport && f.dist.length) {
     const b = m.buckets[f.sport] || [];
@@ -216,10 +214,8 @@ export async function render(box) {
     box.append(cityBox);
     drawCity();
 
-    box.append(field('Даты', chips([
-      { value: 'cm', label: 'Этот месяц' }, { value: 'nm', label: 'Следующий месяц' },
-      ...m.months.map((o) => ({ value: o.code, label: o.label })),
-    ], f.periods, true, (v) => update({ periods: v }))));
+    box.append(field('Даты', chips(m.months.map((o) => ({ value: o.code, label: o.label })),
+      f.periods, true, (v) => update({ periods: v }))));
 
     if (f.sport) {
       const buckets = m.buckets[f.sport] || [];

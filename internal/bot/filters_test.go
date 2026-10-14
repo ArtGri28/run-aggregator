@@ -317,7 +317,7 @@ func TestFilterFlow(t *testing.T) {
 		t.Fatal("список пуст: проверка города ничего не проверила")
 	}
 
-	// Дата: «этот» и «следующий» месяц, десять следующих и «все будущие»; «следующий месяц» — октябрь 2026.
+	// Дата: двенадцать месяцев с текущего и «все будущие»; старая кнопка «следующий месяц» — октябрь 2026.
 	c = press(t, b, api, "f:d")
 	months := 0
 	for _, d := range datas(t, c) {
@@ -328,13 +328,11 @@ func TestFilterFlow(t *testing.T) {
 	if strings.Contains(strings.Join(datas(t, c), " "), ":30") {
 		t.Fatalf("f:d: в меню остался пресет «30 дней»: %v", datas(t, c))
 	}
-	for _, want := range []string{"f:w:cm", "f:w:nm", "f:w:-"} {
-		if !strings.Contains(strings.Join(datas(t, c), " "), want) {
-			t.Fatalf("f:d: нет кнопки %s: %v", want, datas(t, c))
-		}
+	if all := strings.Join(datas(t, c), " "); !strings.Contains(all, "f:w:-") || strings.Contains(all, "f:w:cm") || strings.Contains(all, "f:w:nm") {
+		t.Fatalf("f:d: кнопки %v, want «все будущие» без «этот/следующий месяц»", datas(t, c))
 	}
-	if months != 10 {
-		t.Fatalf("f:d: месяцев %d, want 10 (первые два — в верхнем ряду)", months)
+	if months != 12 {
+		t.Fatalf("f:d: месяцев %d, want 12", months)
 	}
 	nm := road
 	nm.From, nm.To = day(2026, 10, 1), day(2026, 10, 31)

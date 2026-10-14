@@ -283,22 +283,22 @@ func TestDatePeriods(t *testing.T) {
 	s, api, b := searchFixture(t)
 	press(t, b, api, "f:t:road")
 
-	c := press(t, b, api, "f:w:nm") // «сегодня» теста — сентябрь: следующий месяц — октябрь
-	if c.Form["text"] != "Выберите даты (можно несколько)" || c.button(t, "✓ 🗓 Следующий месяц") != "f:w:nm" || c.button(t, "✓ 🔮") != "" {
-		t.Fatalf("после f:w:nm: текст %q кнопки %v", c.Form["text"], c.buttons(t))
+	c := press(t, b, api, "f:w:m202610") // «сегодня» теста — сентябрь
+	if c.Form["text"] != "Выберите даты (можно несколько)" || c.button(t, "✓ Октябрь 2026") != "f:w:m202610" || c.button(t, "✓ 🔮") != "" {
+		t.Fatalf("после f:w:m202610: текст %q кнопки %v", c.Form["text"], c.buttons(t))
 	}
 	c = press(t, b, api, "f:w:m202612")
-	if c.button(t, "✓ 🗓 Следующий месяц") == "" || c.button(t, "✓ Декабрь 2026") != "f:w:m202612" {
+	if c.button(t, "✓ Октябрь 2026") == "" || c.button(t, "✓ Декабрь 2026") != "f:w:m202612" {
 		t.Fatalf("две отметки: %v", c.buttons(t))
 	}
 	f, _ := filtersV(t, b)
-	if !reflect.DeepEqual(f.Dates, []string{"nm", "m202612"}) || f.Type != "road" || f.Date != "" {
+	if !reflect.DeepEqual(f.Dates, []string{"m202610", "m202612"}) || f.Type != "road" || f.Date != "" {
 		t.Fatalf("фильтры: %+v", f)
 	}
 
 	// «Назад» сохраняет выбор; в выдаче октябрь и декабрь, ноябрьского трейла и январского забега нет.
 	c = press(t, b, api, "f:s")
-	if !strings.Contains(c.Form["text"], "📅 Дата: Следующий месяц, Декабрь 2026") || showCount(t, c) != 2 {
+	if !strings.Contains(c.Form["text"], "📅 Дата: Октябрь 2026, Декабрь 2026") || showCount(t, c) != 2 {
 		t.Fatalf("сводка: %q, Показать %d", c.Form["text"], showCount(t, c))
 	}
 	_, v := filtersV(t, b)
@@ -306,7 +306,7 @@ func TestDatePeriods(t *testing.T) {
 	if rows := listRows(t, list); len(rows) != 2 || !strings.Contains(rows[0], "Казачья слава") || !strings.Contains(rows[1], "Московский марафон") {
 		t.Errorf("выдача: %q", rows)
 	}
-	if !strings.Contains(list.Form["text"], "⚙️ Фильтры: Следующий месяц, Декабрь 2026 · Шоссе") {
+	if !strings.Contains(list.Form["text"], "⚙️ Фильтры: Октябрь 2026, Декабрь 2026 · Шоссе") {
 		t.Errorf("шапка списка: %q", list.Form["text"])
 	}
 	if got := press(t, b, api, "s:o").Form["text"]; !strings.Contains(got, "Активно фильтров: 2 из 5") {
@@ -314,7 +314,7 @@ func TestDatePeriods(t *testing.T) {
 	}
 
 	// Повторное нажатие снимает отметку.
-	press(t, b, api, "f:w:nm")
+	press(t, b, api, "f:w:m202610")
 	if f, _ := filtersV(t, b); !reflect.DeepEqual(f.Dates, []string{"m202612"}) {
 		t.Errorf("после снятия: %+v", f)
 	}

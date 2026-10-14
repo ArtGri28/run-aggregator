@@ -757,20 +757,16 @@ func check(on bool, label string) string {
 	return label
 }
 
-// dateMenu — «этот» и «следующий» месяц, за ними десять следующих месяцев
-// (первые два уже в верхнем ряду), внизу «все будущие». Периоды отмечаются и
-// снимаются по одному, можно несколько; «все будущие» — отдельный режим: снимает
-// все отметки. Меню остаётся на экране, выбор сохраняется сразу. Пресет
-// «30 дней» в меню не выводится, но в сохранённых фильтрах и старых кнопках
-// действует.
+// dateMenu — двенадцать месяцев с текущего, внизу «все будущие». Периоды
+// отмечаются и снимаются по одному, можно несколько; «все будущие» — отдельный
+// режим: снимает все отметки. Меню остаётся на экране, выбор сохраняется сразу.
+// Пресеты «30 дней», «этот» и «следующий месяц» в меню не выводятся, но в
+// сохранённых фильтрах и старых кнопках действуют.
 func dateMenu(f userFilters, today time.Time) screen {
 	on := func(p string) bool { return slices.Contains(f.Dates, p) }
-	var top row
-	top.add(check(on("cm"), "📅 Этот месяц"), callback{Kind: cbPeriod, Value: "cm"})
-	top.add(check(on("nm"), "🗓 Следующий месяц"), callback{Kind: cbPeriod, Value: "nm"})
-	rows := []row{top}
+	var rows []row
 	var mr row
-	for i, o := range monthOptions(today)[2:] {
+	for i, o := range monthOptions(today) {
 		mr.add(check(on(o.Value), upperFirst(o.Label)), callback{Kind: cbPeriod, Value: o.Value})
 		if i%2 == 1 {
 			rows, mr = append(rows, mr), nil
