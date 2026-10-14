@@ -101,9 +101,11 @@ const (
 	cbFavAdd  // w:a
 	cbFavDel  // w:x
 
-	cbReportOpen   // q:o
-	cbReport       // q:r
-	cbReportCancel // q:x
+	cbReportOpen    // q:o
+	cbReport        // q:r
+	cbReportCancel  // q:x
+	cbSuggest       // q:s
+	cbSuggestCancel // q:c
 )
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
@@ -431,6 +433,10 @@ func parseCallback(data string) (callback, error) {
 		switch {
 		case len(p) == 2 && p[1] == "x":
 			return callback{Kind: cbReportCancel}, nil
+		case len(p) == 2 && p[1] == "s":
+			return callback{Kind: cbSuggest}, nil
+		case len(p) == 2 && p[1] == "c":
+			return callback{Kind: cbSuggestCancel}, nil
 		case len(p) == 3 && p[1] == "o":
 			id, err := num(p[2], 1, math.MaxInt64)
 			return callback{Kind: cbReportOpen, ID: id}, err
@@ -535,6 +541,10 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("q:r:%d:%s", c.ID, c.Value)
 	case cbReportCancel:
 		s = "q:x"
+	case cbSuggest:
+		s = "q:s"
+	case cbSuggestCancel:
+		s = "q:c"
 	default:
 		return "", errCallback
 	}

@@ -59,7 +59,7 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 				b.logger().Warn("countries", "err", err)
 			}
 		}
-		sc = emptyScreen(f, pick)
+		sc = emptyScreen(f, pick, b.suggestRow())
 	} else {
 		page = min(page, (total+pageSize-1)/pageSize)
 		items, err := b.Store.ListEvents(ctx, flt, pageSize, (page-1)*pageSize)

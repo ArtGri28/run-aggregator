@@ -97,8 +97,11 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	}
 	if b.reportsOn() {
 		// Заявкам некуда уйти без группы и без администраторов: строки в карточке нет,
-		// кнопка q: из старого сообщения — «Кнопка устарела» (onDefault).
-		all = append(all, tgbot.WithCallbackQueryDataHandler("q:", tgbot.MatchTypePrefix, b.cb(b.onReport)))
+		// кнопка q: из старого сообщения — «Кнопка устарела» (onDefault), а /suggest —
+		// неизвестная команда.
+		all = append(all,
+			tgbot.WithMessageTextHandler("suggest", tgbot.MatchTypeCommandStartOnly, b.onSuggestCmd),
+			tgbot.WithCallbackQueryDataHandler("q:", tgbot.MatchTypePrefix, b.cb(b.onReport)))
 	}
 	api, err := tgbot.New(cfg.Token, append(all, opts...)...)
 	if err != nil {
@@ -335,7 +338,12 @@ func (b *Bot) onDefault(ctx context.Context, api *tgbot.Bot, u *models.Update) {
 		b.answer(ctx, u.CallbackQuery, staleNotice)
 	case u.Message != nil && u.Message.Text != "":
 		b.onText(ctx, api, u)
-	case u.Message != nil && b.supportChat != 0:
-		b.supportNonText(ctx, u.Message) // сообщение без текста: отказ только в режиме обращения
+	case u.Message != nil:
+		// Сообщение без текста: отказ только в режиме обращения либо ссылки; режимы
+		// взаимоисключающие, поэтому ответит не больше одного.
+		if b.supportChat != 0 {
+			b.supportNonText(ctx, u.Message)
+		}
+		b.suggestNonText(ctx, u.Message)
 	}
 }

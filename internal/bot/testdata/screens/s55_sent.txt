@@ -1,0 +1,11 @@
+method: sendMessage
+parse_mode: HTML
+---
+💡 <b>Предложение старта</b>
+https://example.org/races/autumn-10k
+---
+method: sendMessage
+parse_mode: 
+---
+✅ Передал.
+---

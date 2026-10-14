@@ -92,10 +92,10 @@ func TestEmptyScreenHints(t *testing.T) {
 	_, v := filtersV(t, b)
 	c := press(t, b, api, "p:1:v"+strconv.Itoa(v))
 	if c.Form["text"] != "Ничего не нашлось\n\nПопробуйте снять ограничение:" ||
-		!reflect.DeepEqual(datas(t, c), []string{"f:x:d", "f:k", "f:s"}) || c.button(t, backLabel) != "f:s" {
+		!reflect.DeepEqual(datas(t, c), []string{"f:x:d", "f:k", "q:s", "f:s"}) || c.button(t, backLabel) != "f:s" {
 		t.Errorf("с фильтром: %q %v", c.Form["text"], datas(t, c))
 	}
-	if em := emptyScreen(userFilters{}, false); em.text != "Ничего не нашлось" || len(em.kb.InlineKeyboard) != 1 {
+	if em := emptyScreen(userFilters{}, false, nil); em.text != "Ничего не нашлось" || len(em.kb.InlineKeyboard) != 1 {
 		t.Errorf("без фильтров: %+v", em)
 	}
 }
@@ -160,7 +160,7 @@ func TestEmptyPickCountry(t *testing.T) {
 	_, v := filtersV(t, b)
 	c := press(t, b, api, "p:1:v"+strconv.Itoa(v))
 	if c.Form["text"] != "Ничего не нашлось" || c.button(t, "🌍 Выбрать страну") != "f:k" ||
-		!reflect.DeepEqual(datas(t, c), []string{"f:k", "f:s"}) {
+		!reflect.DeepEqual(datas(t, c), []string{"f:k", "q:s", "f:s"}) {
 		t.Fatalf("BY-only: %q %v", c.Form["text"], datas(t, c))
 	}
 	if m := press(t, b, api, "f:k"); buttonText(t, m, "f:k:BY") != "🇧🇾 Беларусь (1)" {
@@ -187,7 +187,7 @@ func TestEmptyPickCountry(t *testing.T) {
 	}
 
 	// RU+BY, у RU по фильтру 0: кнопка есть; сам emptyScreen — флаг управляет.
-	if em := emptyScreen(userFilters{}, true); len(em.kb.InlineKeyboard) != 2 || em.text != "Ничего не нашлось" {
+	if em := emptyScreen(userFilters{}, true, nil); len(em.kb.InlineKeyboard) != 2 || em.text != "Ничего не нашлось" {
 		t.Errorf("emptyScreen(pick): %+v", em)
 	}
 }

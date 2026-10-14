@@ -423,7 +423,7 @@ func TestEmptyResult(t *testing.T) {
 	if c.Form["text"] != "Ничего не нашлось\n\nПопробуйте снять ограничение:" {
 		t.Fatalf("пустая выдача: текст %q", c.Form["text"])
 	}
-	if got, want := datas(t, c), []string{"f:x:c", "f:x:t", "f:s"}; !reflect.DeepEqual(got, want) {
+	if got, want := datas(t, c), []string{"f:x:c", "f:x:t", "q:s", "f:s"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("пустая выдача: кнопки %v, want %v", got, want)
 	}
 	c = press(t, b, api, "f:x:t")

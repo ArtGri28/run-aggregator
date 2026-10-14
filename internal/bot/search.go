@@ -198,20 +198,20 @@ func (b *Bot) searchResults(ctx context.Context, uf userFilters, text string, v 
 		}
 	}
 	b.logger().Info("text", "city", false, "events", len(found), "cities", len(cities))
-	return searchScreen(text, found[:min(len(found), pageSize)], len(found), cities, v, all, today.Year(), pick), nil
+	return searchScreen(text, found[:min(len(found), pageSize)], len(found), cities, v, all, today.Year(), pick, b.suggestRow()), nil
 }
 
 // searchScreen — результаты запроса: подсказки городов (кнопка выбирает город
 // фильтром) и найденные события (кнопка открывает карточку с возвратом к этим
 // результатам; у небегового события перед названием значок вида спорта);
-// ничего не найдено — предложение открыть каталог. Первая
+// ничего не найдено — предложение открыть каталог и строка suggest (E-1). Первая
 // строка «Запрос «…»» — по ней карточка узнаёт запрос (queryOf). pick —
 // кнопка выбора города или страны; v — версия фильтров для кнопок.
-func searchScreen(query string, items []store.ListItem, total int, cities []store.CityCount, v int, flags bool, year int, pick row) screen {
+func searchScreen(query string, items []store.ListItem, total int, cities []store.CityCount, v int, flags bool, year int, pick, suggest row) screen {
 	q := "«" + html.EscapeString(query) + "»"
 	if total == 0 && len(cities) == 0 {
 		return screen{text: "По запросу " + q + " ничего не нашлось.\nПопробуйте другое слово или откройте каталог.",
-			kb: keyboard(btn("📋 Открыть каталог", callback{Kind: cbPage, Page: 1, V: v}), pick, btn(backLabel, back))}
+			kb: keyboard(btn("📋 Открыть каталог", callback{Kind: cbPage, Page: 1, V: v}), pick, suggest, btn(backLabel, back))}
 	}
 	var lines []string
 	var rows []row

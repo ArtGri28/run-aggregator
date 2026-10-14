@@ -194,7 +194,7 @@ func TestCallbackLength(t *testing.T) {
 		"summary": summaryScreen(f, "Город", math.MaxInt32, math.MaxInt32, true),
 		"list":    listScreen(items, 50000, 10000, math.MaxInt32, true, 2026, ""),
 		"list1":   listScreen(items, 1, 1, 1, false, 2026, ""),
-		"empty":   emptyScreen(f, false),
+		"empty":   emptyScreen(f, false, btn(suggestLabel, callback{Kind: cbSuggest})),
 	} {
 		if sc.kb == nil || len(sc.kb.InlineKeyboard) == 0 {
 			t.Errorf("%s: нет клавиатуры", name)

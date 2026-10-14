@@ -74,9 +74,13 @@ func (b *Bot) reportsOn() bool { return b.supportChat != 0 || len(b.adminIDs) > 
 //   - q:o — R-1 новым сообщением; недоступное и прошедшее — уведомлением;
 //   - q:r — заявка и правка R-1 на итог (R-2…R-6); сбой доставки — R-8
 //     уведомлением, заявка удаляется, R-1 не правится;
-//   - q:x — правка R-1 на R-7.
+//   - q:x — правка R-1 на R-7;
+//   - q:s, q:c — предложение старта (onSuggest).
 func (b *Bot) onReport(ctx context.Context, q *models.CallbackQuery, c callback) string {
-	if c.Kind == cbReportCancel {
+	switch c.Kind {
+	case cbSuggest, cbSuggestCancel:
+		return b.onSuggest(ctx, q, c)
+	case cbReportCancel:
 		b.reportShow(ctx, q, screen{text: reportCancelled})
 		return ""
 	}

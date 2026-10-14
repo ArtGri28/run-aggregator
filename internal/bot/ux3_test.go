@@ -237,7 +237,7 @@ func TestTextSearch(t *testing.T) {
 	if !strings.HasPrefix(c.Form["text"], "По запросу «Атлантида» ничего не нашлось") {
 		t.Errorf("нет совпадений: %q", c.Form["text"])
 	}
-	if got, want := datas(t, c), []string{"p:1:v1", "f:c", "f:s"}; !reflect.DeepEqual(got, want) {
+	if got, want := datas(t, c), []string{"p:1:v1", "f:c", "q:s", "f:s"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("нет совпадений: кнопки %v, want %v", got, want)
 	}
 	if c.button(t, "📋 Открыть каталог") == "" {
