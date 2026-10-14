@@ -1,0 +1,697 @@
+{
+ "events": [
+  {
+   "id": "801463821704163568",
+   "name": "City Trail Абонемент 2026",
+   "sports": [
+    {
+     "code": "trail-running",
+     "name": "Трейл"
+    }
+   ],
+   "start_date": "2025-12-17",
+   "end_date": "2026-11-01",
+   "location": {
+    "id": "4",
+    "country": "RU",
+    "city": "Москва",
+    "latitude": 55.755826,
+    "longitude": 37.6173
+   },
+   "url": "https://myrace.info/events/1640",
+   "activities": [
+    {
+     "id": "801463195389717631",
+     "name": "Абонемент 2026",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2025-12-17",
+     "end_date": "2025-12-17"
+    }
+   ],
+   "updated_at": "2026-08-28T10:15:44.000Z"
+  },
+  {
+   "id": "834766431731117241",
+   "name": "Yerevan Marathon 2026",
+   "sports": [
+    {
+     "code": "running",
+     "name": "Бег"
+    }
+   ],
+   "start_date": "2026-10-17",
+   "end_date": "2026-10-18",
+   "location": {
+    "id": "1303",
+    "city": "Ереван",
+    "latitude": 40.1872023,
+    "longitude": 44.515209
+   },
+   "url": "https://myrace.info/events/1880",
+   "activities": [
+    {
+     "id": "835266124818986238",
+     "name": "42,2 км  (18 октября)",
+     "sport": {
+      "code": "running",
+      "name": "Бег"
+     },
+     "start_date": "2026-10-18",
+     "end_date": "2026-10-18"
+    },
+    {
+     "id": "835266358093606923",
+     "name": "21,1  (18 октября)",
+     "sport": {
+      "code": "running",
+      "name": "Бег"
+     },
+     "start_date": "2026-10-18",
+     "end_date": "2026-10-18"
+    },
+    {
+     "id": "835266571264898069",
+     "name": "12 км (18 октября) ",
+     "sport": {
+      "code": "running",
+      "name": "Бег"
+     },
+     "start_date": "2026-10-18",
+     "end_date": "2026-10-18"
+    },
+    {
+     "id": "835268076512538841",
+     "name": "5 км (17 октября)",
+     "sport": {
+      "code": "running",
+      "name": "Бег"
+     },
+     "start_date": "2026-10-17",
+     "end_date": "2026-10-17"
+    },
+    {
+     "id": "835268662729437191",
+     "name": "1 км - детский забег (17 октября)",
+     "sport": {
+      "code": "running",
+      "name": "Бег"
+     },
+     "start_date": "2026-10-17",
+     "end_date": "2026-10-17"
+    }
+   ],
+   "updated_at": "2026-10-14T04:20:18.000Z"
+  },
+  {
+   "id": "869562175839070418",
+   "name": "КАРСТОВЫЙ трейл 2026",
+   "sports": [
+    {
+     "code": "trail-running",
+     "name": "Трейл"
+    }
+   ],
+   "start_date": "2026-10-24",
+   "end_date": "2026-10-24",
+   "location": {
+    "id": "2590",
+    "country": "RU",
+    "city": "Ишеево",
+    "latitude": 53.619059,
+    "longitude": 56.1264644
+   },
+   "url": "https://myrace.info/events/2072",
+   "activities": [
+    {
+     "id": "869564052001567820",
+     "name": "Автономная ультра ~66 km",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "869565103308059892",
+     "name": "Лонг ~23 km",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "869565794781016314",
+     "name": "Лайт ~12 km",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "869566410869761245",
+     "name": "Cпринт ~6 km",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "869566958767499505",
+     "name": "Детский забег",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    }
+   ],
+   "updated_at": "2026-10-14T05:52:37.000Z"
+  },
+  {
+   "id": "888337446180285561",
+   "name": "МиГ ninja",
+   "sports": [
+    {
+     "code": "running-with-obstacles",
+     "name": "Гонки с препятствиями"
+    }
+   ],
+   "start_date": "2026-10-24",
+   "end_date": "2026-10-25",
+   "location": {
+    "id": "214",
+    "country": "RU",
+    "city": "Жуковский",
+    "latitude": 55.5974912,
+    "longitude": 38.1132562
+   },
+   "url": "https://myrace.info/events/2155",
+   "activities": [
+    {
+     "id": "888338531640991905",
+     "name": "Девочки 6-7 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888338714890133522",
+     "name": "Мальчики 6-7 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888338809689795711",
+     "name": "Девочки 8-9 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888338922613041329",
+     "name": "Мальчики 8-9 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888339095951043613",
+     "name": "Девочки 10-11 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888339225148187775",
+     "name": "Мальчики 10-11 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888339382346507484",
+     "name": "Девочки 12-13 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888339554212310121",
+     "name": "Мальчики 12-13 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888339712966714395",
+     "name": "Девушки 14-17 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888339875940590830",
+     "name": "Юноши 14-17 лет",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888340023999508579",
+     "name": "Женщины 18+",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    },
+    {
+     "id": "888340140471150806",
+     "name": "Мужчины 18+",
+     "sport": {
+      "code": "running-with-obstacles",
+      "name": "Гонки с препятствиями"
+     },
+     "start_date": "2026-10-24",
+     "end_date": "2026-10-24"
+    }
+   ],
+   "updated_at": "2026-10-13T13:16:27.000Z"
+  },
+  {
+   "id": "893497545085464746",
+   "name": "Осенний Акватлон -  III этап Кубка Акватлона ",
+   "sports": [
+    {
+     "code": "aquathlon",
+     "name": "Акватлон"
+    }
+   ],
+   "start_date": "2026-11-01",
+   "end_date": "2026-11-01",
+   "location": {
+    "id": "24",
+    "country": "RU",
+    "city": "Екатеринбург",
+    "latitude": 56.8430993,
+    "longitude": 60.64540859999999
+   },
+   "url": "https://myrace.info/events/2179",
+   "activities": [
+    {
+     "id": "893500201577275529",
+     "name": "Акватлон",
+     "sport": {
+      "code": "aquathlon",
+      "name": "Акватлон"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    }
+   ],
+   "updated_at": "2026-10-13T12:51:11.000Z"
+  },
+  {
+   "id": "897756985691268226",
+   "name": "Ночная Вологда",
+   "sports": [
+    {
+     "code": "running",
+     "name": "Бег"
+    }
+   ],
+   "start_date": "2026-10-25",
+   "end_date": "2026-10-25",
+   "location": {
+    "id": "294",
+    "country": "RU",
+    "city": "Вологда",
+    "latitude": 59.21806649999999,
+    "longitude": 39.8978052
+   },
+   "url": "https://myrace.info/events/2185",
+   "activities": [
+    {
+     "id": "897764010286428191",
+     "name": "Ночной забег",
+     "sport": {
+      "code": "running",
+      "name": "Бег"
+     },
+     "start_date": "2026-10-25",
+     "end_date": "2026-10-25"
+    }
+   ],
+   "updated_at": "2026-10-13T08:33:56.000Z"
+  },
+  {
+   "id": "801463821951627510",
+   "name": "City Trail 6 X-Race",
+   "sports": [
+    {
+     "code": "cycling",
+     "name": "Велоспорт"
+    },
+    {
+     "code": "trail-running",
+     "name": "Трейл"
+    }
+   ],
+   "start_date": "2026-11-01",
+   "end_date": "2026-11-01",
+   "location": {
+    "id": "4",
+    "country": "RU",
+    "city": "Москва",
+    "latitude": 55.755826,
+    "longitude": 37.6173
+   },
+   "url": "https://myrace.info/events/1654",
+   "activities": [
+    {
+     "id": "812276365641430233",
+     "name": "X-Bike Short",
+     "sport": {
+      "code": "cycling",
+      "name": "Велоспорт"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "812276460608876691",
+     "name": "X-Bike Long",
+     "sport": {
+      "code": "cycling",
+      "name": "Велоспорт"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "801463195918199950",
+     "name": "Basic",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "801463195926588562",
+     "name": "Medium",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "801463195939171427",
+     "name": "Hard",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "801463195951754249",
+     "name": "Boss",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "807616087188356349",
+     "name": "Детский билет",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "807616372744973486",
+     "name": "Подростковый билет",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    }
+   ],
+   "updated_at": "2026-10-13T20:42:36.000Z"
+  },
+  {
+   "id": "862637914956279961",
+   "name": "19-й альпинистский горный кросс «неМартовский заяц» - 2026",
+   "sports": [
+    {
+     "code": "skysnow",
+     "name": "Скайсноу"
+    }
+   ],
+   "start_date": "2026-11-04",
+   "end_date": "2026-11-04",
+   "location": {
+    "id": "32",
+    "country": "RU",
+    "city": "Санкт-Петербург",
+    "latitude": 59.9310584,
+    "longitude": 30.3609097
+   },
+   "url": "https://myrace.info/events/2035",
+   "activities": [
+    {
+     "id": "862642504154018017",
+     "name": "\"Морковка\" 6,5км (1 круг)",
+     "sport": {
+      "code": "skysnow",
+      "name": "Скайсноу"
+     },
+     "start_date": "2026-11-04",
+     "end_date": "2026-11-04"
+    },
+    {
+     "id": "862643814064516171",
+     "name": "\"Классика\" 19,5км (3 круга)",
+     "sport": {
+      "code": "skysnow",
+      "name": "Скайсноу"
+     },
+     "start_date": "2026-11-04",
+     "end_date": "2026-11-04"
+    }
+   ],
+   "updated_at": "2026-10-14T07:01:49.000Z"
+  },
+  {
+   "id": "860136636388782141",
+   "name": "Arkhyz Wild Trail 2027",
+   "sports": [
+    {
+     "code": "trail-running",
+     "name": "Трейл"
+    }
+   ],
+   "start_date": "2027-06-25",
+   "end_date": "2027-06-27",
+   "location": {
+    "id": "574",
+    "country": "RU",
+    "city": "Архыз",
+    "latitude": 43.5631805,
+    "longitude": 41.28128969999999
+   },
+   "url": "https://myrace.info/events/2018",
+   "activities": [
+    {
+     "id": "860466817984934066",
+     "name": "ARKHYZ 15",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-27",
+     "end_date": "2027-06-27"
+    },
+    {
+     "id": "860467888199363797",
+     "name": "SMIRNOVA 19",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-26"
+    },
+    {
+     "id": "860468167032500347",
+     "name": "GABULCHAT 30",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-26"
+    },
+    {
+     "id": "860468693971284125",
+     "name": "ABISHIRA 40",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-27",
+     "end_date": "2027-06-27"
+    },
+    {
+     "id": "860469427144027143",
+     "name": "AYULU 50",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-26"
+    },
+    {
+     "id": "860469620279128259",
+     "name": "ZAGEDAN 65",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-27",
+     "end_date": "2027-06-27"
+    },
+    {
+     "id": "860470920442080360",
+     "name": "ROMANTIC 34 (19+15)",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-27"
+    },
+    {
+     "id": "860471293521227889",
+     "name": "PEAK 70 (30+40)",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-27"
+    },
+    {
+     "id": "860471527202664506",
+     "name": "LAKE 115 (50+65)",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-27"
+    },
+    {
+     "id": "860472294894529539",
+     "name": "ДЕТСКИЙ БИЛЕТ",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-26"
+    },
+    {
+     "id": "860472593705119952",
+     "name": "БИЛЕТ ПОДРОСТКА",
+     "sport": {
+      "code": "trail-running",
+      "name": "Трейл"
+     },
+     "start_date": "2027-06-26",
+     "end_date": "2027-06-26"
+    }
+   ],
+   "updated_at": "2026-10-13T16:16:33.000Z"
+  },
+  {
+   "id": "897781630058423522",
+   "name": "Открытое первенство города Ставрополя по бэкъярду",
+   "sports": [
+    {
+     "code": "running",
+     "name": "Бег"
+    }
+   ],
+   "start_date": "2027-04-17",
+   "end_date": "2027-04-20",
+   "location": {
+    "id": "133",
+    "country": "RU",
+    "city": "Ставрополь",
+    "latitude": 45.0390116,
+    "longitude": 41.9631954
+   },
+   "url": "https://myrace.info/events/2186",
+   "activities": [],
+   "updated_at": "2026-10-13T19:20:12.000Z"
+  }
+ ],
+ "next_page_token": "cGFnZTI"
+}

@@ -31,6 +31,7 @@ import (
 	"aggregator/internal/ingest"
 	"aggregator/internal/ingest/sources/heroleague"
 	"aggregator/internal/ingest/sources/marathonec"
+	"aggregator/internal/ingest/sources/myrace"
 	"aggregator/internal/ingest/sources/probeg"
 	"aggregator/internal/ingest/sources/tristyle"
 	"aggregator/internal/store"
@@ -204,8 +205,14 @@ func openStore(ctx context.Context) (*store.Store, error) {
 // не импортирует. f — сетевой загрузчик (боту не нужен: nil).
 // Адаптеры klbamatar и runin (internal/ingest/sources) написаны, но не
 // зарегистрированы: на 2026-10-04 они дают только дубли ПроБЕГа.
+// MyRace подключается, только если задан MYRACE_TOKEN (Phase 17, D-07): токен
+// партнёра уходит только в заголовок запроса.
 func newSources(f *ingest.Fetcher) []ingest.Source {
-	return []ingest.Source{marathonec.New(f), probeg.New(f), heroleague.New(f), tristyle.New(f)}
+	src := []ingest.Source{marathonec.New(f), probeg.New(f), heroleague.New(f), tristyle.New(f)}
+	if token := strings.TrimSpace(os.Getenv("MYRACE_TOKEN")); token != "" {
+		src = append(src, myrace.New(f, token))
+	}
+	return src
 }
 
 // newRunner собирает Runner из настроек наблюдения и дедупликации. Worker и

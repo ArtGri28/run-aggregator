@@ -47,6 +47,7 @@ x-app-env: &app-env
   DEDUP_DISTANCE_TOL_M: ${DEDUP_DISTANCE_TOL_M:-}
   DEDUP_SOURCE_PRIORITY: ${DEDUP_SOURCE_PRIORITY:-}
   DEDUP_DIGEST_AT: ${DEDUP_DIGEST_AT:-}
+  MYRACE_TOKEN: ${MYRACE_TOKEN:-}
 
 x-app: &app
   image: aggregator:${IMAGE_TAG:?задайте IMAGE_TAG в .env}

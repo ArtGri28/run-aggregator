@@ -47,6 +47,7 @@ func TestWorkerDedupConfigFirst(t *testing.T) {
 
 // Боту сетевой загрузчик не нужен: источники строятся с nil и Policy не ходит в сеть.
 func TestNewSources(t *testing.T) {
+	t.Setenv("MYRACE_TOKEN", "")
 	codes := map[string]ingest.Policy{}
 	for _, s := range newSources(nil) {
 		codes[s.Code()] = s.Policy()
@@ -62,6 +63,11 @@ func TestNewSources(t *testing.T) {
 	}
 	if p := codes["probeg"]; p.CountryFallback != normalize.NoFallback {
 		t.Fatalf("probeg: Policy = %+v, want NoFallback (D-01)", p)
+	}
+	// MyRace — только с токеном (Phase 17, D-07).
+	t.Setenv("MYRACE_TOKEN", " test-token ")
+	if src := newSources(nil); len(src) != 5 || src[4].Code() != "myrace" {
+		t.Fatalf("с MYRACE_TOKEN: %d источников", len(src))
 	}
 }
 

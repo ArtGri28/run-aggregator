@@ -160,6 +160,33 @@ func TestFetchNoRetry4xx(t *testing.T) {
 	}
 }
 
+// GetAuth: заголовок доходит до сервера, Accept — JSON; 401 без повтора, и
+// значение заголовка не попадает ни в ошибку, ни в RawDoc.
+func TestFetchAuth(t *testing.T) {
+	const auth = "Bearer secret-test-value"
+	var gotAuth, gotAccept string
+	s, n := server(t, func(i int, w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotAccept = r.Header.Get("Authorization"), r.Header.Get("Accept")
+		if i > 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	})
+	f, _ := testFetcher(DefaultFetchConfig())
+	doc, err := f.GetAuth(context.Background(), s.URL, 0, auth)
+	if err != nil || gotAuth != auth || gotAccept != "application/json" || strings.Contains(doc.URL, "secret") {
+		t.Fatalf("doc=%+v err=%v auth=%q accept=%q", doc, err, gotAuth, gotAccept)
+	}
+	_, err = f.GetAuth(context.Background(), s.URL, 0, auth)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 401") || strings.Contains(err.Error(), "secret") || n.Load() != 2 {
+		t.Fatalf("401: err = %v, requests = %d", err, n.Load())
+	}
+	if _, err := f.Get(context.Background(), s.URL, 0); gotAuth != "" || err == nil {
+		t.Fatalf("Get без ключа отправил Authorization %q", gotAuth)
+	}
+}
+
 func TestFetchRetryAfterTooLong(t *testing.T) {
 	s, n := server(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Retry-After", "600")

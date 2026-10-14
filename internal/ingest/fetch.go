@@ -161,6 +161,13 @@ func retryAfter(h http.Header, now time.Time) (time.Duration, bool) {
 // minInterval (0 → HostMinInterval) от конца предыдущего запроса к хосту.
 // RawDoc.URL — запрошенный адрес (не адрес после редиректа).
 func (f *Fetcher) Get(ctx context.Context, rawURL string, minInterval time.Duration) (RawDoc, error) {
+	return f.GetAuth(ctx, rawURL, minInterval, "")
+}
+
+// GetAuth — Get с заголовком Authorization (непустой auth) и Accept JSON:
+// для API, которые выдают ключ. Значение auth не попадает ни в RawDoc, ни в
+// тексты ошибок.
+func (f *Fetcher) GetAuth(ctx context.Context, rawURL string, minInterval time.Duration, auth string) (RawDoc, error) {
 	if f.cfg.UserAgent == "" {
 		return RawDoc{}, errors.New("fetch: User-Agent не задан (нужен OWNER_CONTACT)")
 	}
@@ -173,7 +180,7 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string, minInterval time.Durat
 	}
 	var last error
 	for attempt := 1; attempt <= f.cfg.Attempts; attempt++ {
-		doc, err := f.once(ctx, u, minInterval)
+		doc, err := f.once(ctx, u, minInterval, auth)
 		if err == nil {
 			return doc, nil
 		}
@@ -194,7 +201,7 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string, minInterval time.Durat
 }
 
 // once — одна попытка под затвором хоста.
-func (f *Fetcher) once(ctx context.Context, u *url.URL, minInterval time.Duration) (RawDoc, error) {
+func (f *Fetcher) once(ctx context.Context, u *url.URL, minInterval time.Duration, auth string) (RawDoc, error) {
 	g := f.gate(u.Host)
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -211,6 +218,10 @@ func (f *Fetcher) once(ctx context.Context, u *url.URL, minInterval time.Duratio
 	}
 	req.Header.Set("User-Agent", f.cfg.UserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+		req.Header.Set("Accept", "application/json")
+	}
 	resp, err := f.client.Do(req)
 	switch {
 	case errors.Is(err, errRedirect):
