@@ -1,30 +1,31 @@
-/* Тема «Где старт?» всегда тёмно-зелёная (Q-D1): лесной фон с осветлением
-   сверху, карточки чуть светлее фона, салатовый акцент. --accent — заливка,
+/* Тема «Где старт?» всегда тёмная: сине-графитовый фон с осветлением
+   сверху (решение владельца 2026-10-14 вместо зелёного), карточки чуть
+   светлее фона, лаймовый акцент. --accent — заливка,
    --accent-ink — акцент как цвет текста и значков. Узкий экран — одна
    колонка, широкий — список в две колонки и плитки в ряд. */
 :root {
-  --bg: #0b1a13;
-  --bg-top: #173a2a;
-  --card: #11251b;
-  --card-2: #193326;
+  --bg: #0b131b;
+  --bg-top: #1a2c3d;
+  --card: #121d28;
+  --card-2: #1b2836;
   --border: rgba(255, 255, 255, .1);
   --text: #ffffff;
-  --hint: #a3bcae;
-  --link: #b6f24a;
-  --accent: #b6f24a;
-  --accent-ink: #b6f24a;
-  --accent-text: #0b1a13;
-  --accent-dim: #21401f;
-  --coral: #ff6b6b;
-  --danger: #ff9a8f;
+  --hint: #93a6b8;
+  --link: #c8ff5a;
+  --accent: #c8ff5a;
+  --accent-ink: #c8ff5a;
+  --accent-text: #0b131b;
+  --accent-dim: #1d3320;
+  --coral: #ff5d5d;
+  --danger: #ff8a80;
   --ski: #8fd3ff;
-  --ski-dim: #163447;
-  --plate: #f1f6ee;
-  --plate-text: #0b1a13;
-  --plate-hint: #4d6357;
-  --hero-fallback: linear-gradient(160deg, #173a2a 0, #1f4a2c 50%, #3d5f23 100%);
+  --ski-dim: #17304a;
+  --plate: #f2f5f7;
+  --plate-text: #0b131b;
+  --plate-hint: #566675;
+  --hero-fallback: linear-gradient(135deg, #1b3147 0, #1f4034 55%, #4d6a2a 100%);
   --hero-pos: center 40%;
-  --nav-bg: rgba(17, 37, 27, .94);
+  --nav-bg: rgba(18, 29, 40, .94);
   --tap: 44px;
   --nav: 64px;
   color-scheme: dark;
@@ -188,17 +189,17 @@ span.pill { cursor: default; }
   padding: 16px;
   border-radius: 0 0 24px 24px;
   background:
-    linear-gradient(180deg, rgba(11, 26, 19, .35) 0, rgba(11, 26, 19, .7) 45%, rgba(11, 26, 19, .92) 100%),
+    linear-gradient(180deg, rgba(11, 19, 27, .35) 0, rgba(11, 19, 27, .7) 45%, rgba(11, 19, 27, .92) 100%),
     url("/hero.webp") var(--hero-pos) / cover no-repeat,
     var(--hero-fallback);
   background-color: var(--bg);
 }
 .hero .eyebrow { font-size: 11px; }
 .hero h1 { max-width: 14em; font-size: 24px; }
-.hero .sub { max-width: 30em; color: #d6e4da; font-size: 14px; }
+.hero .sub { max-width: 30em; color: #d5dee6; font-size: 14px; }
 .hero .search { max-width: 520px; }
 .hero .search input, .hero .search .btn { min-height: 48px; }
-.hero .search input { border-color: rgba(255, 255, 255, .18); background: rgba(17, 37, 27, .85); }
+.hero .search input { border-color: rgba(255, 255, 255, .18); background: rgba(18, 29, 40, .85); }
 
 /* Круглые кнопки видов спорта (главная) */
 .chips.sports { flex-wrap: nowrap; gap: 12px; overflow-x: auto; }
@@ -395,7 +396,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .ev-hero > * { position: relative; }
 .ev-hero .stamp { padding: 4px 10px; border-radius: 10px; background: var(--plate); color: var(--plate-text); font-size: 14px; font-weight: 800; text-transform: uppercase; }
 .ev-hero h2 { font-size: 22px; font-weight: 800; color: #ffffff; overflow-wrap: anywhere; }
-.ev-hero .kind { margin-top: 4px; color: #d6e4da; font-size: 14px; }
+.ev-hero .kind { margin-top: 4px; color: #d5dee6; font-size: 14px; }
 .card .fav { color: var(--coral); font-size: 14px; font-weight: 600; }
 
 /* Карточка события и профиль */
