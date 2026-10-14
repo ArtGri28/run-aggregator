@@ -59,3 +59,30 @@ ROLLOUT DONE: 2026-10-10
 «favorites=0|users=0, outbox пусто, меню новое»
 
 Образ `5ebde6c49d95` (прежний `391b9b0fc6bc`), миграция `00010` применена; свежая копия сделана за 8 секунд до deploy; `events_merged=104` и автослияние без изменений; таблицы избранного и очереди пусты.
+
+## Проверка после первых прогонов (2026-10-14)
+
+Лог `p14-deploy-verify.log` (имя дал владелец вместо `p14-after-runs-verify.log`); запросы — в root-консоли, вывод передан владельцем.
+
+- `DEPLOY VERIFY OK`; бот и воркер на `5ebde6c49d95`, `healthy` четвёртые сутки; порт PostgreSQL не опубликован; права и владельцы — OK; `source_alerts=0`.
+- `events_listed=631` (на выкате 559): прирост — прогон «Лиги Героев» 164 с `created:13`, принятый владельцем кнопкой 2026-10-12, и новые записи источников. `events_merged=106`, `dedup_candidates=pending:0|confirmed:106|rejected:8|fresh:0`: два слияния — решения владельца из очереди (пара 160 — 2026-10-13). Автослияние выключено в боте и воркере, `would_auto:0`.
+- Ошибки `getUpdates` `502 Bad Gateway` и таймауты 2026-10-12 и 2026-10-14 около 01:11 UTC — сбой на стороне Telegram; бот переподключился сам. Токен в логе скрыт.
+- `favorites=0|users=0`, строк `outbox=` нет; напоминаний и сообщений об изменениях не было (владелец).
+
+run_counts=heroleague|180|ok|created:0|changed:0|unchanged:16
+run_counts=heroleague|184|ok|created:0|changed:0|unchanged:16
+run_counts=heroleague|188|ok|created:0|changed:0|unchanged:16
+run_counts=marathonec|179|ok|created:0|changed:0|unchanged:95
+run_counts=marathonec|183|ok|created:0|changed:0|unchanged:95
+run_counts=marathonec|187|ok|created:0|changed:0|unchanged:95
+run_counts=probeg|181|ok|created:1|changed:0|unchanged:360
+run_counts=probeg|185|ok|created:2|changed:2|unchanged:359
+run_counts=probeg|189|ok|created:0|changed:0|unchanged:363
+run_counts=tristyle|178|ok|created:1|changed:0|unchanged:9
+run_counts=tristyle|182|ok|created:0|changed:0|unchanged:10
+run_counts=tristyle|186|ok|created:0|changed:0|unchanged:10
+
+PRODUCTION CHECK: 2026-10-14 (все четыре источника — по три прогона `ok` новым кодом; `created` и `changed` — ноль либо единицы, как до выката; автослияние выключено; очередь сообщений пуста)
+«favorites=0|users=0, outbox пусто, напоминаний не было»
+
+Не закрыто: напоминание и сообщение об изменении в production не проверены — избранного нет ни у кого (`favorites=0`). `REMINDER CHECK:` — после первого избранного старта с датой не ближе восьми дней.
