@@ -7,13 +7,17 @@ import (
 	"io"
 	"math"
 	"math/rand/v2"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // FetchConfig — параметры надёжности загрузки (MVP.md §5.3); значения
@@ -254,7 +258,27 @@ func (f *Fetcher) once(ctx context.Context, u *url.URL, minInterval time.Duratio
 		return RawDoc{}, fmt.Errorf("ответ больше %d байт", f.cfg.MaxBytes)
 	}
 	if !utf8.Valid(body) {
-		return RawDoc{}, errors.New("тело не UTF-8")
+		if !windows1251(resp.Header.Get("Content-Type")) {
+			return RawDoc{}, errors.New("тело не UTF-8")
+		}
+		if body, err = charmap.Windows1251.NewDecoder().Bytes(body); err != nil {
+			return RawDoc{}, fmt.Errorf("перекодирование windows-1251: %w", err)
+		}
 	}
 	return RawDoc{URL: u.String(), Body: body, FetchedAt: f.now()}, nil
+}
+
+// windows1251 — сервер объявил кодировку windows-1251 в Content-Type (O-time:
+// «charset=cp-1251»). Тело в ней перекодируется в UTF-8; другие кодировки,
+// кроме UTF-8, — ошибка, как раньше.
+func windows1251(contentType string) bool {
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(params["charset"]) {
+	case "windows-1251", "cp-1251", "cp1251":
+		return true
+	}
+	return false
 }

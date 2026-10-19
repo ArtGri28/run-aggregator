@@ -75,6 +75,38 @@ func TestParseEdge(t *testing.T) {
 	}
 }
 
+// Полный путь: сервер отдаёт сохранённую страницу в windows-1251 с
+// «charset=cp-1251», как O-time; загрузчик перекодирует, разбор даёт те же
+// записи, что из файла.
+func TestFetchParseWindows1251(t *testing.T) {
+	body, err := os.ReadFile("testdata/calendar.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=cp-1251")
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+	cfg := ingest.DefaultFetchConfig()
+	cfg.UserAgent, cfg.Attempts = "test", 1
+	s := New(ingest.NewFetcher(cfg))
+	s.url = srv.URL + "/calendar"
+	docs, err := s.Fetch(context.Background())
+	if err != nil || len(docs) != 1 {
+		t.Fatalf("Fetch: %d документов, %v", len(docs), err)
+	}
+	docs[0].FetchedAt = fixtureNow
+	got, err := Parse(docs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Parse(ingest.RawDoc{Body: body, FetchedAt: fixtureNow})
+	if err != nil || len(got) != 47 || !reflect.DeepEqual(got, want) {
+		t.Fatalf("разбор загруженной страницы: %d записей, %v; want те же 47, что из файла", len(got), err)
+	}
+}
+
 func TestFetch(t *testing.T) {
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

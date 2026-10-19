@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -94,9 +95,14 @@ func (s *Source) Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) { return
 //
 // Нет ни одного дня — ingest.ErrStructureNotFound.
 func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
-	body, err := charmap.Windows1251.NewDecoder().Bytes(doc.Body)
-	if err != nil {
-		return nil, fmt.Errorf("кодировка windows-1251: %w", err)
+	// Загрузчик перекодирует страницу в UTF-8 по заголовку сервера; тело не в
+	// UTF-8 (сохранённая страница) перекодируется здесь.
+	body := doc.Body
+	if !utf8.Valid(body) {
+		var err error
+		if body, err = charmap.Windows1251.NewDecoder().Bytes(body); err != nil {
+			return nil, fmt.Errorf("кодировка windows-1251: %w", err)
+		}
 	}
 	root, err := html.Parse(bytes.NewReader(body))
 	if err != nil {

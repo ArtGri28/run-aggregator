@@ -250,6 +250,26 @@ func TestFetchNonUTF8(t *testing.T) {
 	}
 }
 
+// Тело в windows-1251 с этой кодировкой в Content-Type перекодируется в UTF-8;
+// с другой кодировкой или без неё — ошибка, как раньше.
+func TestFetchWindows1251(t *testing.T) {
+	ct := "text/html; charset=cp-1251"
+	s, _ := server(t, func(_ int, w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", ct)
+		_, _ = w.Write([]byte{0xcc, 0xee, 0xf1, 0xea, 0xe2, 0xe0}) // «Москва»
+	})
+	f, _ := testFetcher(DefaultFetchConfig())
+	doc, err := f.Get(context.Background(), s.URL, 0)
+	if err != nil || string(doc.Body) != "Москва" {
+		t.Fatalf("Get = %q, %v; want «Москва»", doc.Body, err)
+	}
+	for _, ct = range []string{"text/html; charset=koi8-r", "text/html", "не тип"} {
+		if _, err := f.Get(context.Background(), s.URL, 0); err == nil || !strings.Contains(err.Error(), "UTF-8") {
+			t.Errorf("%q: err = %v, want UTF-8 error", ct, err)
+		}
+	}
+}
+
 func TestFetchHostGate(t *testing.T) {
 	s, _ := server(t, func(_ int, w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	f, c := testFetcher(DefaultFetchConfig())
