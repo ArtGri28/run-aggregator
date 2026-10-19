@@ -18,6 +18,7 @@ import (
 
 	"aggregator/internal/event"
 	"aggregator/internal/ingest"
+	"aggregator/internal/normalize"
 )
 
 const (
@@ -55,25 +56,6 @@ var (
 	pageMarkRe = regexp.MustCompile(`\[[^\]]*\]`)
 )
 
-// abroad — страны, которыми может кончаться место заплыва или велостарта вне
-// Беларуси: список отфильтрован по Беларуси, но зарубежные старты в него
-// попадают (testdata/README.md).
-//
-// Упрощение: страна, которой нет в списке, остаётся Беларусью. Точнее — когда
-// источник даст поле страны.
-var abroad = map[string]bool{
-	"россия": true, "украина": true, "польша": true, "литва": true, "латвия": true, "эстония": true,
-	"грузия": true, "армения": true, "азербайджан": true, "казахстан": true, "узбекистан": true,
-	"кыргызстан": true, "киргизия": true, "таджикистан": true, "турция": true, "египет": true,
-	"оаэ": true, "таиланд": true, "тайланд": true, "вьетнам": true, "индонезия": true, "китай": true,
-	"черногория": true, "сербия": true, "хорватия": true, "словения": true, "италия": true,
-	"франция": true, "испания": true, "португалия": true, "греция": true, "кипр": true, "мальта": true,
-	"германия": true, "австрия": true, "швейцария": true, "чехия": true, "словакия": true,
-	"венгрия": true, "болгария": true, "румыния": true, "финляндия": true, "швеция": true,
-	"норвегия": true, "дания": true, "нидерланды": true, "бельгия": true, "великобритания": true,
-	"израиль": true, "абхазия": true, "мальдивы": true, "шри-ланка": true,
-}
-
 // Parse разбирает один документ прогона. Чистая функция: без сети, файлов
 // и часов.
 //   - Страница списка записей не даёт; без блока competitions-page —
@@ -95,7 +77,7 @@ var abroad = map[string]bool{
 //     пометки о дате в нём ещё нет; дисциплина — у лыж по слову в названии
 //     (skiLabel), у плавания и велоспорта — подпись sportLabel для
 //     normalize.SportType. Заплыв или велостарт, место которого кончается
-//     зарубежной страной (abroad), записи не даёт.
+//     зарубежной страной (isAbroad), записи не даёт.
 func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	u, err := url.Parse(doc.URL)
 	if err != nil {
@@ -149,10 +131,12 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	return []ingest.SourceEvent{rec}, nil
 }
 
-// isAbroad — место кончается зарубежной страной: «Стамбул, Турция».
+// isAbroad — место кончается зарубежной страной: «Стамбул, Турция». Список
+// отфильтрован по Беларуси, но зарубежные старты в него попадают
+// (testdata/README.md).
 func isAbroad(loc string) bool {
 	parts := strings.Split(loc, ",")
-	return abroad[strings.ToLower(strings.TrimSpace(parts[len(parts)-1]))]
+	return normalize.ForeignCountry(parts[len(parts)-1])
 }
 
 // sportLabel — подпись для normalize.SportType: название и отметка в

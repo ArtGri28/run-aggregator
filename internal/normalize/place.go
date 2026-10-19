@@ -193,3 +193,26 @@ func countryIn(explicit string, p CountryPolicy, allowed map[string]bool) (code 
 func collapseSpaces(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// foreignCountries — названия стран, кроме Беларуси, в нижнем регистре: ими
+// источники со свободной строкой места помечают зарубежные старты.
+//
+// Упрощение: страны, которой нет в списке, ForeignCountry не узнаёт. Точнее —
+// когда источник даст поле страны.
+var foreignCountries = map[string]bool{
+	"россия": true, "украина": true, "польша": true, "литва": true, "латвия": true, "эстония": true,
+	"грузия": true, "армения": true, "азербайджан": true, "казахстан": true, "узбекистан": true,
+	"кыргызстан": true, "киргизия": true, "таджикистан": true, "турция": true, "египет": true,
+	"оаэ": true, "таиланд": true, "тайланд": true, "вьетнам": true, "индонезия": true, "китай": true,
+	"черногория": true, "сербия": true, "хорватия": true, "словения": true, "италия": true,
+	"франция": true, "испания": true, "португалия": true, "греция": true, "кипр": true, "мальта": true,
+	"германия": true, "австрия": true, "швейцария": true, "чехия": true, "словакия": true,
+	"венгрия": true, "болгария": true, "румыния": true, "финляндия": true, "швеция": true,
+	"норвегия": true, "дания": true, "нидерланды": true, "бельгия": true, "великобритания": true,
+	"израиль": true, "абхазия": true, "мальдивы": true, "шри-ланка": true,
+}
+
+// ForeignCountry — name — название страны, кроме Беларуси («Турция», «Россия»).
+func ForeignCountry(name string) bool {
+	return foreignCountries[strings.ToLower(strings.TrimSpace(name))]
+}
