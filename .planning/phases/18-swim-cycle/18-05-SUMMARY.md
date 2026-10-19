@@ -1,7 +1,7 @@
 ---
 phase: 18-swim-cycle
 plan: 05
-status: in-progress
+status: rolled-out
 requirements-completed: []
 ---
 
@@ -26,3 +26,27 @@ requirements-completed: []
 Причина: загрузчик (`ingest.Fetcher`) отвергал любое тело не в UTF-8, а O-time отдаёт windows-1251 (`Content-Type: text/html; charset=cp-1251`). Тест адаптера разбирал сохранённую страницу, а тест загрузки шёл на заглушке в UTF-8 — сочетание не проверялось. В каталог ничего не записано.
 
 Исправление (по разрешению владельца 2026-10-19): загрузчик перекодирует тело в UTF-8, если сервер объявил windows-1251 (`windows-1251`, `cp-1251`, `cp1251`); остальные кодировки — ошибка, как раньше. Адаптер O-time перекодирует только тело не в UTF-8 (сохранённую страницу). Тесты: `TestFetchWindows1251`, `TestFetchParseWindows1251` — загрузка сохранённой страницы через тестовый сервер с заголовком O-time и разбор, те же 47 записей. Полный прогон: 550 PASS, 0 FAIL, 0 SKIP. Повторный выкат — тем же порядком: образ, preflight, deploy, проверка.
+
+## Повторный выкат с исправлением (2026-10-19)
+
+| Шаг | Результат |
+|---|---|
+| Образ | `SMOKE OK`, `AGG LOAD OK: aggregator:f3ee9869a54c`; хеш пакета `b73f08b1…`, `INSTALL` не нужен |
+| Preflight | `DEPLOY PREFLIGHT DONE` |
+| Deploy | `DEPLOY APPLY DONE`; `IMAGE_PREV=30cd4f8bd0be` |
+| Проверка | `DEPLOY VERIFY OK`; бот, воркер, `webapp` на `f3ee9869a54c`, `healthy`; воркер запущен с девятью источниками. Прогоны SwimRocket 286, Swimcup 285, CyclingRace 288 приняты владельцем кнопкой (`accepted=t`); `events_listed` 715 → 771 (+56 = 23 + 28 + 5); `events_merged=123`, `users=44`, `dedup_candidates` и автослияние — как до выката. `source_alerts=1` — сбой O-time 287. Следующий прогон O-time по расписанию — 2026-10-19 20:04 UTC; Tristyle — 09:47 UTC |
+
+## Telegram
+
+Шаги 9–10: владелец — «В боте и Mini App всё работает» (кнопки плавания и велоспорта, списки, карточки, фильтры Mini App; бег и лыжи как раньше).
+
+ROLLOUT DONE: 2026-10-19
+
+PRODUCTION ACCEPTANCE: 2026-10-19
+«В боте и Mini App всё работает»
+
+## Осталось
+
+- O-time: прогон по расписанию 2026-10-19 20:04 UTC — ожидается `suspect` около 47 записей, принятие кнопкой; `failed` — не принимать.
+- Tristyle: первый прогон новым кодом 09:47 UTC (плавание и велоспорт Беларуси); `suspect` из-за роста записей — принять.
+- После обоих — `agg verify` (лог `p18-after-runs-verify.log`): `events_merged` и автослияние без изменений, пары O-time с ПроБЕГом и Марафонцем — `pending` в `/dupes`.
