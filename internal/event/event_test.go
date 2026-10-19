@@ -81,8 +81,10 @@ func TestSportTypes(t *testing.T) {
 	re := regexp.MustCompile(format)
 
 	want := map[Sport][]Type{
-		SportRunning: {"road", "trail", "cross", "track", "obstacle", "other"},
-		SportSkiing:  {"ski", "rollerski", "other"},
+		SportRunning:  {"road", "trail", "cross", "track", "obstacle", "other"},
+		SportSkiing:   {"ski", "rollerski", "other"},
+		SportSwimming: {"open_water", "pool", "other"},
+		SportCycling:  {"road_bike", "mtb", "gravel", "other"},
 	}
 	if !reflect.DeepEqual(SportTypes, want) {
 		t.Fatalf("SportTypes = %v, want %v", SportTypes, want)

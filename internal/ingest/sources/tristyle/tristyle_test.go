@@ -80,8 +80,8 @@ func testSource(srvURL string) *Source {
 	cfg.Attempts = 1
 	s := New(ingest.NewFetcher(cfg))
 	s.listURL, s.base, s.delay = srvURL+"/competition/?only_belarus=on", srvURL+"/competition/", time.Millisecond
-	// Источник с одним списком; оба списка — skiSource.
-	s.skiListURL = ""
+	// Источник с одним списком; бег и лыжи — skiSource, все списки — swimCycleSource.
+	s.skiListURL, s.more = "", nil
 	return s
 }
 

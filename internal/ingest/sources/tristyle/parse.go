@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 
+	"aggregator/internal/event"
 	"aggregator/internal/ingest"
 )
 
@@ -30,8 +31,10 @@ const (
 	cancelMark = "отмен"
 	// distPrefix — строка текста события с перечнем дистанций.
 	distPrefix = "дистанции:"
-	// dateMark — пометка названия лыжного события с датой-заглушкой.
+	// dateMark — пометка названия небегового события с датой-заглушкой.
 	dateMark = "(дата уточняется)"
+	// poolWord — слово места или текста заплыва, по которому он бассейновый.
+	poolWord = "бассейн"
 	// Подписи дисциплин лыж (normalize.SportType).
 	labelSki, labelRollerski = "Лыжные гонки", "Лыжероллеры"
 )
@@ -48,7 +51,28 @@ var (
 	listItemRe = regexp.MustCompile(`(\d+(?:[.,]\d+)?)(, | и )`)
 	// dayRe — «1 января»: день числом и слово после него (нижний регистр).
 	dayRe = regexp.MustCompile(`(?:^|\D)(\d{1,2}) ([а-я]+)`)
+	// pageMarkRe — отметка дисциплины в заголовке страницы: «… [МТБ] — Tristyle.Клуб».
+	pageMarkRe = regexp.MustCompile(`\[[^\]]*\]`)
 )
+
+// abroad — страны, которыми может кончаться место заплыва или велостарта вне
+// Беларуси: список отфильтрован по Беларуси, но зарубежные старты в него
+// попадают (testdata/README.md).
+//
+// Упрощение: страна, которой нет в списке, остаётся Беларусью. Точнее — когда
+// источник даст поле страны.
+var abroad = map[string]bool{
+	"россия": true, "украина": true, "польша": true, "литва": true, "латвия": true, "эстония": true,
+	"грузия": true, "армения": true, "азербайджан": true, "казахстан": true, "узбекистан": true,
+	"кыргызстан": true, "киргизия": true, "таджикистан": true, "турция": true, "египет": true,
+	"оаэ": true, "таиланд": true, "тайланд": true, "вьетнам": true, "индонезия": true, "китай": true,
+	"черногория": true, "сербия": true, "хорватия": true, "словения": true, "италия": true,
+	"франция": true, "испания": true, "португалия": true, "греция": true, "кипр": true, "мальта": true,
+	"германия": true, "австрия": true, "швейцария": true, "чехия": true, "словакия": true,
+	"венгрия": true, "болгария": true, "румыния": true, "финляндия": true, "швеция": true,
+	"норвегия": true, "дания": true, "нидерланды": true, "бельгия": true, "великобритания": true,
+	"израиль": true, "абхазия": true, "мальдивы": true, "шри-ланка": true,
+}
 
 // Parse разбирает один документ прогона. Чистая функция: без сети, файлов
 // и часов.
@@ -62,12 +86,16 @@ var (
 //   - Дистанции — только из строки текста «Дистанции: …», скобки убраны;
 //     нет такой строки — пусто.
 //   - Вид спорта страница события не называет: он следует из списка, в
-//     котором событие найдено. Fetch помечает документ лыжного события
-//     фрагментом адреса skiMark; документ без пометки — беговой и разбирается
-//     как раньше. У лыжного документа запись получает вид спорта skiing и ещё
-//     три правила: дисциплина — по слову в названии (skiLabel); перечисление
+//     котором событие найдено. Fetch помечает документ небегового события
+//     фрагментом адреса — кодом вида спорта (skiing, swimming, cycling);
+//     документ без пометки — беговой и разбирается как раньше. Небеговой
+//     документ даёт запись этого вида спорта и ещё три правила: перечисление
 //     дистанций с общей единицей раскрывается (expandList); название события
-//     с датой-заглушкой получает пометку dateMark (datePlaceholder).
+//     с датой-заглушкой получает пометку dateMark (datePlaceholder), если
+//     пометки о дате в нём ещё нет; дисциплина — у лыж по слову в названии
+//     (skiLabel), у плавания и велоспорта — подпись sportLabel для
+//     normalize.SportType. Заплыв или велостарт, место которого кончается
+//     зарубежной страной (abroad), записи не даёт.
 func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	u, err := url.Parse(doc.URL)
 	if err != nil {
@@ -102,15 +130,53 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 		Address:    address,
 		Timezone:   q.Get("timezone"),
 	}
-	if u.Fragment == skiMark {
-		rec.Sport = skiMark
+	switch sp := event.Sport(u.Fragment); sp {
+	case event.SportSkiing, event.SportSwimming, event.SportCycling:
+		if sp != event.SportSkiing && isAbroad(q.Get("location")) {
+			return nil, nil
+		}
+		rec.Sport = string(sp)
 		rec.TypeLabel = skiLabel(title)
+		if sp != event.SportSkiing {
+			rec.TypeLabel = sportLabel(sp, title, q.Get("location"), root)
+		}
 		rec.Distances = expandList(rec.Distances)
-		if !strings.Contains(strings.ToLower(title), "дата уточняется") && datePlaceholder(rec.Date, root) {
+		lt := strings.ToLower(title)
+		if !strings.Contains(lt, "дата уточняется") && !strings.Contains(lt, "предполагаемая дата") && datePlaceholder(rec.Date, root) {
 			rec.Title = dateMark + " " + title
 		}
 	}
 	return []ingest.SourceEvent{rec}, nil
+}
+
+// isAbroad — место кончается зарубежной страной: «Стамбул, Турция».
+func isAbroad(loc string) bool {
+	parts := strings.Split(loc, ",")
+	return abroad[strings.ToLower(strings.TrimSpace(parts[len(parts)-1]))]
+}
+
+// sportLabel — подпись для normalize.SportType: название и отметка в
+// заголовке страницы («[МТБ]»); у заплыва ещё слово poolWord, если оно есть в
+// месте или тексте события, — бассейн там назван чаще, чем в названии.
+func sportLabel(sp event.Sport, title, loc string, root *html.Node) string {
+	label := title
+	for n := range root.Descendants() {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Title && n.FirstChild != nil {
+			label += " " + strings.Join(pageMarkRe.FindAllString(n.FirstChild.Data, -1), " ")
+		}
+	}
+	if sp == event.SportSwimming {
+		text := strings.ToLower(loc)
+		for n := range root.Descendants() {
+			if n.Type == html.ElementNode && hasClass(n, "e-content") {
+				text += " " + strings.ToLower(strings.Join(lines(n), " "))
+			}
+		}
+		if strings.Contains(text, poolWord) {
+			label += " " + poolWord
+		}
+	}
+	return label
 }
 
 // skiLabel — подпись дисциплины лыжного события по слову в названии: признака

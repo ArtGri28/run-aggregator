@@ -113,9 +113,32 @@ var skiTypes = map[string]event.Type{
 	"лыжероллеры":  event.TypeRollerski,
 }
 
+// wordRules — дисциплины плавания и велоспорта по словам подписи, в порядке
+// проверки: первое совпадение решает. Слова — целиком, без учёта регистра;
+// «\p{L}*» — окончание.
+var wordRules = map[event.Sport][]struct {
+	t  event.Type
+	re *regexp.Regexp
+}{
+	event.SportSwimming: {
+		{event.TypeOpenWater, wordsRe(`открыт\p{L}* вод\p{L}*|x-waters|swimcup`)},
+		{event.TypePool, wordsRe(`бассейн\p{L}*`)},
+	},
+	event.SportCycling: {
+		{event.TypeRoadBike, wordsRe(`шоссе|шоссейн\p{L}*|групповая гонка|гранфондо|gran fondo|granfondo|критериум`)},
+		{event.TypeMTB, wordsRe(`мтб|mtb|хсм|xcm|xco|хсо|маунтинбайк\p{L}*`)},
+		{event.TypeGravel, wordsRe(`гр[эе]вел\p{L}*|гравий|gravel`)},
+	},
+}
+
+func wordsRe(alt string) *regexp.Regexp {
+	return regexp.MustCompile(`(?:^|[^\p{L}\p{N}])(?:` + alt + `)(?:$|[^\p{L}\p{N}])`)
+}
+
 // SportType — дисциплина по паре «вид спорта — подпись источника». У бега —
-// Type; у лыж — подписи skiTypes. Неизвестная подпись, подпись чужого вида
-// спорта и вид спорта без своих дисциплин дают TypeOther.
+// Type; у лыж — подписи skiTypes; у плавания и велоспорта подпись — текст
+// (название и т. п.), дисциплина — по словам wordRules. Неизвестная подпись,
+// подпись чужого вида спорта и вид спорта без своих дисциплин дают TypeOther.
 func SportType(sport event.Sport, label string) event.Type {
 	switch sport {
 	case event.SportRunning:
@@ -123,6 +146,12 @@ func SportType(sport event.Sport, label string) event.Type {
 	case event.SportSkiing:
 		if t, ok := skiTypes[collapseSpaces(yoToE(strings.ToLower(label)))]; ok {
 			return t
+		}
+	}
+	s := collapseSpaces(yoToE(strings.ToLower(label)))
+	for _, r := range wordRules[sport] {
+		if r.re.MatchString(s) {
+			return r.t
 		}
 	}
 	return event.TypeOther

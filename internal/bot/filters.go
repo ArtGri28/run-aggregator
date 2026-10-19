@@ -150,6 +150,24 @@ var skiBuckets = []bucket{
 	{"🔴", "50+ км", 49999, 2147483646},
 }
 
+// swimBuckets и cycleBuckets — корзины плавания (до 1, 1–3, 3–10, 10+ км) и
+// велоспорта (до 50, 50–100, 100–150, 150+ км); граница в верхней корзине,
+// как у skiBuckets.
+var (
+	swimBuckets = []bucket{
+		{"🟢", "До 1 км", -1, 999},
+		{"🟡", "1–3 км", 999, 2999},
+		{"🟠", "3–10 км", 2999, 9999},
+		{"🔴", "10+ км", 9999, 2147483646},
+	}
+	cycleBuckets = []bucket{
+		{"🟢", "До 50 км", -1, 49999},
+		{"🟡", "50–100 км", 49999, 99999},
+		{"🟠", "100–150 км", 99999, 149999},
+		{"🔴", "150+ км", 149999, 2147483646},
+	}
+)
+
 // sportBuckets — набор корзин вида спорта; nil — фильтра дистанции у него нет.
 func sportBuckets(sp event.Sport) []bucket {
 	switch sp {
@@ -157,6 +175,10 @@ func sportBuckets(sp event.Sport) []bucket {
 		return buckets[:]
 	case event.SportSkiing:
 		return skiBuckets
+	case event.SportSwimming:
+		return swimBuckets
+	case event.SportCycling:
+		return cycleBuckets
 	}
 	return nil
 }
@@ -171,6 +193,12 @@ var typeLabels = map[event.Type]string{
 
 	event.TypeSki:       "Лыжные гонки",
 	event.TypeRollerski: "Лыжероллеры",
+
+	event.TypeOpenWater: "Открытая вода",
+	event.TypePool:      "Бассейн",
+	event.TypeRoadBike:  "Шоссе",
+	event.TypeMTB:       "МТБ",
+	event.TypeGravel:    "Грэвел",
 }
 
 var typeEmojis = map[event.Type]string{
@@ -182,6 +210,12 @@ var typeEmojis = map[event.Type]string{
 
 	event.TypeSki:       "⛷",
 	event.TypeRollerski: "🛼",
+
+	event.TypeOpenWater: "🌊",
+	event.TypePool:      "🏊",
+	event.TypeRoadBike:  "🛣",
+	event.TypeMTB:       "🚵",
+	event.TypeGravel:    "🪨",
 }
 
 // typeEmoji — значок типа; у «Другого» и неизвестного типа — бегун.

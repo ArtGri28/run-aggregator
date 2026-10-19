@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"aggregator/internal/event"
 	"aggregator/internal/ingest"
 )
 
@@ -25,6 +26,9 @@ var runSports = map[string]string{
 	"skysnow":                "trail",
 	"running-with-obstacles": "obstacle",
 }
+
+// cyclingCode — код велоспорта в API.
+const cyclingCode = "cycling"
 
 type page struct {
 	Events *[]calEvent `json:"events"`
@@ -53,8 +57,11 @@ type calEvent struct {
 }
 
 // Parse разбирает одну страницу /calendar. Чистая функция: без сети, файлов и
-// часов. События без бегового вида спорта (D-02) пропускаются — так же, как
-// фильтр «Бег» в адресе списка других источников. Ответ без массива events —
+// часов. Событие с беговым видом спорта — беговое (D-02 фазы 17); событие
+// только велоспорта — велоспорт: дистанции из его активностей, подпись
+// дисциплины — название события и активностей (normalize.SportType). Прочие
+// события (плавание, мультиспорт и т. п.) пропускаются — так же, как фильтр
+// «Бег» в адресе списка других источников. Ответ без массива events —
 // ingest.ErrStructureNotFound.
 func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	p, err := decode(doc.Body)
@@ -64,12 +71,13 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	var out []ingest.SourceEvent
 	for _, e := range *p.Events {
 		label, ok := typeLabel(e.Sports)
-		if !ok {
+		cycle := !ok && onlyCycling(e.Sports)
+		if !ok && !cycle {
 			continue
 		}
 		var dists []string
 		for _, a := range e.Activities {
-			if _, run := runSports[code(a.Sport)]; run || a.Sport == nil {
+			if _, run := runSports[code(a.Sport)]; run || a.Sport == nil || (cycle && code(a.Sport) == cyclingCode) {
 				dists = append(dists, strings.Join(strings.Fields(a.Name), " "))
 			}
 		}
@@ -81,6 +89,10 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 			Distances:       strings.Join(dists, ", "),
 			TypeLabel:       label,
 			RegistrationURL: httpURL(e.URL),
+		}
+		if cycle {
+			rec.Sport = string(event.SportCycling)
+			rec.TypeLabel = rec.Title + ", " + rec.Distances
 		}
 		if e.EndDate != e.StartDate {
 			rec.EndDate = e.EndDate
@@ -129,6 +141,16 @@ func typeLabel(sports []sport) (string, bool) {
 		}
 	}
 	return label, ok
+}
+
+// onlyCycling — у события есть виды спорта, и все они — велоспорт.
+func onlyCycling(sports []sport) bool {
+	for _, s := range sports {
+		if s.Code != cyclingCode {
+			return false
+		}
+	}
+	return len(sports) > 0
 }
 
 func code(s *sport) string {

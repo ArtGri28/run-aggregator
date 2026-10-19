@@ -68,12 +68,24 @@ const (
 	TypeRollerski Type = "rollerski"
 )
 
+// Дисциплины плавания и велоспорта: у каждой дисциплины один вид спорта,
+// поэтому шоссе велоспорта — свой код.
+const (
+	TypeOpenWater Type = "open_water"
+	TypePool      Type = "pool"
+	TypeRoadBike  Type = "road_bike"
+	TypeMTB       Type = "mtb"
+	TypeGravel    Type = "gravel"
+)
+
 // SportTypes — допустимые дисциплины по видам спорта. Схема проверяет только
 // формат event_type (миграция 00009); перечень значений — здесь. TypeOther
 // допустим у любого вида спорта.
 var SportTypes = map[Sport][]Type{
-	SportRunning: {TypeRoad, TypeTrail, TypeCross, TypeTrack, TypeObstacle, TypeOther},
-	SportSkiing:  {TypeSki, TypeRollerski, TypeOther},
+	SportRunning:  {TypeRoad, TypeTrail, TypeCross, TypeTrack, TypeObstacle, TypeOther},
+	SportSkiing:   {TypeSki, TypeRollerski, TypeOther},
+	SportSwimming: {TypeOpenWater, TypePool, TypeOther},
+	SportCycling:  {TypeRoadBike, TypeMTB, TypeGravel, TypeOther},
 }
 
 // TypeFor — дисциплина t, если она допустима у вида спорта s, иначе TypeOther.
