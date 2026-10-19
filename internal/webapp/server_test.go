@@ -376,8 +376,8 @@ func TestMeta(t *testing.T) {
 	for _, sp := range m.Sports {
 		codes = append(codes, string(sp.Code))
 	}
-	if strings.Join(codes, ",") != "running,skiing" {
-		t.Fatalf("sports = %v, want оба включённых вида спорта", codes)
+	if strings.Join(codes, ",") != "running,skiing,swimming,cycling" {
+		t.Fatalf("sports = %v, want включённые виды спорта", codes)
 	}
 	if m.Sports[0].Count != r.count(event.Filter{From: fixtureToday, Sport: event.SportRunning}) || m.Sports[0].Count == 0 {
 		t.Fatalf("running count = %d", m.Sports[0].Count)
@@ -429,7 +429,7 @@ func TestEvents(t *testing.T) {
 	}
 
 	// Неверные параметры → 400 bad_request.
-	for _, q := range []string{"limit=51", "limit=0", "page=10001", "page=x", "country=*&city=moscow", "country=ru", "sport=swimming", "sport=football",
+	for _, q := range []string{"limit=51", "limit=0", "page=10001", "page=x", "country=*&city=moscow", "country=ru", "sport=multisport", "sport=football",
 		"dist=0", "sport=running&dist=4", "sport=running&dist=a", "type=football", "sport=skiing&type=road", "periods=xx", "periods=cm&from=2026-10-01", "from=2026-13-01", "to=01.10.2026", "city=Moscow"} {
 		if code := r.errCode(user, "/api/v1/events?"+q, http.StatusBadRequest); code != "bad_request" {
 			t.Fatalf("%s: %q", q, code)
@@ -854,7 +854,7 @@ func TestSearch(t *testing.T) {
 
 	// Неверные параметры → 400 bad_request; текста запроса в ответе нет.
 	for _, q := range []string{"", "q=", "q=%20%20", "q=я", "q=%20я%20", "q=" + strings.Repeat("я", 65), "q=" + url.QueryEscape(strings.Repeat(searchMark, 6)),
-		"q=забег&limit=51", "q=забег&limit=0", "q=забег&limit=x", "q=забег&country=ru", "q=забег&sport=football", "q=забег&sport=swimming"} {
+		"q=забег&limit=51", "q=забег&limit=0", "q=забег&limit=x", "q=забег&country=ru", "q=забег&sport=football", "q=забег&sport=multisport"} {
 		resp, body := r.get("/api/v1/search?"+q, r.auth(searchBad))
 		if resp.StatusCode != http.StatusBadRequest || strings.TrimSpace(string(body)) != `{"error":"bad_request"}` {
 			t.Fatalf("%s: code=%d body=%s, want 400 bad_request", q, resp.StatusCode, body)

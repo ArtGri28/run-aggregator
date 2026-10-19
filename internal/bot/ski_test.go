@@ -744,7 +744,7 @@ func TestS42MixedSearch(t *testing.T) {
 }
 
 // TestS43SportStale — S-43: устаревшие кнопки вида спорта и выключенный вид
-// спорта (на плавании; в шаге 7 — лыжи, выключенные на время теста).
+// спорта (на мультиспорте; в шаге 7 — лыжи, выключенные на время теста).
 func TestS43SportStale(t *testing.T) {
 	s, api, b := skiBot(t)
 	logs := captureLogs(t)
@@ -761,7 +761,7 @@ func TestS43SportStale(t *testing.T) {
 	}
 
 	// 3. Выключенный вид спорта.
-	staleToast(t, b, api, "f:a:swimming:v3")
+	staleToast(t, b, api, "f:a:multisport:v3")
 	wantStored(t, "шаги 1–3", `{}`, 3)
 
 	// 4. Будущих лыжных событий уже нет: сводка с нулём, в меню кнопки лыж нет.
@@ -790,7 +790,7 @@ func TestS43SportStale(t *testing.T) {
 	}
 
 	// 6. Сохранённый вид спорта вне справочника или выключенный читается как бег.
-	for _, filters := range []string{`{"sport":"chess"}`, `{"sport":"swimming"}`} {
+	for _, filters := range []string{`{"sport":"chess"}`, `{"sport":"multisport"}`} {
 		setUserFilters(t, s, filters)
 		before := stored(t)
 		if c := press(t, b, api, "f:s"); !strings.HasPrefix(c.Form["text"], "🔎 <b>Поиск забега</b>") || showCount(t, c) != showCount(t, fresh) {
@@ -824,7 +824,7 @@ func TestS43SportStale(t *testing.T) {
 
 	// 8. В логе — только вид кнопки.
 	if out := logs.String(); !strings.Contains(out, "callback stale") || !strings.Contains(out, "prefix=f") ||
-		strings.Contains(out, "skiing") || strings.Contains(out, "swimming") || strings.Contains(out, "chess") {
+		strings.Contains(out, "skiing") || strings.Contains(out, "multisport") || strings.Contains(out, "chess") {
 		t.Errorf("шаг 8: лог:\n%s", out)
 	}
 }

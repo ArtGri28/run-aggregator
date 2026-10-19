@@ -217,7 +217,7 @@ func TestSportVisibility(t *testing.T) {
 	run := listEvent(t, s, "2026-10-02", "Раменское", "ramenskoe", event.TypeRoad, 10000)
 	probe := listEventIn(t, s, "BY", "2026-10-03", "Раубичи", "raubichi", event.TypeTrack, 5000)
 	const setSport = "UPDATE events SET sport = $2 WHERE id = $1"
-	exec(t, setSport, probe, "swimming")
+	exec(t, setSport, probe, "multisport")
 
 	city := func(cs []CityCount, key string) bool {
 		return slices.ContainsFunc(cs, func(c CityCount) bool { return c.Key == key })
@@ -259,7 +259,7 @@ func TestSportVisibility(t *testing.T) {
 			}
 		}
 	}
-	check("swimming", false)
+	check("multisport", false)
 	exec(t, setSport, probe, "running")
 	check("running", true)
 

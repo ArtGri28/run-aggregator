@@ -41,7 +41,7 @@ func TestSports(t *testing.T) {
 		if s.Emoji == "" {
 			t.Errorf("%s: нет значка", s.Code)
 		}
-		if s.Enabled != (s.Code == SportRunning || s.Code == SportSkiing) {
+		if s.Enabled != (s.Code != SportMultisport) {
 			t.Errorf("%s: Enabled = %v", s.Code, s.Enabled)
 		}
 		if seen[s.Code] {

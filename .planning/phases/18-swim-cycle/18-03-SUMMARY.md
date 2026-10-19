@@ -1,7 +1,7 @@
 ---
 phase: 18-swim-cycle
 plan: 03
-status: awaiting-acceptance
+status: complete
 requirements-completed: []
 ---
 
@@ -35,6 +35,9 @@ requirements-completed: []
 
 `go vet ./...`, `gofmt -l .` — чисто. Полный прогон: 548 PASS (542 прежних и 6 новых), 0 FAIL, 0 SKIP. Существующие эталоны не изменены (`git diff --numstat -- internal/bot/testdata/screens` пуст), новые — 17 файлов `s57_*…s61_*`.
 
-## Осталось
+## Локальная приёмка и включение
 
-Локальная приёмка владельцем → `Enabled: true` у плавания и велоспорта в `event.Sports`; тесты, которые проверяют выключенный вид спорта на плавании (S-43, `sport_test.go`, `sportfilter_test.go`, `store/sport_test.go`, `webapp`), переводятся на мультиспорт; эталоны S-43 побайтно прежние.
+LOCAL ACCEPTANCE: 2026-10-19
+«локальная приёмка пройдена»
+
+После ответа владельца плавание и велоспорт включены в `event.Sports` (`Enabled: true`). Тесты, которые проверяли выключенный вид спорта на плавании, переведены на мультиспорт: `TestS43SportStale` (шаги 3, 6, 8), `TestSportHiddenList`, `TestSportHidden` (бот), `TestSportVisibility` (хранилище), `TestEvents`, `TestSearch` (Mini App); `TestSports` и `TestMeta` ожидают четыре включённых вида спорта. Эталоны S-43 и все прочие — побайтно прежние. Полный прогон после включения: 548 PASS, 0 FAIL, 0 SKIP.
