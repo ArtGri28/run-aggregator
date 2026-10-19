@@ -1,0 +1,47 @@
+{
+ "events": [
+  {
+   "id": "840502672799887376",
+   "name": "Samba Trail: Арчеда VI",
+   "sports": [
+    {
+     "code": "cycling",
+     "name": "Велоспорт"
+    }
+   ],
+   "start_date": "2026-11-01",
+   "end_date": "2026-11-01",
+   "location": {
+    "id": "1019",
+    "country": "RU",
+    "city": "Фролово",
+    "latitude": 49.7660348,
+    "longitude": 43.6479945
+   },
+   "url": "https://myrace.info/events/1907",
+   "activities": [
+    {
+     "id": "840547973929692256",
+     "name": "Fat bike - 50 км",
+     "sport": {
+      "code": "cycling",
+      "name": "Велоспорт"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    },
+    {
+     "id": "840548492207255789",
+     "name": "Вело - 28 км",
+     "sport": {
+      "code": "cycling",
+      "name": "Велоспорт"
+     },
+     "start_date": "2026-11-01",
+     "end_date": "2026-11-01"
+    }
+   ],
+   "updated_at": "2026-10-13T16:13:20.000Z"
+  }
+ ]
+}
