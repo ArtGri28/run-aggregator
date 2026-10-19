@@ -56,7 +56,10 @@ export async function render(box, id) {
   }
   if (!box.isConnected) return;
   const sport = m.sports.find((s) => s.code === c.sport);
-  const kind = (sport && sport.code !== 'running' ? sport.title + ' · ' : '') + c.type_label;
+  // У небегового события дисциплина «другое» не называется: «Велоспорт».
+  const kind = sport && sport.code !== 'running'
+    ? sport.title + (c.type !== 'other' ? ' · ' + c.type_label : '')
+    : c.type_label;
 
   const [y, mo, d] = c.start_date.split('-').map(Number);
   const badge = statusBadge(c.status);

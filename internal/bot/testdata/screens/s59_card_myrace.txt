@@ -1,0 +1,16 @@
+method: editMessageText
+parse_mode: HTML
+---
+🚴 <b>Samba Trail: Арчеда VI</b>
+
+📅 1 ноября 2026
+📍 Фролово
+📏 28 · 50 км
+🚴 Велоспорт
+
+🔗 Источник: <a href="https://myrace.info/events/1907">MyRace</a>
+---
+[🔗 Регистрация] → url:https://myrace.info/events/1907
+[⭐ В избранное] → w:a:146
+[📝 Сообщить об ошибке] → q:o:146
+[⬅️ Назад] → p:1:v3

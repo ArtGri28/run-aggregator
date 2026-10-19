@@ -19,9 +19,10 @@ var uxContracts = []string{
 	"../../.planning/phases/13-skiing/13-UX-CONTRACT.md",
 	"../../.planning/phases/14-favorites/14-UX-CONTRACT.md",
 	"../../.planning/phases/16-catalog-quality/16-UX-CONTRACT.md",
+	"../../.planning/phases/18-swim-cycle/18-UX-CONTRACT.md",
 }
 
-var minScenarios = []int{17, 8, 10, 8, 10, 3}
+var minScenarios = []int{17, 8, 10, 8, 10, 3, 5}
 
 var (
 	contractScenarioRE = regexp.MustCompile("(?m)^### S-([0-9]{2}) .*тест `(TestS[0-9]{2}[A-Za-z0-9]*)`")
@@ -29,8 +30,8 @@ var (
 	scenarioSnapshotRE = regexp.MustCompile(`^s([0-9]{2})_.+\.txt$`)
 )
 
-// TestContractCoverage: множество сценариев S-xx шести контрактов экранов
-// (Phase 8, Phase 9, Phase 11, Phase 13, Phase 14 и Phase 16) равно множеству
+// TestContractCoverage: множество сценариев S-xx семи контрактов экранов
+// (Phase 8, Phase 9, Phase 11, Phase 13, Phase 14, Phase 16 и Phase 18) равно множеству
 // тестов TestSxx…; у каждого сценария есть хотя бы один эталон sxx_*, а тестов и
 // эталонов сценариев, которых нет ни в одном контракте, нет. Лишние и
 // отсутствующие сценарии перечисляются в ошибке.

@@ -1,0 +1,14 @@
+method: editMessageText
+parse_mode: HTML
+---
+🚴 <b>Староборисовский МТБ марафон</b>
+
+📅 15 ноября 2026
+📍 Борисов
+🚴 Велоспорт · МТБ
+
+🔗 Источник: <a href="https://tristyle.club/competition/674/">Tristyle.Клуб</a>
+---
+[⭐ В избранное] → w:a:145
+[📝 Сообщить об ошибке] → q:o:145
+[⬅️ Назад] → p:1:v4

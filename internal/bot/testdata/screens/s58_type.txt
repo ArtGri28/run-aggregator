@@ -1,0 +1,8 @@
+method: editMessageText
+parse_mode: HTML
+---
+Выберите дисциплину
+---
+[🏊 Бассейн] → f:t:pool:v3
+[✓ 🏊 Любая] → f:t:-:v3
+[⬅️ Назад] → f:s:v3

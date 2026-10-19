@@ -1,0 +1,8 @@
+method: editMessageText
+parse_mode: HTML
+---
+Выберите дисциплину
+---
+[🚵 МТБ] → f:t:mtb:v4
+[✓ 🚴 Любая] → f:t:-:v4
+[⬅️ Назад] → f:s:v4

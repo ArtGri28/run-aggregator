@@ -280,12 +280,16 @@ const (
 // cardScreen — карточка события (BOT-05, HTML): всё динамическое
 // экранировано, ссылки только из validURL. Пустые поля строк не дают. Вид
 // карточки определяет событие: у небегового — значок вида спорта перед
-// названием и строка «вид спорта · дисциплина» вместо строки типа.
+// названием и строка «вид спорта · дисциплина» вместо строки типа; дисциплина
+// «другое» не называется.
 func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style placeStyle) screen {
 	esc := func(s string, n int) string { return html.EscapeString(cut(s, n)) }
 	icon, kind := typeEmoji(e.Type), typeEmoji(e.Type)+" "+typeLabel(string(e.Type))
 	if sp, ok := event.SportByCode(event.SportOf(string(e.Sport))); ok && sp.Code != event.SportRunning {
-		icon, kind = sp.Emoji, sp.Emoji+" "+sp.Title+" · "+typeLabel(string(e.Type))
+		icon, kind = sp.Emoji, sp.Emoji+" "+sp.Title
+		if e.Type != event.TypeOther {
+			kind += " · " + typeLabel(string(e.Type))
+		}
 	}
 	var sb strings.Builder
 	sb.WriteString(icon + " <b>" + statusMark(e.Status) + esc(e.Title, 200) + "</b>\n\n")

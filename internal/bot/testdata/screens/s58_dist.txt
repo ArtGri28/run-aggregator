@@ -1,0 +1,7 @@
+method: editMessageText
+parse_mode: HTML
+---
+Выберите дистанции (можно несколько)
+---
+[✓ 🏊 Любая] → f:n:-:v3
+[⬅️ Назад] → f:s:v3
