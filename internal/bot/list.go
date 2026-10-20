@@ -291,7 +291,7 @@ var monthsGen = [...]string{"января", "февраля", "марта", "а�
 
 // sourceNames — подпись источника по коду; неизвестный код показывается как есть.
 var sourceNames = map[string]string{"marathonec": "Марафонец", "probeg": "ПроБЕГ", "heroleague": "Лига Героев", "tristyle": "Tristyle.Клуб", "klbamatar": "КЛБ «Аматар»", "runin": "RunIn", "myrace": "MyRace",
-	"swimrocket": "SwimRocket", "swimcup": "Swimcup", "cyclingrace": "CyclingRace", "otime": "O-time"}
+	"swimrocket": "SwimRocket", "swimcup": "Swimcup", "cyclingrace": "CyclingRace", "otime": "O-time", "russialoppet": "Russialoppet"}
 
 func sourceName(code string) string {
 	if n, ok := sourceNames[code]; ok {

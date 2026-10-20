@@ -52,21 +52,21 @@ func TestNewSources(t *testing.T) {
 	for _, s := range newSources(nil) {
 		codes[s.Code()] = s.Policy()
 	}
-	for _, c := range []string{"marathonec", "probeg", "heroleague", "tristyle", "swimrocket", "swimcup", "cyclingrace", "otime"} {
+	for _, c := range []string{"marathonec", "probeg", "heroleague", "tristyle", "swimrocket", "swimcup", "cyclingrace", "otime", "russialoppet"} {
 		if _, ok := codes[c]; !ok {
 			t.Fatalf("источник %s не зарегистрирован", c)
 		}
 	}
 	// klbamatar и runin исключены из активного сбора решением владельца.
-	if len(codes) != 8 {
-		t.Fatalf("зарегистрировано источников: %d, want 8", len(codes))
+	if len(codes) != 9 {
+		t.Fatalf("зарегистрировано источников: %d, want 9", len(codes))
 	}
 	if p := codes["probeg"]; p.CountryFallback != normalize.NoFallback {
 		t.Fatalf("probeg: Policy = %+v, want NoFallback (D-01)", p)
 	}
 	// MyRace — только с токеном (Phase 17, D-07).
 	t.Setenv("MYRACE_TOKEN", " test-token ")
-	if src := newSources(nil); len(src) != 9 || src[8].Code() != "myrace" {
+	if src := newSources(nil); len(src) != 10 || src[9].Code() != "myrace" {
 		t.Fatalf("с MYRACE_TOKEN: %d источников", len(src))
 	}
 }

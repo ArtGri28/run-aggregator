@@ -35,6 +35,7 @@ import (
 	"aggregator/internal/ingest/sources/myrace"
 	"aggregator/internal/ingest/sources/otime"
 	"aggregator/internal/ingest/sources/probeg"
+	"aggregator/internal/ingest/sources/russialoppet"
 	"aggregator/internal/ingest/sources/swimcup"
 	"aggregator/internal/ingest/sources/swimrocket"
 	"aggregator/internal/ingest/sources/tristyle"
@@ -210,11 +211,12 @@ func openStore(ctx context.Context) (*store.Store, error) {
 // Адаптеры klbamatar и runin (internal/ingest/sources) написаны, но не
 // зарегистрированы: на 2026-10-04 они дают только дубли ПроБЕГа.
 // SwimRocket и O-time читаются с письменного разрешения владельцев сайтов
-// (Phase 18). MyRace подключается, только если задан MYRACE_TOKEN (Phase 17, D-07): токен
+// (Phase 18), Russialoppet — тоже, со своими настройками TLS (Phase 23).
+// MyRace подключается, только если задан MYRACE_TOKEN (Phase 17, D-07): токен
 // партнёра уходит только в заголовок запроса.
 func newSources(f *ingest.Fetcher) []ingest.Source {
 	src := []ingest.Source{marathonec.New(f), probeg.New(f), heroleague.New(f), tristyle.New(f),
-		swimrocket.New(f), swimcup.New(f), cyclingrace.New(f), otime.New(f)}
+		swimrocket.New(f), swimcup.New(f), cyclingrace.New(f), otime.New(f), russialoppet.New(f)}
 	if token := strings.TrimSpace(os.Getenv("MYRACE_TOKEN")); token != "" {
 		src = append(src, myrace.New(f, token))
 	}

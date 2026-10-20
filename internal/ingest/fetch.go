@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +40,8 @@ type FetchConfig struct {
 	// UserAgent содержит контакт владельца: не логируется и не
 	// попадает в тексты ошибок.
 	UserAgent string
+	// TLS — настройки TLS источника; nil — настройки по умолчанию.
+	TLS *tls.Config
 }
 
 // DefaultFetchConfig — стартовые значения MVP.md §5.3.
@@ -89,6 +92,7 @@ func (e *retryErr) Unwrap() error { return e.err }
 func NewFetcher(cfg FetchConfig) *Fetcher {
 	tr := &http.Transport{
 		DialContext:         (&net.Dialer{Timeout: cfg.ConnectTimeout}).DialContext,
+		TLSClientConfig:     cfg.TLS,
 		TLSHandshakeTimeout: 10 * time.Second,
 		ForceAttemptHTTP2:   true,
 		IdleConnTimeout:     90 * time.Second,
@@ -105,6 +109,19 @@ func NewFetcher(cfg FetchConfig) *Fetcher {
 		},
 	}
 	return &Fetcher{cfg: cfg, client: client, now: time.Now, sleep: sleepCtx, gates: map[string]*hostGate{}}
+}
+
+// WithTLS — новый загрузчик с теми же настройками и TLS-настройками t;
+// у него свой затвор хоста. nil остаётся nil (боту загрузчик не нужен).
+func (f *Fetcher) WithTLS(t *tls.Config) *Fetcher {
+	if f == nil {
+		return nil
+	}
+	c := f.cfg
+	c.TLS = t
+	n := NewFetcher(c)
+	n.now, n.sleep = f.now, f.sleep
+	return n
 }
 
 // sleepCtx ждёт d или отмену ctx (SIGTERM не ждёт конца паузы).
