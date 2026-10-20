@@ -462,7 +462,7 @@ Plans:
 **Requirements**: будут определены при планировании
 **Note**: добавлена 2026-10-10. Кандидаты: MyRace по API (ответ ожидается), ответы на письма из `SOURCE-PERMISSION-LETTERS.md`, лыжный календарь Марафонца (к декабрю). Критерий каждого источника — прирост уникальных будущих событий, а не число разобранных записей. Источники без разрешения не подключаются; `allowedCountries` (RU, BY) не меняется до отдельного решения
 **Production**: deploy, миграция и любые изменения VPS — только по отдельному разрешению владельца на конкретный шаг
-**Plans**: не спланирована
+**Plans**: 17-01…17-02 выполнены (MyRace по партнёрскому API, выкат 2026-10-14); PRODUCTION CHECK 2026-10-20 (прогоны 283 и 327 `ok` без принятия; полная история между сбоем 204 и прогоном 327 не проверялась). Источники SwimRocket, Swimcup, CyclingRace, O-time подключены в Phase 18. Закрыта 2026-10-20 по команде владельца; перенесено: письмо техлиду MyRace, лыжный календарь Марафонца (к декабрю), ответы на письма russialoppet.ru и reg.place
 
 ### Phase 18: Swimming & Cycling
 
@@ -504,5 +504,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 14. Favorites & Event Watch | 6/7 | In Progress | - |
 | 15. Mini App | 9/9 | Complete    | 2026-10-14 |
 | 16. Catalog Quality | 6/6 | Complete    | 2026-10-14 |
-| 17. Source Coverage | 2/2 | In Progress | - |
+| 17. Source Coverage | 2/2 | Complete    | 2026-10-20 |
 | 18. Swimming & Cycling | 5/5 | Complete    | 2026-10-20 |
