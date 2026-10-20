@@ -33,6 +33,7 @@ type Bot struct {
 	log         *slog.Logger
 	token       string // только для маскирования в логах (redactHandler)
 	supportChat int64  // группа поддержки; 0 — поддержка выключена целиком (D-03)
+	name        string // имя бота из getMe для ссылок «Поделиться»; "" — кнопки нет
 
 	// lastErr — время последней ошибки библиотеки Telegram (UnixNano; 0 — не
 	// было); active — число выполняющихся обработчиков.
@@ -115,8 +116,16 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	return b, nil
 }
 
-// Start принимает апдейты (long polling) до отмены ctx.
-func (b *Bot) Start(ctx context.Context) { b.api.Start(ctx) }
+// Start узнаёт имя бота для ссылок «Поделиться» (не узнал — кнопки нет) и
+// принимает апдейты (long polling) до отмены ctx.
+func (b *Bot) Start(ctx context.Context) {
+	if me, err := b.api.GetMe(ctx); err == nil {
+		b.name = me.Username
+	} else {
+		b.logger().Warn("get me", "err", err)
+	}
+	b.api.Start(ctx)
+}
 
 // Healthy — бот работает с Telegram (LO-06): за последние errQuiet не было
 // ошибок библиотеки (её обработчик вызывается на каждой ошибке getUpdates) и

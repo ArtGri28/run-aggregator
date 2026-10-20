@@ -18,6 +18,8 @@ const (
 	MetricCardApp   = "card_app"
 	MetricFavBot    = "fav_bot"
 	MetricFavApp    = "fav_app"
+	// MetricSourcePrefix — начало счётчика входа по метке ссылки: src_<метка>.
+	MetricSourcePrefix = "src_"
 )
 
 // MarkDay отмечает, что пользователь был сегодня в боте (app = false) или в
@@ -68,6 +70,7 @@ type Activity struct {
 	Freq      [4]int // дней за 30 дней: 1, 2–3, 4–9, 10+
 	Actions   map[string]int
 	Reminders int // напоминаний отправлено за 7 дней
+	Subs      int // подписаны на новые старты
 }
 
 // Activity считает сводку на день today и момент now.
@@ -89,10 +92,11 @@ func (s *Store) Activity(ctx context.Context, today, now time.Time) (Activity, e
 		       (SELECT count(*) FROM users u WHERE created_at >= $2::timestamptz - interval '30 days'
 		            AND created_at < $2::timestamptz - interval '7 days'
 		            AND EXISTS (SELECT 1 FROM user_days d WHERE d.tg_id = u.tg_id AND d.day > $1::date - 7)),
-		       (SELECT count(*) FROM outbox WHERE kind = $3 AND sent_at >= $2::timestamptz - interval '7 days')
+		       (SELECT count(*) FROM outbox WHERE kind = $3 AND sent_at >= $2::timestamptz - interval '7 days'),
+		       (SELECT count(*) FROM subscriptions)
 		FROM user_days`, today, now, OutboxReminder).Scan(&since, &a.Users, &a.New7,
 		&a.Active[0], &a.Active[1], &a.Active[2], &a.App[0], &a.App[1], &a.App[2],
-		&a.Cohort, &a.Returned, &a.Reminders)
+		&a.Cohort, &a.Returned, &a.Reminders, &a.Subs)
 	if err != nil {
 		return a, fmt.Errorf("activity: %w", err)
 	}

@@ -11,6 +11,6 @@ parse_mode: HTML
 🔗 Источник: <a href="https://myrace.info/events/1907">MyRace</a>
 ---
 [🔗 Регистрация] → url:https://myrace.info/events/1907
-[⭐ В избранное] → w:a:146
+[⭐ В избранное] → w:a:146 | [📤 Поделиться] → url:https://t.me/share/url?url=https%3A%2F%2Ft.me%2Ftest_bot%3Fstart%3De_146&text=Samba+Trail%3A+%D0%90%D1%80%D1%87%D0%B5%D0%B4%D0%B0+VI
 [📝 Сообщить об ошибке] → q:o:146
 [⬅️ Назад] → p:1:v3

@@ -66,7 +66,26 @@ func (b *Bot) onSettings(ctx context.Context, q *models.CallbackQuery, c callbac
 		err    error
 		notice string
 	)
-	if c.Kind == cbResetYes {
+	switch c.Kind {
+	case cbUnsubscribe:
+		if c.Value == fromDigest {
+			return b.unsubscribeDigest(ctx, q)
+		}
+		if err := b.Store.Unsubscribe(ctx, q.From.ID); err != nil {
+			b.logger().Error("subscription", "action", "off", "err", err)
+			return errNotice
+		}
+		b.logger().Info("subscription", "action", "off")
+		notice = subOffNotice
+	case cbSubList:
+		return b.subList(ctx, q)
+	}
+	if c.Kind == cbSubscribe {
+		f, v, notice, err = b.subscribe(ctx, q.From.ID, c)
+		if notice == staleNotice {
+			return notice
+		}
+	} else if c.Kind == cbResetYes {
 		f, v, err = b.updateAt(ctx, q.From.ID, c, userFilters.reset)
 		if errors.Is(err, store.ErrStaleFilters) {
 			return staleNotice
@@ -89,8 +108,12 @@ func (b *Bot) onSettings(ctx context.Context, q *models.CallbackQuery, c callbac
 		sc, err = b.summary(ctx, f, v)
 	default:
 		var name string
+		var sub []byte
 		if name, err = b.cityName(ctx, f); err == nil {
-			sc = settingsScreen(f, name)
+			sub, _, _, err = b.Store.Subscription(ctx, q.From.ID)
+		}
+		if err == nil {
+			sc = withSub(settingsScreen(f, name), f, sub)
 		}
 	}
 	if err != nil {

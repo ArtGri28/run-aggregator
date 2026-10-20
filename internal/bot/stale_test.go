@@ -239,6 +239,9 @@ func TestSnapshotsVersioned(t *testing.T) {
 		noUser := strings.HasPrefix(f.Name(), "s15_no_user")
 		for _, m := range fButtonRE.FindAllStringSubmatch(string(body), -1) {
 			c, err := parseCallback(m[1])
+			if err == nil && (c.Kind == cbUnsubscribe || c.Kind == cbSubList) {
+				continue // подписка: кнопки без версии (20-UX-CONTRACT.md, раздел 3)
+			}
 			if err != nil || c.Legacy || (c.V == 0) != noUser || !versionRE.MatchString(m[1]) {
 				t.Errorf("%s: кнопка %q — версия %d, legacy %v, %v", f.Name(), m[1], c.V, c.Legacy, err)
 			}

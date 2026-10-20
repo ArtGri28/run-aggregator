@@ -106,7 +106,15 @@ const (
 	cbReportCancel  // q:x
 	cbSuggest       // q:s
 	cbSuggestCancel // q:c
+
+	cbSubscribe   // s:b
+	cbUnsubscribe // s:u
+	cbSubList     // s:l
 )
+
+// fromDigest — отписка (s:u) из сообщения подписки; с экрана настроек —
+// fromSettings.
+const fromDigest = "d"
 
 // callback — разобранная кнопка. Value: "" — открыть подменю, "-" — снять
 // значение; для f:x — снимаемый фильтр; для сброса настроек — откуда пришли
@@ -320,6 +328,12 @@ func parseCallback(data string) (callback, error) {
 		}
 		return c, nil
 	case "s":
+		switch {
+		case len(p) == 2 && p[1] == "l":
+			return callback{Kind: cbSubList}, nil
+		case len(p) == 3 && p[1] == "u" && (p[2] == fromSettings || p[2] == fromDigest):
+			return callback{Kind: cbUnsubscribe, Value: p[2]}, nil
+		}
 		if len(p) < 3 {
 			return callback{}, errCallback
 		}
@@ -330,6 +344,8 @@ func parseCallback(data string) (callback, error) {
 		switch {
 		case len(p) == 3 && p[1] == "o":
 			return callback{Kind: cbSettings, V: v}, nil
+		case len(p) == 3 && p[1] == "b":
+			return callback{Kind: cbSubscribe, V: v}, nil
 		case len(p) == 4 && (p[1] == "r" || p[1] == "y") && (p[2] == "o" || p[2] == "f"):
 			k := cbResetAsk
 			if p[1] == "y" {
@@ -356,7 +372,8 @@ func parseCallback(data string) (callback, error) {
 		if err != nil {
 			return callback{}, err
 		}
-		page, err := num(p[2], 1, maxPage)
+		// Страница 0 — карточка из сообщения без списка (ссылка, подписка).
+		page, err := num(p[2], 0, maxPage)
 		if err != nil {
 			return callback{}, err
 		}
@@ -499,6 +516,12 @@ func (c callback) encode() (string, error) {
 		s = fmt.Sprintf("s:r:%s:v%d", c.Value, c.V)
 	case cbResetYes:
 		s = fmt.Sprintf("s:y:%s:v%d", c.Value, c.V)
+	case cbSubscribe:
+		s = fmt.Sprintf("s:b:v%d", c.V)
+	case cbUnsubscribe:
+		s = "s:u:" + c.Value
+	case cbSubList:
+		s = "s:l"
 	case cbPage:
 		s = fmt.Sprintf("p:%d:v%d", c.Page, c.V)
 	case cbCard:

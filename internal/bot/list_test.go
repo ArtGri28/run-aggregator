@@ -216,7 +216,7 @@ func TestCard(t *testing.T) {
 	noReg := eventWith(t, s, func(e event.Event) bool { return e.RegistrationURL == "" })
 	card = press(t, b, api, fmt.Sprintf("e:%d:1:v1", noReg.ID))
 	text = card.Form["text"]
-	if hasURLButton(t, card) || card.button(t, backLabel) != "p:1:v1" {
+	if card.button(t, "🔗 Регистрация") != "" || card.button(t, backLabel) != "p:1:v1" {
 		t.Fatalf("card without registration: buttons %+v", card.buttons(t))
 	}
 	if !strings.Contains(text, "🔗 Источник: ") {
@@ -360,7 +360,7 @@ func TestCardEscapingAndURLs(t *testing.T) {
 			t.Fatalf("card has raw %q:\n%s", raw, text)
 		}
 	}
-	if !strings.Contains(text, "&lt;b&gt;") || hasURLButton(t, card) {
+	if !strings.Contains(text, "&lt;b&gt;") || card.button(t, "🔗 Регистрация") != "" {
 		t.Fatalf("card: want escaped title and no registration button:\n%s", text)
 	}
 

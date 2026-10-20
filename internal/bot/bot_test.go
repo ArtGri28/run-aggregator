@@ -167,6 +167,7 @@ func newBotWith(t *testing.T, api *fakeAPI, s *store.Store, cfg Config) *Bot {
 		t.Fatal(err)
 	}
 	b.Now = func() time.Time { return fixtureNow }
+	b.name = "test_bot"
 	return b
 }
 

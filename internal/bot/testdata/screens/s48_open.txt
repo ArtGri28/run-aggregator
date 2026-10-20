@@ -11,6 +11,6 @@ parse_mode: HTML
 🔗 Источник: <a href="https://marathonec.ru/calendar-beg/">Марафонец</a>
 ---
 [🔗 Регистрация] → url:https://reg.russiarunning.com/event/FestivalbegaShartashKarasiki27092026
-[✖️ Убрать из избранного] → w:x:52
+[✖️ Убрать из избранного] → w:x:52 | [📤 Поделиться] → url:https://t.me/share/url?url=https%3A%2F%2Ft.me%2Ftest_bot%3Fstart%3De_52&text=%D0%A2%D1%80%D0%B5%D0%B9%D0%BB+%C2%AB%D0%A8%D0%B0%D1%80%D1%82%D0%B0%D1%88+%D0%9A%D0%B0%D1%80%D0%B0%D1%81%D0%B8%D0%BA%D0%B8%C2%BB
 [📝 Сообщить об ошибке] → q:o:52
 [⬅️ Назад] → w:p:1

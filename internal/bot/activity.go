@@ -1,7 +1,9 @@
 package bot
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -24,6 +26,7 @@ func activityScreen(a store.Activity) screen {
 	sb.WriteString("📈 Активность (с " + a.Since.Format("02.01.2006") + ")" +
 		"\n\nПользователей: " + strconv.Itoa(a.Users) +
 		"\nНовых за 7 дней: " + strconv.Itoa(a.New7) +
+		"\n🔔 Подписаны на новые старты: " + strconv.Itoa(a.Subs) +
 		"\n\n👥 Заходили в бот или Mini App")
 	for i, label := range []string{"Сегодня", "За 7 дней", "За 30 дней"} {
 		sb.WriteString("\n" + label + " — " + strconv.Itoa(a.Active[i]) + " (из них в Mini App — " + strconv.Itoa(a.App[i]) + ")")
@@ -40,6 +43,24 @@ func activityScreen(a store.Activity) screen {
 		" (Mini App — " + strconv.Itoa(act[store.MetricCardApp]) + ")" +
 		"\n⭐ В избранное — " + strconv.Itoa(act[store.MetricFavBot]+act[store.MetricFavApp]) +
 		"\n🔔 Напоминаний отправлено — " + strconv.Itoa(a.Reminders))
+	// Входы по меткам ссылок (N-8): блок есть, только если они были.
+	type src struct {
+		label string
+		n     int
+	}
+	var srcs []src
+	for m, n := range act {
+		if l, ok := strings.CutPrefix(m, store.MetricSourcePrefix); ok && n > 0 {
+			srcs = append(srcs, src{l, n})
+		}
+	}
+	slices.SortFunc(srcs, func(x, y src) int { return cmp.Or(y.n-x.n, strings.Compare(x.label, y.label)) })
+	if len(srcs) > 0 {
+		sb.WriteString("\n\n🔗 Пришли по ссылкам за 7 дней")
+		for _, s := range srcs[:min(len(srcs), 10)] {
+			sb.WriteString("\n" + s.label + " — " + strconv.Itoa(s.n))
+		}
+	}
 	return screen{text: sb.String(), plain: true}
 }
 

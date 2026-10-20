@@ -45,13 +45,27 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 			notice = "Фильтры изменились — показываю актуальную выдачу"
 		}
 	}
+	sc, err := b.listPage(ctx, f, v, page)
+	if err != nil {
+		b.logger().Error("list", "err", err)
+		return errNotice
+	}
+	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
+		b.logger().Warn("show list", "err", err)
+	}
+	return notice
+}
+
+// listPage — экран страницы page выдачи по фильтрам f версии v (без отметки
+// версии в кнопках); пустая выдача — экран пустой выдачи. Страница за
+// пределами выдачи зажимается до последней.
+func (b *Bot) listPage(ctx context.Context, f userFilters, v, page int) (screen, error) {
+	today := b.today()
 	flt := f.query(today)
 	total, err := b.Store.CountEvents(ctx, flt)
 	if err != nil {
-		b.logger().Error("count", "err", err)
-		return errNotice
+		return screen{}, err
 	}
-	var sc screen
 	if total == 0 {
 		var pick bool
 		if f.Country == "" {
@@ -59,30 +73,24 @@ func (b *Bot) onList(ctx context.Context, q *models.CallbackQuery, c callback) s
 				b.logger().Warn("countries", "err", err)
 			}
 		}
-		sc = emptyScreen(f, pick, b.suggestRow())
-	} else {
-		page = min(page, (total+pageSize-1)/pageSize)
-		items, err := b.Store.ListEvents(ctx, flt, pageSize, (page-1)*pageSize)
-		if err != nil {
-			b.logger().Error("list", "err", err)
-			return errNotice
-		}
-		name, err := b.cityName(ctx, f)
-		if err != nil {
-			b.logger().Error("city name", "err", err)
-			return errNotice
-		}
-		sc = listScreen(items, total, page, v, f.Country == allCountries, today.Year(), activeLine(f, name))
-		// Небеговой вид спорта назван в заголовке списка; у бега заголовок прежний.
-		if sp := f.sport(); !f.running() {
-			_, rest, _ := strings.Cut(sc.text, "\n")
-			sc.text = fmt.Sprintf("%s <b>%s — найдено: %d</b>\n%s", sp.Emoji, sp.Title, total, rest)
-		}
+		return emptyScreen(f, pick, b.suggestRow()), nil
 	}
-	if err := b.show(ctx, q, stamp(sc, v)); err != nil {
-		b.logger().Warn("show list", "err", err)
+	page = min(page, (total+pageSize-1)/pageSize)
+	items, err := b.Store.ListEvents(ctx, flt, pageSize, (page-1)*pageSize)
+	if err != nil {
+		return screen{}, err
 	}
-	return notice
+	name, err := b.cityName(ctx, f)
+	if err != nil {
+		return screen{}, err
+	}
+	sc := listScreen(items, total, page, v, f.Country == allCountries, today.Year(), activeLine(f, name))
+	// Небеговой вид спорта назван в заголовке списка; у бега заголовок прежний.
+	if sp := f.sport(); !f.running() {
+		_, rest, _ := strings.Cut(sc.text, "\n")
+		sc.text = fmt.Sprintf("%s <b>%s — найдено: %d</b>\n%s", sp.Emoji, sp.Title, total, rest)
+	}
+	return sc, nil
 }
 
 // statusIcon — короткая пометка статуса в кнопке списка.
@@ -183,7 +191,13 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	if !ok {
 		return errNotice
 	}
-	if err := b.show(ctx, q, sc); err != nil {
+	// Карточка из сообщения без списка приходит новым сообщением: то не правится.
+	if c.Page == 0 {
+		err := b.send(ctx, q.From.ID, sc)
+		if err != nil {
+			b.logger().Warn("send card", "err", err)
+		}
+	} else if err := b.show(ctx, q, sc); err != nil {
 		b.logger().Warn("show card", "err", err)
 	}
 	b.count(ctx, store.MetricCardBot)
@@ -239,7 +253,11 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 		return screen{}, 0, false
 	}
 	rows := sc.kb.InlineKeyboard
-	add := [][]models.InlineKeyboardButton{{favBtn(e.ID, fav)}}
+	favRow := []models.InlineKeyboardButton{favBtn(e.ID, fav)}
+	if b.name != "" {
+		favRow = append(favRow, models.InlineKeyboardButton{Text: shareLabel, URL: shareURL(b.name, e.ID, e.Title)})
+	}
+	add := [][]models.InlineKeyboardButton{favRow}
 	if b.reportsOn() {
 		add = append(add, btn(reportLabel, callback{Kind: cbReportOpen, ID: e.ID}))
 	}
@@ -248,7 +266,20 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 }
 
 func goneScreen(page, v int) screen {
-	return screen{text: goneNotice, kb: keyboard(btn(backLabel, callback{Kind: cbPage, Page: page, V: v}))}
+	return screen{text: goneNotice, kb: keyboard(cardBack(page, v))}
+}
+
+// menuLabel — возврат из карточки, открытой не из списка (страница 0: по
+// ссылке или из сообщения подписки).
+const menuLabel = "⬅️ В меню"
+
+// cardBack — последний ряд карточки: на страницу списка либо, для страницы 0,
+// в главное меню.
+func cardBack(page, v int) row {
+	if page == 0 {
+		return btn(menuLabel, callback{Kind: cbMenu})
+	}
+	return btn(backLabel, callback{Kind: cbPage, Page: page, V: v})
 }
 
 // monthsGen — месяцы в родительном падеже.
@@ -345,7 +376,7 @@ func cardScreen(e event.Event, srcs []store.EventSource, page, v int, style plac
 		reg = row{{Text: "🔗 Регистрация", URL: e.RegistrationURL}}
 	}
 	return screen{text: strings.TrimRight(sb.String(), "\n"),
-		kb: keyboard(reg, btn(backLabel, callback{Kind: cbPage, Page: page, V: v}))}
+		kb: keyboard(reg, cardBack(page, v))}
 }
 
 // sourcesLine — строка источников карточки: «🔗 Источник: …», ссылка — только

@@ -193,6 +193,10 @@ func (n *Notifier) settle(ctx context.Context, row store.OutboxRow, err error, n
 			b.logger().Warn("notify", "kind", row.Kind, "outcome", "sent_unmarked")
 			return
 		}
+		// Следующее сообщение подписки — о стартах после этого.
+		if row.Kind == store.OutboxDigest && b.Store.MarkDigestSent(ctx, row.TgID, now) != nil {
+			b.logger().Warn("notify", "kind", row.Kind, "outcome", "digest_unmarked")
+		}
 		b.logger().Info("notify", "kind", row.Kind, "outcome", "sent")
 	case kindBlocked:
 		// 403: строка и остальные ожидающие строки пользователя закрываются одной
@@ -201,6 +205,10 @@ func (n *Notifier) settle(ctx context.Context, row store.OutboxRow, err error, n
 		if cerr != nil {
 			b.logger().Warn("notify", "kind", row.Kind, "outcome", "close_failed")
 			return
+		}
+		// Подписка заблокировавшего удаляется (N-5).
+		if b.Store.Unsubscribe(ctx, row.TgID) != nil {
+			b.logger().Warn("notify", "kind", row.Kind, "outcome", "unsubscribe_failed")
 		}
 		b.logger().Info("notify", "kind", row.Kind, "outcome", store.OutboxBlocked, "closed", closed)
 	case kindRateLimited:
@@ -247,13 +255,14 @@ func (n *Notifier) chores(ctx context.Context, now time.Time) {
 	pruned := do("prune", func() (int, error) { return b.Store.PruneOutbox(ctx, now.Add(-notifyKeep)) })
 	reminders := do("remind", func() (int, error) { return n.remind(ctx, now) })
 	fuse := do("fuse", func() (int, error) { return n.fuse(ctx, now) })
+	digests := do("digest", func() (int, error) { return n.digest(ctx, now) })
 	reports := do("reports", func() (int, error) { return b.Store.PruneReports(ctx, now.Add(-reportKeep)) })
 	days := do("days", func() (int, error) { return b.Store.PruneUserDays(ctx, n.dayOf(now).AddDate(0, 0, -dayKeep)) })
 	if len(failed) > 0 {
 		b.logger().Warn("notify chores failed", "steps", strings.Join(failed, ","))
 	}
-	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 || days > 0 {
-		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports, "days", days)
+	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 || days > 0 || digests > 0 {
+		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports, "days", days, "digests", digests)
 	}
 }
 
@@ -331,6 +340,8 @@ func (n *Notifier) prepare(ctx context.Context, row store.OutboxRow, now time.Ti
 		return n.prepareReminder(ctx, row, now)
 	case store.OutboxFuse:
 		return prepareFuse(row), nil
+	case store.OutboxDigest:
+		return n.prepareDigest(ctx, row, now)
 	}
 	if (row.Kind != event.KindChange && row.Kind != event.KindGone) || row.EventID == 0 {
 		return prepared{close: store.OutboxRejected}, nil

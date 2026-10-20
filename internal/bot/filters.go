@@ -1076,6 +1076,13 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	if u.Message == nil || u.Message.From == nil {
 		return
 	}
+	switch id, source := startArg(u.Message.Text); {
+	case id > 0:
+		b.startCard(ctx, u.Message, id)
+		return
+	case source != "":
+		b.count(ctx, store.MetricSourcePrefix+source)
+	}
 	fv, pv, offered, err := b.Store.StartUser(ctx, u.Message.From.ID)
 	if err != nil {
 		b.logger().Error("start", "err", err)
