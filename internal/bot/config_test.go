@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-var configVars = []string{"TELEGRAM_BOT_TOKEN", "ADMIN_TG_IDS", "SUPPORT_CHAT_ID"}
+var configVars = []string{"TELEGRAM_BOT_TOKEN", "ADMIN_TG_IDS", "SUPPORT_CHAT_ID", "WEBAPP_DOMAIN"}
 
 // setEnv очищает переменные бота и выставляет заданные.
 func setEnv(t *testing.T, kv map[string]string) {
@@ -85,5 +85,22 @@ func TestLoadConfig(t *testing.T) {
 				t.Fatalf("err = %q повторяет значение %q", err, tc.leak)
 			}
 		})
+	}
+}
+
+// TestConfigDomain — WEBAPP_DOMAIN (Phase 21): необязательна, приводится к
+// нижнему регистру; не похожее на домен — ошибка старта без повтора значения.
+func TestConfigDomain(t *testing.T) {
+	for _, tc := range []struct{ val, want string }{{"", ""}, {" App.Example.RU ", "app.example.ru"}, {"localhost", "localhost"}} {
+		setEnv(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123456:ABC-def_1", "WEBAPP_DOMAIN": tc.val})
+		if cfg, err := LoadConfig(); err != nil || cfg.Domain != tc.want {
+			t.Fatalf("WEBAPP_DOMAIN=%q: %+v, %v; want %q", tc.val, cfg, err, tc.want)
+		}
+	}
+	for _, v := range []string{"https://a.ru", "a.ru/x", "a ru", "-a.ru", "a_b.ru"} {
+		setEnv(t, map[string]string{"TELEGRAM_BOT_TOKEN": "123456:ABC-def_1", "WEBAPP_DOMAIN": v})
+		if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "WEBAPP_DOMAIN") || strings.Contains(err.Error(), v) {
+			t.Fatalf("WEBAPP_DOMAIN=%q: err = %v", v, err)
+		}
 	}
 }

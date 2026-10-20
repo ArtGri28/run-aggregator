@@ -11,5 +11,6 @@ parse_mode: HTML
 🔗 Источник: <a href="https://tristyle.club/competition/1178/">Tristyle.Клуб</a>
 ---
 [⭐ В избранное] → w:a:134 | [📤 Поделиться] → url:https://t.me/share/url?url=https%3A%2F%2Ft.me%2Ftest_bot%3Fstart%3De_134&text=%D0%9B%D1%8B%D0%B6%D0%B5%D1%80%D0%BE%D0%BB%D0%BB%D0%B5%D1%80%D0%BD%D1%8B%D0%B9+%D0%BC%D0%B0%D1%80%D0%B0%D1%84%D0%BE%D0%BD
+[📅 В календарь] → k:e:134
 [📝 Сообщить об ошибке] → q:o:134
 [⬅️ Назад] → p:1:v2

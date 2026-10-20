@@ -21,6 +21,7 @@ var uxContracts = []string{
 	"../../.planning/phases/16-catalog-quality/16-UX-CONTRACT.md",
 	"../../.planning/phases/18-swim-cycle/18-UX-CONTRACT.md",
 	"../../.planning/phases/20-subscription-sharing/20-UX-CONTRACT.md",
+	"../../.planning/phases/21-my-calendar/21-UX-CONTRACT.md",
 }
 
 var minScenarios = []int{17, 8, 10, 8, 10, 3, 5}
@@ -31,7 +32,7 @@ var (
 	scenarioSnapshotRE = regexp.MustCompile(`^s([0-9]{2})_.+\.txt$`)
 )
 
-// TestContractCoverage: множество сценариев S-xx восьми контрактов экранов
+// TestContractCoverage: множество сценариев S-xx девяти контрактов экранов
 // (Phase 8, Phase 9, Phase 11, Phase 13, Phase 14, Phase 16 и Phase 18) равно множеству
 // тестов TestSxx…; у каждого сценария есть хотя бы один эталон sxx_*, а тестов и
 // эталонов сценариев, которых нет ни в одном контракте, нет. Лишние и

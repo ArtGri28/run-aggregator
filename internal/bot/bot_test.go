@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -66,6 +67,14 @@ func fakeTelegram(t *testing.T, scripts ...script) *fakeAPI {
 		if r.MultipartForm != nil {
 			for k, v := range r.MultipartForm.Value {
 				c.Form[k] = v[0]
+			}
+			// Файлы (sendDocument): содержимое — Form[k], имя — Form[k+"_name"].
+			for k, fhs := range r.MultipartForm.File {
+				if f, err := fhs[0].Open(); err == nil {
+					body, _ := io.ReadAll(f)
+					f.Close()
+					c.Form[k], c.Form[k+"_name"] = string(body), fhs[0].Filename
+				}
 			}
 		}
 		f.mu.Lock()

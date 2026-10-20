@@ -275,7 +275,7 @@ func profileScreen(p store.Profile, pv int) screen {
 	return screen{
 		text: "👤 <b>Мой профиль</b>\n\n🚻 Пол: " + gender + "\n🎂 Возраст: " + age + "\n🏠 Живу: " + home +
 			"\n🏅 Спорт: " + sports,
-		kb: keyboard(r1, r2, btn(backLabel, callback{Kind: cbMenu})),
+		kb: keyboard(r1, r2, btn(calLabel, callback{Kind: cbCalOpen}), btn(backLabel, callback{Kind: cbMenu})),
 	}
 }
 

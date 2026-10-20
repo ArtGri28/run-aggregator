@@ -105,6 +105,8 @@ services:
       ADMIN_TG_IDS: ${ADMIN_TG_IDS:?задайте ADMIN_TG_IDS в .env}
       # необязательная: пусто — поддержка выключена
       SUPPORT_CHAT_ID: ${SUPPORT_CHAT_ID:-}
+      # Домен Mini App для ссылки подписного календаря (Phase 21); пусто — ссылки нет.
+      WEBAPP_DOMAIN: ${WEBAPP_DOMAIN:-}
     # Больше 15 с, которые бот ждёт выполняющиеся обработчики при остановке.
     stop_grace_period: 20s
     healthcheck:

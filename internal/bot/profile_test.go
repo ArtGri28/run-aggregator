@@ -594,7 +594,7 @@ func TestS23Profile(t *testing.T) {
 	if userRow(t, 43) != usersBefore || profileRow(t, 43) != profileBefore {
 		t.Errorf("/profile изменил данные:\n%s\n%s", usersBefore, userRow(t, 43))
 	}
-	want := []string{"u:a:g:e:v2", "u:a:a:e:v2", "u:a:k:e:v2", "u:a:s:e:v2", "m"}
+	want := []string{"u:a:g:e:v2", "u:a:a:e:v2", "u:a:k:e:v2", "u:a:s:e:v2", "k:o", "m"}
 	if got := datas(t, empty); !reflect.DeepEqual(got, want) {
 		t.Errorf("кнопки P-1: %v, want %v", got, want)
 	}
@@ -617,7 +617,7 @@ func TestS23Profile(t *testing.T) {
 	if after := dbState(t); after != before || userRow(t, 77) != "" || profileRow(t, 77) != "" {
 		t.Errorf("/profile создал данные:\n%s\n%s", before, after)
 	}
-	if got := datas(t, none); !reflect.DeepEqual(got, []string{"u:a:g:e:v0", "u:a:a:e:v0", "u:a:k:e:v0", "u:a:s:e:v0", "m"}) {
+	if got := datas(t, none); !reflect.DeepEqual(got, []string{"u:a:g:e:v0", "u:a:a:e:v0", "u:a:k:e:v0", "u:a:s:e:v0", "k:o", "m"}) {
 		t.Errorf("кнопки P-1 без профиля: %v", got)
 	}
 	// 8. Просмотр с отметкой ожидания города снимает только её: версия и ответы целы.

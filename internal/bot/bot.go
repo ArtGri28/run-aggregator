@@ -34,6 +34,7 @@ type Bot struct {
 	token       string // только для маскирования в логах (redactHandler)
 	supportChat int64  // группа поддержки; 0 — поддержка выключена целиком (D-03)
 	name        string // имя бота из getMe для ссылок «Поделиться»; "" — кнопки нет
+	domain      string // домен Mini App для ссылки календаря; "" — ссылки нет
 
 	// lastErr — время последней ошибки библиотеки Telegram (UnixNano; 0 — не
 	// было); active — число выполняющихся обработчиков.
@@ -56,7 +57,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("часовой пояс Europe/Moscow: %w", err)
 	}
-	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc, token: cfg.Token, supportChat: cfg.SupportChatID}
+	b := &Bot{Store: s, admins: map[int64]bool{}, loc: loc, token: cfg.Token, supportChat: cfg.SupportChatID, domain: cfg.Domain}
 	for _, id := range cfg.Admins {
 		if !b.admins[id] {
 			b.adminIDs = append(b.adminIDs, id)
@@ -90,6 +91,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithCallbackQueryDataHandler("r:", tgbot.MatchTypePrefix, b.cb(b.onRun)),
 		tgbot.WithCallbackQueryDataHandler("d:", tgbot.MatchTypePrefix, b.cb(b.onDupe)),
 		tgbot.WithCallbackQueryDataHandler("w:", tgbot.MatchTypePrefix, b.cb(b.onFav)),
+		tgbot.WithCallbackQueryDataHandler("k:", tgbot.MatchTypePrefix, b.cb(b.onCalendar)),
 	}
 	if b.supportChat != 0 {
 		// Без группы ничего не регистрируется: /support остаётся неизвестной командой,
@@ -121,6 +123,12 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 func (b *Bot) Start(ctx context.Context) {
 	if me, err := b.api.GetMe(ctx); err == nil {
 		b.name = me.Username
+		// Имя бота нужно и webapp: ссылки «Поделиться» и UID календаря.
+		if b.Store != nil {
+			if err := b.Store.SetSetting(ctx, store.SettingBotUsername, me.Username); err != nil {
+				b.logger().Warn("save bot name", "err", err)
+			}
+		}
 	} else {
 		b.logger().Warn("get me", "err", err)
 	}
@@ -361,7 +369,7 @@ func cbPrefix(data string) string {
 	if data == "m" {
 		return "m"
 	}
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h' || data[0] == 'w' || data[0] == 'q') {
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h' || data[0] == 'w' || data[0] == 'q' || data[0] == 'k') {
 		return data[:1]
 	}
 	return "?"

@@ -1,0 +1,3 @@
+method: sendDocument
+document: start-110.ics
+caption: 📅 Откройте файл и нажмите «Добавить».

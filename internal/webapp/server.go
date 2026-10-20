@@ -95,6 +95,7 @@ type server struct {
 	log   *slog.Logger
 	limit *limiter
 	write *limiter
+	feeds *limiter // ссылки календаря: по ссылке, не по пользователю
 }
 
 // New собирает маршруты API. Каждый маршрут: лог → проверка initData →
@@ -105,6 +106,7 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 		store: s, dict: bot.Catalog(), now: now, log: log,
 		limit: &limiter{now: now, max: rateLimit, hits: map[int64]*window{}},
 		write: &limiter{now: now, max: writeLimit, hits: map[int64]*window{}},
+		feeds: &limiter{now: now, max: feedLimit, hits: map[int64]*window{}},
 	}
 	auth := Middleware(secret, now, func(code string) { log.Info("auth rejected", "code", code) })
 	mux := http.NewServeMux()
@@ -126,6 +128,7 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 	handleWrite("DELETE /api/v1/favorites/{id}", srv.favoriteRemove)
 	handle("GET /api/v1/profile", srv.profile)
 	handle("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, http.StatusNotFound, "not_found") })
+	mux.Handle("GET /cal/{file}", srv.logged(http.HandlerFunc(srv.calFeed)))
 	mux.Handle("/", srv.logged(static()))
 	return mux
 }

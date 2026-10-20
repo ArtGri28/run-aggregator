@@ -110,7 +110,18 @@ const (
 	cbSubscribe   // s:b
 	cbUnsubscribe // s:u
 	cbSubList     // s:l
+
+	cbCalOpen // k:o
+	cbCalAll  // k:f
+	cbCalFile // k:e
+	cbCalLink // k:l
+	cbCalNew  // k:r
+	cbCalOff  // k:x
 )
+
+// Кнопки календаря (k:) без версии: фильтры не меняются.
+var kKinds = map[string]cbKind{"o": cbCalOpen, "f": cbCalAll, "l": cbCalLink, "r": cbCalNew, "x": cbCalOff}
+var kLetters = map[cbKind]string{cbCalOpen: "o", cbCalAll: "f", cbCalLink: "l", cbCalNew: "r", cbCalOff: "x"}
 
 // fromDigest — отписка (s:u) из сообщения подписки; с экрана настроек —
 // fromSettings.
@@ -418,6 +429,17 @@ func parseCallback(data string) (callback, error) {
 		return callback{Kind: k, ID: id}, err
 	case "u":
 		return parseProfile(p)
+	case "k":
+		if len(p) == 3 && p[1] == "e" {
+			id, err := num(p[2], 1, math.MaxInt64)
+			return callback{Kind: cbCalFile, ID: id}, err
+		}
+		if len(p) == 2 {
+			if k, ok := kKinds[p[1]]; ok {
+				return callback{Kind: k}, nil
+			}
+		}
+		return callback{}, errCallback
 	case "h":
 		if len(p) == 2 {
 			if k, ok := hKinds[p[1]]; ok {
@@ -522,6 +544,10 @@ func (c callback) encode() (string, error) {
 		s = "s:u:" + c.Value
 	case cbSubList:
 		s = "s:l"
+	case cbCalOpen, cbCalAll, cbCalLink, cbCalNew, cbCalOff:
+		s = "k:" + kLetters[c.Kind]
+	case cbCalFile:
+		s = fmt.Sprintf("k:e:%d", c.ID)
 	case cbPage:
 		s = fmt.Sprintf("p:%d:v%d", c.Page, c.V)
 	case cbCard:

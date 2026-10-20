@@ -17,7 +17,12 @@ type Config struct {
 	Token         string
 	Admins        []int64
 	SupportChatID int64
+	// Domain — домен Mini App (WEBAPP_DOMAIN) для ссылки подписного календаря;
+	// "" — ссылки нет.
+	Domain string
 }
+
+var domainRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`)
 
 var tokenRE = regexp.MustCompile(`^[0-9]+:[A-Za-z0-9_-]+$`)
 
@@ -51,6 +56,12 @@ func LoadConfig() (Config, error) {
 			return Config{}, errors.New("SUPPORT_CHAT_ID: неверное значение")
 		}
 		c.SupportChatID = id
+	}
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("WEBAPP_DOMAIN"))); v != "" {
+		if !domainRE.MatchString(v) {
+			return Config{}, errors.New("WEBAPP_DOMAIN: неверное значение")
+		}
+		c.Domain = v
 	}
 	return c, nil
 }

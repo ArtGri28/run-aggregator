@@ -27,6 +27,10 @@ func renderCall(t *testing.T, c call) string {
 		fmt.Fprintf(&sb, "text: %s\nshow_alert: %s\n", c.Form["text"], c.Form["show_alert"])
 		return sb.String()
 	}
+	if c.Method == "sendDocument" {
+		fmt.Fprintf(&sb, "document: %s\ncaption: %s\n", c.Form["document_name"], c.Form["caption"])
+		return sb.String()
+	}
 	fmt.Fprintf(&sb, "parse_mode: %s\n---\n%s\n---\n", c.Form["parse_mode"], c.Form["text"])
 	if raw := c.Form["reply_markup"]; raw != "" {
 		var kb models.InlineKeyboardMarkup

@@ -134,7 +134,8 @@ func TestFavTracer(t *testing.T) {
 	card := press(t, b, api, open)
 	add, del := fmt.Sprintf("w:a:%d", id), fmt.Sprintf("w:x:%d", id)
 	// Ряд избранного — «⭐» и «📤 Поделиться» (ссылка, без callback).
-	if ds := datas(t, card); len(ds) < 4 || ds[len(ds)-4] != add || ds[len(ds)-2] != fmt.Sprintf("q:o:%d", id) || ds[len(ds)-1] != "p:1:v1" {
+	// Ряд избранного — «⭐» и «📤 Поделиться» (ссылка, без callback), под ним «📅 В календарь».
+	if ds := datas(t, card); len(ds) < 5 || ds[len(ds)-5] != add || ds[len(ds)-3] != fmt.Sprintf("k:e:%d", id) || ds[len(ds)-2] != fmt.Sprintf("q:o:%d", id) || ds[len(ds)-1] != "p:1:v1" {
 		t.Fatalf("карточка: кнопки %v, want %s и строку заявки перед p:1:v1", ds, add)
 	}
 
@@ -149,7 +150,7 @@ func TestFavTracer(t *testing.T) {
 		t.Errorf("правка клавиатуры: %+v", calls[0].Form)
 	}
 	was, now := datas(t, card), datas(t, calls[0])
-	was[len(was)-4] = del
+	was[len(was)-5] = del
 	if strings.Join(now, " ") != strings.Join(was, " ") {
 		t.Errorf("клавиатура после нажатия %v, want %v", now, was)
 	}
@@ -337,7 +338,7 @@ func TestS46FavVisibility(t *testing.T) {
 	favPut(t, 52)
 	sec := favSnap(t, b, api, 42, nil, "w:o", "s46_merged")
 	card := favEdit(t, b, api, 42, &sec, "w:e:110:1")
-	if ds := datas(t, card); !strings.Contains(card.Form["text"], "Шарташ") || len(ds) < 4 || ds[len(ds)-4] != "w:x:52" || ds[len(ds)-2] != "q:o:52" || ds[len(ds)-1] != "w:p:1" {
+	if ds := datas(t, card); !strings.Contains(card.Form["text"], "Шарташ") || len(ds) < 5 || ds[len(ds)-5] != "w:x:52" || ds[len(ds)-3] != "k:e:52" || ds[len(ds)-2] != "q:o:52" || ds[len(ds)-1] != "w:p:1" {
 		t.Errorf("шаг 3: карточка слитого: %q, кнопки %v", card.Form["text"], ds)
 	}
 	if calls := favTap(t, b, api, 42, &card, "w:x:52"); methods(calls) != "editMessageReplyMarkup answerCallbackQuery" || favs(t) != "" {
@@ -588,16 +589,16 @@ func TestFavMessageKeyboard(t *testing.T) {
 		return calls[0]
 	}
 	if c := open("w:n:52"); !strings.Contains(c.Form["text"], "<b>Трейл «Шарташ Карасики»</b>") ||
-		!strings.HasSuffix(kbLines(t, c), "["+delL+"] → w:x:52 | "+share52+"\n["+reportLabel+"] → q:o:52\n["+backLabel+"] → w:p:1\n") {
+		!strings.HasSuffix(kbLines(t, c), "["+delL+"] → w:x:52 | "+share52+"\n["+calFileLabel+"] → k:e:52\n["+reportLabel+"] → q:o:52\n["+backLabel+"] → w:p:1\n") {
 		t.Errorf("w:n:52: текст %q, клавиатура %q", c.Form["text"], kbLines(t, c))
 	}
 	favClear(t)
-	if c := open("w:n:52"); !strings.HasSuffix(kbLines(t, c), "["+addL+"] → w:a:52 | "+share52+"\n["+reportLabel+"] → q:o:52\n["+backLabel+"] → w:p:1\n") {
+	if c := open("w:n:52"); !strings.HasSuffix(kbLines(t, c), "["+addL+"] → w:a:52 | "+share52+"\n["+calFileLabel+"] → k:e:52\n["+reportLabel+"] → q:o:52\n["+backLabel+"] → w:p:1\n") {
 		t.Errorf("w:n:52 не из избранного: клавиатура %q", kbLines(t, c))
 	}
 	storetest.MergeEvent(t, 110, 52)
 	if c := open("w:n:110"); !strings.Contains(c.Form["text"], "<b>Трейл «Шарташ Карасики»</b>") ||
-		!strings.HasSuffix(kbLines(t, c), "["+addL+"] → w:a:52 | "+share52+"\n["+reportLabel+"] → q:o:52\n["+backLabel+"] → w:p:1\n") {
+		!strings.HasSuffix(kbLines(t, c), "["+addL+"] → w:a:52 | "+share52+"\n["+calFileLabel+"] → k:e:52\n["+reportLabel+"] → q:o:52\n["+backLabel+"] → w:p:1\n") {
 		t.Errorf("w:n слитого: текст %q, клавиатура %q", c.Form["text"], kbLines(t, c))
 	}
 	storetest.HideEvent(t, 52)

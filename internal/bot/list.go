@@ -258,6 +258,9 @@ func (b *Bot) buildCard(ctx context.Context, tgID int64, c callback) (sc screen,
 		favRow = append(favRow, models.InlineKeyboardButton{Text: shareLabel, URL: shareURL(b.name, e.ID, e.Title)})
 	}
 	add := [][]models.InlineKeyboardButton{favRow}
+	if !event.DateTBD(e.Title) {
+		add = append(add, btn(calFileLabel, callback{Kind: cbCalFile, ID: e.ID}))
+	}
 	if b.reportsOn() {
 		add = append(add, btn(reportLabel, callback{Kind: cbReportOpen, ID: e.ID}))
 	}

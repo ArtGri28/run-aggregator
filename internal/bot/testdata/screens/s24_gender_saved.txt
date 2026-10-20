@@ -10,6 +10,7 @@ parse_mode: HTML
 ---
 [🚻 Пол] → u:a:g:e:v3 | [🎂 Возраст] → u:a:a:e:v3
 [🏠 Где живу] → u:a:k:e:v3 | [🏅 Спорт] → u:a:s:e:v3
+[📅 Мой календарь] → k:o
 [⬅️ Назад] → m
 method: answerCallbackQuery
 text: 
