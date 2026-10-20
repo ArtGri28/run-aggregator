@@ -148,6 +148,9 @@ func (b *Bot) favSet(ctx context.Context, q *models.CallbackQuery, c callback) s
 			return errNotice
 		}
 		outcome, notice = favAdded[res].outcome, favAdded[res].notice
+		if res == store.FavAdded {
+			b.count(ctx, store.MetricFavBot)
+		}
 		if res != store.FavAdded && res != store.FavAlready {
 			b.logger().Info("favorite", "action", action, "outcome", outcome)
 			return notice

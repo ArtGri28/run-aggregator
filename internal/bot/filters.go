@@ -1281,6 +1281,7 @@ func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	if b.residenceText(ctx, m, text) { // город проживания (D-10): в поиск и в фильтры не идёт
 		return
 	}
+	b.count(ctx, store.MetricSearchBot)
 	today := b.today()
 	// Фильтры читаются до любого ответа с кнопками: кнопкам нужна версия.
 	raw, v, err := b.Store.Filters(ctx, m.From.ID)

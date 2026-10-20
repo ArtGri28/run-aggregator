@@ -77,6 +77,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithMessageTextHandler("runs", tgbot.MatchTypeCommandStartOnly, b.onRuns),
 		tgbot.WithMessageTextHandler("dupes", tgbot.MatchTypeCommandStartOnly, b.onDupes),
 		tgbot.WithMessageTextHandler("stats", tgbot.MatchTypeCommandStartOnly, b.onStats),
+		tgbot.WithMessageTextHandler("activity", tgbot.MatchTypeCommandStartOnly, b.onActivity),
 		tgbot.WithMessageTextHandler("quality", tgbot.MatchTypeCommandStartOnly, b.onQuality),
 		tgbot.WithCallbackQueryDataHandler("m", tgbot.MatchTypeExact, b.cb(b.onMenu)),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
@@ -257,6 +258,7 @@ func (b *Bot) chatMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 	return func(ctx context.Context, api *tgbot.Bot, u *models.Update) {
 		switch {
 		case isPrivate(u):
+			b.markDay(ctx, u)
 			next(ctx, api, u)
 		case u.CallbackQuery != nil:
 			b.answer(ctx, u.CallbackQuery, "")
@@ -268,6 +270,31 @@ func (b *Bot) chatMW(next tgbot.HandlerFunc) tgbot.HandlerFunc {
 			// чата — ни названия, ни отправителя, ни текста.
 			b.logger().Info("message from unconfigured group", "chat_id", u.Message.Chat.ID, "chat_type", string(u.Message.Chat.Type))
 		}
+	}
+}
+
+// markDay — отметка «был сегодня в боте» (Phase 19, D-01); ошибка в лог без
+// пользователя и не мешает ответу.
+func (b *Bot) markDay(ctx context.Context, u *models.Update) {
+	var id int64
+	switch {
+	case u.Message != nil && u.Message.From != nil:
+		id = u.Message.From.ID
+	case u.CallbackQuery != nil:
+		id = u.CallbackQuery.From.ID
+	}
+	if id == 0 {
+		return
+	}
+	if err := b.Store.MarkDay(ctx, id, b.today(), false); err != nil {
+		b.logger().Warn("mark day", "err", err)
+	}
+}
+
+// count прибавляет действие к счётчику дня (Phase 19, D-03).
+func (b *Bot) count(ctx context.Context, metric string) {
+	if err := b.Store.CountAction(ctx, b.today(), metric); err != nil {
+		b.logger().Warn("count action", "metric", metric, "err", err)
 	}
 }
 

@@ -186,6 +186,7 @@ func (b *Bot) onCard(ctx context.Context, q *models.CallbackQuery, c callback) s
 	if err := b.show(ctx, q, sc); err != nil {
 		b.logger().Warn("show card", "err", err)
 	}
+	b.count(ctx, store.MetricCardBot)
 	return ""
 }
 

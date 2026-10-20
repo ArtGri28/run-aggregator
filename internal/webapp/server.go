@@ -109,10 +109,10 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 	auth := Middleware(secret, now, func(code string) { log.Info("auth rejected", "code", code) })
 	mux := http.NewServeMux()
 	handle := func(pattern string, h http.HandlerFunc) {
-		mux.Handle(pattern, srv.logged(auth(limited(srv.limit, h))))
+		mux.Handle(pattern, srv.logged(auth(srv.seen(limited(srv.limit, h)))))
 	}
 	handleWrite := func(pattern string, h http.HandlerFunc) {
-		mux.Handle(pattern, srv.logged(auth(limited(srv.write, h))))
+		mux.Handle(pattern, srv.logged(auth(srv.seen(limited(srv.write, h)))))
 	}
 	handle("GET /api/v1/meta", srv.meta)
 	handle("GET /api/v1/events", srv.events)
@@ -194,6 +194,26 @@ func (s *server) logged(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, r)
 		s.log.Info("http", "method", r.Method, "route", r.Pattern, "status", sw.code, "ms", time.Since(start).Milliseconds())
 	})
+}
+
+// seen — отметка «был сегодня в Mini App» (Phase 19, D-01); ошибка в лог без
+// пользователя и не мешает ответу.
+func (s *server) seen(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := TgID(r.Context()); ok && s.store != nil {
+			if err := s.store.MarkDay(r.Context(), id, s.today(), true); err != nil {
+				s.log.Warn("mark day", "err", err)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// count прибавляет действие к счётчику дня (Phase 19, D-03).
+func (s *server) count(ctx context.Context, metric string) {
+	if err := s.store.CountAction(ctx, s.today(), metric); err != nil {
+		s.log.Warn("count action", "metric", metric, "err", err)
+	}
 }
 
 // limiter — счётчик запросов пользователя в фиксированном окне rateWindow с
@@ -515,6 +535,7 @@ func (s *server) event(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r, err)
 		return
 	}
+	s.count(ctx, store.MetricCardApp)
 	writeJSON(w, http.StatusOK, cardJSONOf(s.dict, e, srcs, fav))
 }
 
@@ -582,6 +603,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
+	s.count(ctx, store.MetricSearchApp)
 	items, err := s.store.SearchCandidates(ctx, country, today, s.dict.MaxSearchCandidates)
 	if err != nil {
 		s.internal(w, r, err)
@@ -656,6 +678,9 @@ func (s *server) favoriteAdd(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		fail(w, http.StatusNotFound, "gone")
 		return
+	}
+	if res == store.FavAdded {
+		s.count(ctx, store.MetricFavApp)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"outcome": outcome})
 }

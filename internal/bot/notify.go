@@ -248,11 +248,12 @@ func (n *Notifier) chores(ctx context.Context, now time.Time) {
 	reminders := do("remind", func() (int, error) { return n.remind(ctx, now) })
 	fuse := do("fuse", func() (int, error) { return n.fuse(ctx, now) })
 	reports := do("reports", func() (int, error) { return b.Store.PruneReports(ctx, now.Add(-reportKeep)) })
+	days := do("days", func() (int, error) { return b.Store.PruneUserDays(ctx, n.dayOf(now).AddDate(0, 0, -dayKeep)) })
 	if len(failed) > 0 {
 		b.logger().Warn("notify chores failed", "steps", strings.Join(failed, ","))
 	}
-	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 {
-		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports)
+	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 || days > 0 {
+		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports, "days", days)
 	}
 }
 
