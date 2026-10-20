@@ -671,12 +671,14 @@ func TestS41FiltersCompat(t *testing.T) {
 	setUserFilters(t, s, `{"country":"BY","sport":"skiing","sports":{"skiing":{"type":"ski"}}}`)
 	pressSnap(t, b, api, "s:o", "s41_settings_ski")
 	setUserFilters(t, s, `{}`)
-	if c := press(t, b, api, "s:o"); c.Form["text"] != settingsScreen(userFilters{}, "").text || strings.Contains(c.Form["text"], "Вид спорта") ||
-		!strings.HasSuffix(c.Form["text"], "показываются все будущие забеги") {
+	// Под экраном настроек — пояснение подписки (Phase 20); остальное прежнее.
+	noSub := func(c call) string { return strings.TrimSuffix(c.Form["text"], "\n\n"+subOffAbout) }
+	if c := press(t, b, api, "s:o"); noSub(c) != settingsScreen(userFilters{}, "").text || strings.Contains(c.Form["text"], "Вид спорта") ||
+		!strings.HasSuffix(noSub(c), "показываются все будущие забеги") {
 		t.Errorf("шаг 8: настройки при беге: %q", c.Form["text"])
 	}
 	setUserFilters(t, s, `{"sport":"skiing"}`)
-	if c := press(t, b, api, "s:o"); !strings.HasSuffix(c.Form["text"], "🔎 Фильтры не заданы — показываются все будущие старты") {
+	if c := press(t, b, api, "s:o"); !strings.HasSuffix(noSub(c), "🔎 Фильтры не заданы — показываются все будущие старты") {
 		t.Errorf("шаг 8: настройки лыж без фильтров: %q", c.Form["text"])
 	}
 }

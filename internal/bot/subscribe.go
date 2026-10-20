@@ -18,11 +18,14 @@ import (
 // стартах, появившихся после прошлого сообщения.
 
 const (
-	subOnNotice  = "🔔 Подписка включена"
+	subOnNotice  = "🔔 Подписка включена. Новые старты — по понедельникам"
 	subOffNotice = "🔕 Подписка отключена"
 	subLine      = "🔔 Подписка на новые старты: включена"
 	subOldMark   = " (по прежним фильтрам)"
-	digestHead   = "🔔 <b>Новые старты по вашей подписке</b>"
+	// subAbout — как работает подписка: на экране без подписки и с ней.
+	subOffAbout = "🔔 Подписка на новые старты: раз в неделю, по понедельникам, бот пришлёт старты, которые появились в каталоге по этим фильтрам. Если новых не будет — сообщения не будет."
+	subOnAbout  = "\nСообщение приходит по понедельникам после 10:00 по Москве — только если появились новые старты по этим фильтрам. Отписаться можно здесь или кнопкой в самом сообщении."
+	digestHead  = "🔔 <b>Новые старты по вашей подписке</b>"
 	// digestMax — стартов в сообщении подписки; остальные — в поиске (N-7).
 	digestMax = 10
 	// digestHour — час по Москве в понедельник, с которого создаются сообщения
@@ -54,12 +57,13 @@ func withSub(sc screen, f userFilters, raw []byte) screen {
 	var add [][]models.InlineKeyboardButton
 	switch {
 	case raw == nil:
+		sc.text += "\n\n" + subOffAbout
 		add = append(add, btn("🔔 Подписаться на новые старты по этим фильтрам", callback{Kind: cbSubscribe}))
 	case sameSub(raw, f):
-		sc.text += "\n\n" + subLine
+		sc.text += "\n\n" + subLine + subOnAbout
 		add = append(add, btn("🔕 Отписаться", callback{Kind: cbUnsubscribe, Value: fromSettings}))
 	default:
-		sc.text += "\n\n" + subLine + subOldMark
+		sc.text += "\n\n" + subLine + subOldMark + subOnAbout
 		add = append(add, btn("🔔 Подписаться по этим фильтрам", callback{Kind: cbSubscribe}),
 			btn("🔕 Отписаться", callback{Kind: cbUnsubscribe, Value: fromSettings}))
 	}
