@@ -1,7 +1,7 @@
 // Точка входа Mini App: инициализация Telegram.WebApp (ready, expand, цвета,
 // BackButton), шапка с пилюлей страны, нижняя панель разделов и
 // маршрутизация по hash: #/ #/catalog[?q=<запрос>] #/filters #/event/<id>
-// #/calendar[/<месяц или день>] #/favorites #/profile.
+// #/calendar[/<месяц или день>] #/favorites #/profile[/calendar].
 // Вне Telegram (пустой initData) — только заглушка (D-09).
 
 import { meta } from './api.js';
@@ -25,7 +25,7 @@ const ROUTES = [
   [/^#\/event\/(\d{1,18})$/, event],
   [/^#\/calendar(?:\/(\d{4}-\d{2}(?:-\d{2})?))?$/, calendar],
   [/^#\/favorites$/, favorites],
-  [/^#\/profile$/, profile],
+  [/^#\/profile(?:\/(calendar))?$/, profile],
 ];
 
 // Вкладки нижней панели; фильтры и карточка подсвечивают «Каталог».

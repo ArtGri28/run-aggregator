@@ -169,8 +169,13 @@ func (n *Notifier) Step(ctx context.Context) {
 	}
 
 	// Участок «вызов»: с этого места отметка взятия не снимается — кроме 429.
-	p.sc.quiet = quietAt(now, b.loc)
-	n.settle(ctx, row, b.send(context.WithValue(ctx, retryWaitKey{}, noWait), row.TgID, p.sc), now)
+	quiet, sctx := quietAt(now, b.loc), context.WithValue(ctx, retryWaitKey{}, noWait)
+	if p.doc != nil {
+		n.settle(ctx, row, b.sendDoc(sctx, row.TgID, *p.doc, quiet), now)
+		return
+	}
+	p.sc.quiet = quiet
+	n.settle(ctx, row, b.send(sctx, row.TgID, p.sc), now)
 }
 
 // settle отмечает исход вызова Bot API.
@@ -321,6 +326,7 @@ func (n *Notifier) fuse(ctx context.Context, now time.Time) (int, error) {
 // без отправки.
 type prepared struct {
 	sc    screen
+	doc   *doc // документ вместо сообщения (файл .ics из Mini App)
 	close string
 }
 
@@ -342,6 +348,14 @@ func (n *Notifier) prepare(ctx context.Context, row store.OutboxRow, now time.Ti
 		return prepareFuse(row), nil
 	case store.OutboxDigest:
 		return n.prepareDigest(ctx, row, now)
+	case store.OutboxICS:
+		return n.prepareICS(ctx, row)
+	case store.OutboxCalLink:
+		if b.domain == "" {
+			return prepared{close: store.OutboxRejected}, nil
+		}
+		sc, err := b.newLink(ctx, row.TgID)
+		return prepared{sc: sc}, err
 	}
 	if (row.Kind != event.KindChange && row.Kind != event.KindGone) || row.EventID == 0 {
 		return prepared{close: store.OutboxRejected}, nil
@@ -555,4 +569,27 @@ func goneMessage(e event.Event) screen {
 func quietAt(t time.Time, loc *time.Location) bool {
 	h := t.In(loc).Hour()
 	return h >= nightFrom || h < nightTo
+}
+
+// prepareICS — файл .ics по запросу из Mini App: одного старта (у строки есть
+// событие) либо всех избранных. Старт недоступен — «недоступен»; нет стартов
+// с точной датой — «условие не выполняется».
+func (n *Notifier) prepareICS(ctx context.Context, row store.OutboxRow) (prepared, error) {
+	var d doc
+	var ok bool
+	var err error
+	miss := store.OutboxStale
+	if row.EventID > 0 {
+		d, ok, err = n.b.oneDoc(ctx, row.EventID)
+		miss = store.OutboxUnavailable
+	} else {
+		d, ok, err = n.b.allDoc(ctx, row.TgID)
+	}
+	if err != nil {
+		return prepared{}, err
+	}
+	if !ok {
+		return prepared{close: miss}, nil
+	}
+	return prepared{doc: &d}, nil
 }

@@ -52,6 +52,9 @@ type userFilters struct {
 	// Sports — дистанция и дисциплина небеговых видов спорта по коду вида
 	// спорта; у бега они в Dist и Type. Пустая запись не хранится.
 	Sports map[string]sportFilters `json:"sports,omitempty"`
+	// All — все виды спорта: только у подписки из Mini App без выбранного
+	// вида спорта (Phase 21, A-3); поиск бота это поле не читает.
+	All bool `json:"all,omitempty"`
 }
 
 // sportFilters — фильтры одного небегового вида спорта: индексы его корзин и

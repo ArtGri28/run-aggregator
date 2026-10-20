@@ -1,0 +1,3 @@
+method: sendDocument
+document: starts.ics
+caption: 📅 Избранные старты: 2. Откройте файл и нажмите «Добавить».

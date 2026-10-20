@@ -4,7 +4,7 @@
 // задаёт состояние (PUT/DELETE идемпотентны) и сразу его показывает.
 
 import { get, meta } from '../api.js';
-import { el, flag, km, link, MON, ruDate, showError, statusBadge } from '../ui.js';
+import { el, flag, km, link, MON, ruDate, showError, statusBadge, toChat } from '../ui.js';
 import { icon } from '../icons.js';
 import { toggleFav } from '../row.js';
 
@@ -42,6 +42,14 @@ function favControl(c, m, mark) {
   });
   paint();
   return [btn, note];
+}
+
+// shareButton — «📤 Поделиться»: окно Telegram «Переслать» со ссылкой на
+// карточку старта в боте (как кнопка карточки бота, N-1 Phase 20).
+function shareButton(bot, c) {
+  const link = `https://t.me/${bot}?start=e_${c.id}`;
+  const url = 'https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(c.title);
+  return el('button', { type: 'button', class: 'btn btn-block', text: '📤 Поделиться', onclick: () => window.Telegram.WebApp.openTelegramLink(url) });
 }
 
 export async function render(box, id) {
@@ -99,5 +107,7 @@ export async function render(box, id) {
     }
   }
   box.append(...favControl(c, m, mark));
+  if (!c.date_tbd) box.append(...toChat('📅 В календарь', 'calendar/file', { event: c.id }));
+  if (m.bot) box.append(shareButton(m.bot, c));
   box.append(el('a', { class: 'btn btn-block', href: '#/catalog', text: 'К каталогу' }));
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-telegram/bot/models"
 
+	"aggregator/internal/event"
 	"aggregator/internal/store"
 )
 
@@ -26,6 +27,8 @@ const (
 	subOffAbout = "🔔 Подписка на новые старты: раз в неделю, по понедельникам, бот пришлёт старты, которые появились в каталоге по этим фильтрам. Если новых не будет — сообщения не будет."
 	subOnAbout  = "\nСообщение приходит по понедельникам после 10:00 по Москве — только если появились новые старты по этим фильтрам. Отписаться можно здесь или кнопкой в самом сообщении."
 	digestHead  = "🔔 <b>Новые старты по вашей подписке</b>"
+	// digestAllSports — строка вида спорта у подписки «все виды спорта».
+	digestAllSports = "🏅 Все виды спорта"
 	// digestMax — стартов в сообщении подписки; остальные — в поиске (N-7).
 	digestMax = 10
 	// digestHour — час по Москве в понедельник, с которого создаются сообщения
@@ -123,6 +126,7 @@ func (b *Bot) subList(ctx context.Context, q *models.CallbackQuery) string {
 	if json.Unmarshal(raw, &sub) != nil {
 		return staleNotice
 	}
+	sub.All = false // поиск бота ищет по одному виду спорта
 	_, v, err := b.Store.UpdateFilters(ctx, q.From.ID, func([]byte) ([]byte, error) { return json.Marshal(subCopy(sub)) })
 	if err != nil {
 		b.logger().Error("subscription", "err", err)
@@ -172,7 +176,11 @@ func (n *Notifier) prepareDigest(ctx context.Context, row store.OutboxRow, now t
 	}
 	today := n.dayOf(now)
 	f := loadFilters(raw, today)
-	items, total, err := b.Store.NewEvents(ctx, f.query(today), since, now, digestMax)
+	flt := f.query(today)
+	if f.All {
+		flt.Sport, flt.Type, flt.Distances = "", "", nil
+	}
+	items, total, err := b.Store.NewEvents(ctx, flt, since, now, digestMax)
 	if err != nil {
 		return prepared{}, err
 	}
@@ -191,8 +199,12 @@ func (n *Notifier) prepareDigest(ctx context.Context, row store.OutboxRow, now t
 // «Отписаться».
 func digestMessage(f userFilters, cityName string, items []store.ListItem, total, year int) screen {
 	sp := f.sport()
+	head := sp.Emoji + " " + sp.Title
+	if f.All {
+		head = digestAllSports
+	}
 	var sb strings.Builder
-	sb.WriteString(digestHead + "\n\n" + sp.Emoji + " " + sp.Title)
+	sb.WriteString(digestHead + "\n\n" + head)
 	if line := activeLine(f, cityName); line != "" {
 		sb.WriteString("\n⚙️ Фильтры: " + line)
 	}
@@ -201,6 +213,10 @@ func digestMessage(f userFilters, cityName string, items []store.ListItem, total
 	}
 	rows := make([]row, 0, len(items)+2)
 	for _, it := range items {
+		// Все виды спорта: у небегового старта значок вида спорта, как в избранном.
+		if sp, ok := event.SportByCode(it.Sport); f.All && ok && sp.Code != event.SportRunning {
+			it.Title = sp.Emoji + " " + it.Title
+		}
 		rows = append(rows, eventBtn(it, callback{Kind: cbCard, ID: it.ID}, f.Country == allCountries, year))
 	}
 	if total > len(items) {
@@ -208,4 +224,52 @@ func digestMessage(f userFilters, cityName string, items []store.ListItem, total
 	}
 	rows = append(rows, btn("🔕 Отписаться", callback{Kind: cbUnsubscribe, Value: fromDigest}))
 	return screen{text: sb.String(), kb: keyboard(rows...)}
+}
+
+// AppFilters — фильтры каталога Mini App в виде, понятном подписке: вид
+// спорта ("" — бег), страна ("" — по умолчанию, "*" — все), ключ города,
+// дисциплина, индексы корзин дистанции. Проверку значений делает webapp.
+type AppFilters struct {
+	Sport, Country, City, Type string
+	Dist                       []int
+}
+
+// AppSubscription — копия фильтров подписки из фильтров Mini App (Phase 21,
+// A-3): тот же JSON, что пишет бот по кнопке «Подписаться».
+func AppSubscription(a AppFilters) ([]byte, error) {
+	f := userFilters{Country: a.Country, City: a.City}
+	if a.Sport == "" {
+		f.All = true
+	} else if a.Sport == string(event.SportRunning) {
+		f.Dist, f.Type = a.Dist, a.Type
+	} else {
+		f.Sport = a.Sport
+		if len(a.Dist) > 0 || a.Type != "" {
+			f.Sports = map[string]sportFilters{a.Sport: {Dist: a.Dist, Type: a.Type}}
+		}
+	}
+	return json.Marshal(subCopy(f))
+}
+
+// SameSubscription — копии фильтров совпадают (порядок ключей JSON не важен).
+func SameSubscription(stored, current []byte) bool {
+	var cur userFilters
+	if json.Unmarshal(current, &cur) != nil {
+		return false
+	}
+	return sameSub(stored, cur)
+}
+
+// ViewSubscription — фильтры подписки в виде Mini App; false — копию не
+// прочитать.
+func ViewSubscription(raw []byte) (AppFilters, bool) {
+	var f userFilters
+	if json.Unmarshal(raw, &f) != nil {
+		return AppFilters{}, false
+	}
+	if f.All {
+		return AppFilters{Country: f.Country, City: f.City}, true
+	}
+	o := f.own()
+	return AppFilters{Sport: string(f.sport().Code), Country: f.Country, City: f.City, Type: o.Type, Dist: o.Dist}, true
 }

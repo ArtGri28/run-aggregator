@@ -127,6 +127,11 @@ func New(s *store.Store, secret []byte, now func() time.Time, log *slog.Logger) 
 	handleWrite("PUT /api/v1/favorites/{id}", srv.favoriteAdd)
 	handleWrite("DELETE /api/v1/favorites/{id}", srv.favoriteRemove)
 	handle("GET /api/v1/profile", srv.profile)
+	handle("GET /api/v1/subscription", srv.subscription)
+	handleWrite("PUT /api/v1/subscription", srv.subscribe)
+	handleWrite("DELETE /api/v1/subscription", srv.unsubscribe)
+	handleWrite("POST /api/v1/calendar/file", srv.calendarFile)
+	handleWrite("POST /api/v1/calendar/link", srv.calendarLink)
 	handle("/api/", func(w http.ResponseWriter, _ *http.Request) { fail(w, http.StatusNotFound, "not_found") })
 	mux.Handle("GET /cal/{file}", srv.logged(http.HandlerFunc(srv.calFeed)))
 	mux.Handle("/", srv.logged(static()))
@@ -446,6 +451,10 @@ func (s *server) meta(w http.ResponseWriter, r *http.Request) {
 	m.Countries = []countryJSON{}
 	for _, c := range countries {
 		m.Countries = append(m.Countries, countryJSON{c.Code, name(s.dict.CountryNames, c.Code), c.N})
+	}
+	if m.Bot, err = s.store.Setting(ctx, store.SettingBotUsername); err != nil {
+		s.internal(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, m)
 }

@@ -2,7 +2,7 @@
 // данные каталога приходят из внешних источников), даты, флаги, дистанции,
 // заголовок экрана, короткие сообщения, заглушка вне Telegram и показ ошибок API.
 
-import { ApiError } from './api.js';
+import { ApiError, post } from './api.js';
 
 // el — узел с атрибутами и детьми. Ключ "text" — textContent, "on<event>" —
 // обработчик, значение true — пустой атрибут, null/false — атрибут не ставится.
@@ -132,4 +132,22 @@ export function showError(box, err, retry) {
     notice.append(el('button', { class: 'btn btn-block', type: 'button', text: 'Повторить', onclick: () => { notice.remove(); retry(); } }));
   }
   box.append(notice);
+}
+
+// toChat — кнопка запроса, который выполнит бот (файл .ics, ссылка
+// календаря), и строка ответа под ней.
+export function toChat(text, path, params) {
+  const note = el('p', { class: 'hint', role: 'status' });
+  const btn = el('button', { type: 'button', class: 'btn btn-block', text });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await post(path, params);
+      note.textContent = path === 'calendar/link' ? 'Ссылка придёт в чат с ботом.' : 'Файл придёт в чат с ботом.';
+    } catch (e) {
+      note.textContent = e.code === 'empty' ? 'Нет стартов с точной датой.' : errorText(e, 'Не удалось отправить запрос. Повторите позже.');
+    }
+    btn.disabled = false;
+  });
+  return [btn, note];
 }

@@ -77,3 +77,32 @@ func (s *Store) FeedOwner(ctx context.Context, hash []byte) (tgID int64, ok bool
 	}
 	return tgID, true, nil
 }
+
+// Запросы из Mini App, которые выполняет бот (Phase 21, 21-UX-CONTRACT.md
+// раздел 5): файл .ics (eventID 0 — все избранные старты) и ссылка
+// календаря. У webapp нет токена бота, поэтому запрос — строка очереди.
+const (
+	OutboxICS     = "ics"
+	OutboxCalLink = "cal_link"
+)
+
+// EnqueueAppRequest записывает запрос kind пользователя tgID; если такой же
+// запрос (тот же вид и старт) ещё ждёт отправки, второй не пишется.
+// created = false — запрос уже ждёт.
+func (s *Store) EnqueueAppRequest(ctx context.Context, tgID int64, kind string, eventID int64, now time.Time) (created bool, err error) {
+	var ev *int64
+	if eventID > 0 {
+		ev = &eventID
+	}
+	key := fmt.Sprintf("%s:%d:%d", kind, eventID, now.UnixNano())
+	tag, err := s.db.Exec(ctx, `
+		INSERT INTO outbox (tg_id, kind, event_id, dedup_key, created_at)
+		SELECT $1, $2::text, $3, $4 || ':' || gen_random_uuid()::text, $5
+		WHERE NOT EXISTS (SELECT 1 FROM outbox WHERE tg_id = $1 AND kind = $2::text
+		    AND event_id IS NOT DISTINCT FROM $3 AND sent_at IS NULL AND done_at IS NULL)`,
+		tgID, kind, ev, key, now)
+	if err != nil {
+		return false, fmt.Errorf("enqueue app request: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}

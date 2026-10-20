@@ -48,9 +48,10 @@ async function request(method, path, params = {}, signal) {
   return body;
 }
 
-// get — чтение; put и del — запись избранного (без тела, идемпотентны).
+// get — чтение; put, post и del — запись без тела, параметры — в адресе.
 export const get = (path, params) => request('GET', path, params);
-export const put = (path) => request('PUT', path);
+export const put = (path, params) => request('PUT', path, params);
+export const post = (path, params) => request('POST', path, params);
 export const del = (path) => request('DELETE', path);
 
 // search — текстовый поиск стартов в стране country ('*' — все страны).

@@ -107,6 +107,15 @@ func TestS63Digest(t *testing.T) {
 	msg = r.sent(t, "двенадцать новых")
 	matchSnapshot(t, "s63_digest_more", renderCall(t, msg))
 
+	// Подписка из Mini App «все виды спорта» (21-UX-CONTRACT.md, раздел 11):
+	// новые старты бега и лыж в одном сообщении.
+	r = digestRig(t, 2)
+	dbExec(t, `UPDATE subscriptions SET filters = '{"all": true, "country": "*"}'`)
+	dbExec(t, `UPDATE events SET created_at = '2026-09-22T00:00:00Z' WHERE sport = 'skiing'`)
+	r.at(mon(r, 10, 0))
+	msg = r.sent(t, "все виды спорта")
+	matchSnapshot(t, "s63_digest_all", renderCall(t, msg))
+
 	r = digestRig(t, 3)
 	r.reply = func(c call, _ int) string { return errBlocked }
 	r.at(mon(r, 10, 0))

@@ -2,12 +2,15 @@ package webapp
 
 import (
 	"encoding/binary"
+	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"aggregator/internal/bot"
+	"aggregator/internal/event"
 	"aggregator/internal/ics"
 	"aggregator/internal/store"
 )
@@ -77,4 +80,67 @@ func (s *server) feedBody(r *http.Request, tgID int64) ([]byte, error) {
 		return nil, err
 	}
 	return ics.Calendar(bot.CalendarName, s.now(), true, evs), nil
+}
+
+// calendarFile — POST /calendar/file[?event=<id>]: запрос файла .ics, его
+// пришлёт бот (A-2, A-4). Старт недоступен или дата-заглушка — 404 gone; нет
+// стартов с точной датой в избранном — 409 empty.
+func (s *server) calendarFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Cache-Control", noStore)
+	tgID, _ := TgID(ctx)
+	var id int64
+	if v := r.URL.Query().Get("event"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n <= 0 {
+			fail(w, http.StatusBadRequest, "bad_request")
+			return
+		}
+		root, err := s.store.RootEventID(ctx, n)
+		var e event.Event
+		if err == nil {
+			e, err = s.store.GetEvent(ctx, root)
+		}
+		sp, _ := event.SportByCode(e.Sport)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			fail(w, http.StatusNotFound, "gone")
+			return
+		case err != nil:
+			s.internal(w, r, err)
+			return
+		case !e.IsListed || e.MergedIntoID != nil || !sp.Enabled || event.DateTBD(e.Title):
+			fail(w, http.StatusNotFound, "gone")
+			return
+		}
+		id = e.ID
+	} else {
+		items, _, err := s.store.ListFavorites(ctx, tgID, s.today(), s.dict.FavLimit, 0)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		if !slices.ContainsFunc(items, func(it store.ListItem) bool { return !event.DateTBD(it.Title) }) {
+			fail(w, http.StatusConflict, "empty")
+			return
+		}
+	}
+	s.queued(w, r, tgID, store.OutboxICS, id)
+}
+
+// calendarLink — POST /calendar/link: запрос ссылки календаря, её пришлёт бот.
+func (s *server) calendarLink(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", noStore)
+	tgID, _ := TgID(r.Context())
+	s.queued(w, r, tgID, store.OutboxCalLink, 0)
+}
+
+// queued ставит запрос в очередь бота: 202, в том числе если такой же запрос
+// уже ждёт отправки.
+func (s *server) queued(w http.ResponseWriter, r *http.Request, tgID int64, kind string, eventID int64) {
+	if _, err := s.store.EnqueueAppRequest(r.Context(), tgID, kind, eventID, s.now()); err != nil {
+		s.internal(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"outcome": "queued"})
 }

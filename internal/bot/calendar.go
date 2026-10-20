@@ -182,63 +182,95 @@ func calendarScreen(items []store.ListItem, year int, link bool) screen {
 	return screen{text: sb.String(), kb: keyboard(append(rows, fav, back)...)}
 }
 
-// calAll — K-3: файл всех стартов.
-func (b *Bot) calAll(ctx context.Context, q *models.CallbackQuery) string {
-	items, err := b.favorites(ctx, q.From.ID)
-	if err == nil {
-		var evs []ics.Event
-		if evs, err = FavoriteICS(ctx, b.Store, b.name, items); err == nil {
-			if len(evs) == 0 {
-				return calNoDates
-			}
-			caption := "📅 Избранные старты: " + strconv.Itoa(len(evs)) + ". Откройте файл и нажмите «Добавить»."
-			b.sendFile(ctx, q.From.ID, "starts.ics", ics.Calendar(CalendarName, b.now(), false, evs), caption)
-			return ""
-		}
-	}
-	b.logger().Error("calendar", "action", "file", "err", err)
-	return errNotice
+// doc — документ сообщения: файл .ics и подпись.
+type doc struct {
+	name    string
+	data    []byte
+	caption string
 }
 
-// calOne — K-4: файл одного старта (корень слияния).
-func (b *Bot) calOne(ctx context.Context, q *models.CallbackQuery, id int64) string {
+// allDoc — K-3: файл избранных будущих стартов; ok = false — нет стартов с
+// точной датой.
+func (b *Bot) allDoc(ctx context.Context, tgID int64) (d doc, ok bool, err error) {
+	items, err := b.favorites(ctx, tgID)
+	if err != nil {
+		return doc{}, false, err
+	}
+	evs, err := FavoriteICS(ctx, b.Store, b.name, items)
+	if err != nil || len(evs) == 0 {
+		return doc{}, false, err
+	}
+	caption := "📅 Избранные старты: " + strconv.Itoa(len(evs)) + ". Откройте файл и нажмите «Добавить»."
+	return doc{"starts.ics", ics.Calendar(CalendarName, b.now(), false, evs), caption}, true, nil
+}
+
+// oneDoc — K-4: файл одного старта (корень слияния); ok = false — старт
+// недоступен либо дата-заглушка.
+func (b *Bot) oneDoc(ctx context.Context, id int64) (d doc, ok bool, err error) {
 	root, err := b.Store.RootEventID(ctx, id)
 	var e event.Event
 	if err == nil {
 		e, err = b.Store.GetEvent(ctx, root)
 	}
 	if errors.Is(err, store.ErrNotFound) {
-		return goneNotice
+		return doc{}, false, nil
 	}
 	if err != nil {
-		b.logger().Error("calendar", "action", "file", "err", err)
-		return errNotice
+		return doc{}, false, err
 	}
 	sport, _ := event.SportByCode(e.Sport)
 	if !e.IsListed || e.MergedIntoID != nil || !sport.Enabled || event.DateTBD(e.Title) {
-		return goneNotice
+		return doc{}, false, nil
 	}
 	srcs, err := b.Store.EventSources(ctx, e.ID)
 	if err != nil {
-		b.logger().Error("calendar", "action", "file", "err", err)
-		return errNotice
+		return doc{}, false, err
 	}
 	name := "start-" + strconv.FormatInt(e.ID, 10) + ".ics"
-	b.sendFile(ctx, q.From.ID, name, ics.Calendar(CalendarName, b.now(), false, []ics.Event{ICSEvent(e, srcs, b.name)}), calOneCap)
+	return doc{name, ics.Calendar(CalendarName, b.now(), false, []ics.Event{ICSEvent(e, srcs, b.name)}), calOneCap}, true, nil
+}
+
+// calAll — k:f.
+func (b *Bot) calAll(ctx context.Context, q *models.CallbackQuery) string {
+	d, ok, err := b.allDoc(ctx, q.From.ID)
+	switch {
+	case err != nil:
+		b.logger().Error("calendar", "action", "file", "err", err)
+		return errNotice
+	case !ok:
+		return calNoDates
+	}
+	if err := b.sendDoc(ctx, q.From.ID, d, false); err != nil {
+		b.logger().Warn("send calendar file", "err", err)
+	}
 	return ""
 }
 
-// sendFile отправляет документ; в лог — только исход.
-func (b *Bot) sendFile(ctx context.Context, chatID int64, name string, data []byte, caption string) {
+// calOne — k:e.
+func (b *Bot) calOne(ctx context.Context, q *models.CallbackQuery, id int64) string {
+	d, ok, err := b.oneDoc(ctx, id)
+	switch {
+	case err != nil:
+		b.logger().Error("calendar", "action", "file", "err", err)
+		return errNotice
+	case !ok:
+		return goneNotice
+	}
+	if err := b.sendDoc(ctx, q.From.ID, d, false); err != nil {
+		b.logger().Warn("send calendar file", "err", err)
+	}
+	return ""
+}
+
+// sendDoc отправляет документ; quiet — без звука.
+func (b *Bot) sendDoc(ctx context.Context, chatID int64, d doc, quiet bool) error {
 	err := withRetry(ctx, func() error {
-		_, err := b.api.SendDocument(ctx, &tgbot.SendDocumentParams{ChatID: chatID, Caption: caption,
-			Document: &models.InputFileUpload{Filename: name, Data: bytes.NewReader(data)}})
+		_, err := b.api.SendDocument(ctx, &tgbot.SendDocumentParams{ChatID: chatID, Caption: d.caption, DisableNotification: quiet,
+			Document: &models.InputFileUpload{Filename: d.name, Data: bytes.NewReader(d.data)}})
 		return err
 	})
 	b.logKind(err, "sendDocument")
-	if err != nil {
-		b.logger().Warn("send calendar file", "err", err)
-	}
+	return err
 }
 
 // calLink — K-5: renew = false — выдать ссылку, если её ещё нет; true — новая
@@ -247,7 +279,6 @@ func (b *Bot) calLink(ctx context.Context, q *models.CallbackQuery, renew bool) 
 	if b.domain == "" {
 		return staleNotice
 	}
-	kb := keyboard(btn("🔄 Новая ссылка", callback{Kind: cbCalNew}), btn("🚫 Отключить", callback{Kind: cbCalOff}))
 	if !renew {
 		has, err := b.Store.HasFeed(ctx, q.From.ID)
 		if err != nil {
@@ -255,30 +286,43 @@ func (b *Bot) calLink(ctx context.Context, q *models.CallbackQuery, renew bool) 
 			return errNotice
 		}
 		if has {
-			if err := b.send(ctx, q.From.ID, screen{text: calLinkHead + "\n\n" + calLinkAgain, kb: kb}); err != nil {
+			if err := b.send(ctx, q.From.ID, screen{text: calLinkHead + "\n\n" + calLinkAgain, kb: linkKeyboard()}); err != nil {
 				b.logger().Warn("send calendar link", "err", err)
 			}
 			return ""
 		}
 	}
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	sc, err := b.newLink(ctx, q.From.ID)
+	if err != nil {
 		b.logger().Error("calendar", "action", "link", "err", err)
 		return errNotice
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	if err := b.Store.SetFeed(ctx, q.From.ID, FeedHash(token), b.now()); err != nil {
-		b.logger().Error("calendar", "action", "link", "err", err)
-		return errNotice
-	}
-	b.logger().Info("calendar", "action", "link")
-	text := calLinkHead + "\n\nПодключите эту ссылку в календаре телефона — он сам будет подтягивать старты из избранного:\n" +
-		"https://" + b.domain + "/cal/" + token + ".ics\n\n" + calLinkHelp
-	if err := b.send(ctx, q.From.ID, screen{text: text, kb: kb}); err != nil {
+	if err := b.send(ctx, q.From.ID, sc); err != nil {
 		b.logger().Warn("send calendar link", "err", err)
 	}
 	if renew {
 		return calNewNotice
 	}
 	return ""
+}
+
+func linkKeyboard() *models.InlineKeyboardMarkup {
+	return keyboard(btn("🔄 Новая ссылка", callback{Kind: cbCalNew}), btn("🚫 Отключить", callback{Kind: cbCalOff}))
+}
+
+// newLink выдаёт пользователю новую ссылку календаря (прежняя перестаёт
+// работать) и возвращает сообщение K-5 с ней.
+func (b *Bot) newLink(ctx context.Context, tgID int64) (screen, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return screen{}, err
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	if err := b.Store.SetFeed(ctx, tgID, FeedHash(token), b.now()); err != nil {
+		return screen{}, err
+	}
+	b.logger().Info("calendar", "action", "link")
+	text := calLinkHead + "\n\nПодключите эту ссылку в календаре телефона — он сам будет подтягивать старты из избранного:\n" +
+		"https://" + b.domain + "/cal/" + token + ".ics\n\n" + calLinkHelp
+	return screen{text: text, kb: linkKeyboard()}, nil
 }

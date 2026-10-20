@@ -56,6 +56,8 @@ type metaJSON struct {
 	Countries []countryJSON                `json:"countries"`
 	Months    []optionJSON                 `json:"months"`
 	Limits    limitsJSON                   `json:"limits"`
+	// Bot — имя бота для ссылки «Поделиться» (Phase 21, A-4); "" — кнопки нет.
+	Bot string `json:"bot"`
 }
 
 // enabledSports — включённые виды спорта в порядке справочника.
@@ -266,6 +268,8 @@ type cardJSON struct {
 	Distances       []distanceJSON `json:"distances"`
 	Sources         []sourceJSON   `json:"sources"`
 	IsFavorite      bool           `json:"is_favorite"`
+	// DateTBD — дата-заглушка: «📅 В календарь» не показывается (A-4).
+	DateTBD bool `json:"date_tbd"`
 }
 
 // cardJSONOf — карточка события: те же поля, что у карточки бота
@@ -277,6 +281,7 @@ func cardJSONOf(d bot.Dictionary, e event.Event, srcs []store.EventSource, fav b
 		StartTime: e.StartTime, Timezone: e.Timezone, CountryCode: e.CountryCode,
 		CountryName: name(d.CountryNames, e.CountryCode), City: e.City, Address: bot.VisibleAddress(e),
 		Description: e.Description, Distances: []distanceJSON{}, Sources: []sourceJSON{}, IsFavorite: fav,
+		DateTBD: event.DateTBD(e.Title),
 	}
 	if e.EndDate != nil {
 		c.EndDate = e.EndDate.Format(time.DateOnly)

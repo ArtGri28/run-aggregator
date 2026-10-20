@@ -1,11 +1,14 @@
 package bot
 
 import (
+	"context"
 	"encoding/hex"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"aggregator/internal/store"
 )
 
 // Сценарии контракта Phase 21, часть 1 (21-UX-CONTRACT.md, раздел 6): «Мой
@@ -145,3 +148,61 @@ func TestS69CalendarLink(t *testing.T) {
 }
 
 func hexOf(b []byte) string { return hex.EncodeToString(b) }
+
+// TestS70QueueFromApp — S-70: строки ics и cal_link, созданные webapp, бот
+// отправляет документом и сообщением K-5; без домена ссылка не уходит;
+// старт стал недоступен — строка закрыта; 403 — строки закрыты.
+func TestS70QueueFromApp(t *testing.T) {
+	r := newNotifyRig(t)
+	ctx := context.Background()
+	dbExec(t, `DELETE FROM favorites`)
+	favPut(t, 110, 52)
+	put := func(kind string, id int64) {
+		t.Helper()
+		if ok, err := r.s.EnqueueAppRequest(ctx, 42, kind, id, fixtureNow); err != nil || !ok {
+			t.Fatalf("строка %s: %v %v", kind, ok, err)
+		}
+	}
+
+	put(store.OutboxICS, 0)
+	calls := r.step()
+	if len(calls) != 1 || calls[0].Method != "sendDocument" {
+		t.Fatalf("файл всех: вызовы %q", methods(calls))
+	}
+	matchSnapshot(t, "s70_file", renderCall(t, calls[0]))
+	if n := len(vevent.FindAllString(calls[0].Form["document"], -1)); n != 2 || rowState(t, lastRow(t, "ics")) != "sent" {
+		t.Errorf("файл всех: %d событий, строка %s", n, rowState(t, lastRow(t, "ics")))
+	}
+
+	put(store.OutboxICS, 110)
+	if calls := r.step(); len(calls) != 1 || calls[0].Form["document_name"] != "start-110.ics" {
+		t.Errorf("файл старта: %q", methods(calls))
+	}
+	dbExec(t, `UPDATE events SET is_listed = false WHERE id = 52`)
+	put(store.OutboxICS, 52)
+	r.silent(t, "скрытый старт")
+	if got := rowState(t, lastRow(t, "ics")); got != "closed:unavailable" {
+		t.Errorf("скрытый старт: %s", got)
+	}
+	dbExec(t, `UPDATE events SET is_listed = true WHERE id = 52`)
+
+	put(store.OutboxCalLink, 0)
+	r.silent(t, "ссылка без домена")
+	if got := rowState(t, lastRow(t, "cal_link")); got != "closed:rejected" {
+		t.Errorf("без домена: %s", got)
+	}
+	r.b.domain = "app.test"
+	put(store.OutboxCalLink, 0)
+	msg := r.sent(t, "ссылка")
+	linkToken(t, msg, "s70_link")
+	if len(feedHash(t)) == 0 {
+		t.Error("ссылка не записана")
+	}
+
+	r.reply = func(c call, _ int) string { return errBlocked }
+	put(store.OutboxICS, 0)
+	r.step()
+	if got := rowState(t, lastRow(t, "ics")); got != "closed:blocked" {
+		t.Errorf("403: %s", got)
+	}
+}
