@@ -36,7 +36,7 @@ Last activity: 2026-10-14 — Phase 16 (Catalog Quality) закрыта по к�
 Phase 5 закрыта 2026-10-05 по команде владельца (05-VERIFICATION.md — `passed`, 16/16). Прежняя запись (история): Phase 5 (multiple-sources-deduplication) формально не закрыта и ждёт решения владельца: все 8 планов выполнены, верификация `human_needed` (05-VERIFICATION.md), наблюдения в production владельцем не подтверждены. Phase 6 выполняется при открытой Phase 5 (D-16 в 06-CONTEXT.md).
 `DEDUP_AUTO_MERGE=false` (D-23 Phase 5); Phase 6 это значение не меняет, включение — только отдельным решением владельца.
 
-Progress: [███████░░░] 74% (17 из 23 фаз закрыты, Phase 6 — с невыполненными 06-07…06-09; открыты Phase 10, 19–23; Phase 19 Usage Metrics выполнена локально 2026-10-20 — ждёт коммита и выката с миграцией `00012`)
+Progress: [████████░░] 78% (18 из 23 фаз закрыты, Phase 6 — с невыполненными 06-07…06-09; открыты Phase 10, 20–23; Phase 19 Usage Metrics закрыта 2026-10-20 — production-образ `a5df76dbc591`, миграция `00012`; следующая — Phase 20 New-Start Subscription & Sharing, обсуждение)
 
 ## Performance Metrics
 
