@@ -20,17 +20,16 @@ const dayKeep = 90
 // activityScreen — текст сводки по store.Activity.
 func activityScreen(a store.Activity) screen {
 	act := a.Actions
-	trio := func(n [3]int) string {
-		return "сегодня " + strconv.Itoa(n[0]) + " · 7 дней " + strconv.Itoa(n[1]) + " · 30 дней " + strconv.Itoa(n[2])
-	}
 	var sb strings.Builder
 	sb.WriteString("📈 Активность (с " + a.Since.Format("02.01.2006") + ")" +
 		"\n\nПользователей: " + strconv.Itoa(a.Users) +
 		"\nНовых за 7 дней: " + strconv.Itoa(a.New7) +
-		"\n\nЗаходили: " + trio(a.Active) +
-		"\nИз них в Mini App: " + trio(a.App) +
-		"\n\nВернулись: " + strconv.Itoa(a.Returned) + " из " + strconv.Itoa(a.Cohort) +
-		"\n(пришли 8–30 дней назад и заходили за последние 7 дней)" +
+		"\n\n👥 Заходили в бот или Mini App")
+	for i, label := range []string{"Сегодня", "За 7 дней", "За 30 дней"} {
+		sb.WriteString("\n" + label + " — " + strconv.Itoa(a.Active[i]) + " (из них в Mini App — " + strconv.Itoa(a.App[i]) + ")")
+	}
+	sb.WriteString("\n\n🔁 Вернулись — " + strconv.Itoa(a.Returned) + " из " + strconv.Itoa(a.Cohort) +
+		"\nИз пришедших 8–30 дней назад заходили за последние 7 дней" +
 		"\n\nСколько дней заходили за 30 дней")
 	for i, label := range []string{"1 день", "2–3 дня", "4–9 дней", "10 и больше"} {
 		sb.WriteString("\n" + label + " — " + statsNum(a.Freq[i]))
