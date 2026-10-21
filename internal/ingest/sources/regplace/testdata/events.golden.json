@@ -53,5 +53,20 @@
     "registration_url": "https://reg.place/events/odintsovomtb2026/registration",
     "address": "Одинцово. река Саминка, Одинцовский городской округ, Московская область",
     "sport": "cycling"
+  },
+  {
+    "external_id": "bezpredela",
+    "url": "https://reg.place/events/bezpredela",
+    "title": "Полный БезПредел 2027",
+    "date": "21.02.2027",
+    "distances": "",
+    "city": "Иваново",
+    "region": "",
+    "country": "RU",
+    "type": "Полный БезПредел 2027",
+    "registration_url": "https://reg.place/events/bezpredela/registration",
+    "end_date": "23.02.2027",
+    "address": "Иваново. г Иваново, ул Лежневская, д 185Б",
+    "sport": "swimming"
   }
 ]

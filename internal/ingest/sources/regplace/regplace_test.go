@@ -22,7 +22,7 @@ var fixtureNow = time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 
 // fixtureEvents — страницы событий образца с фрагментом, который ставит
 // Fetch по карточке списка.
-var fixtureEvents = []string{"spaskamenka2026#running+reg", "ultra-trail-2026#running+reg", "krylo-2027#swimming+reg", "odintsovomtb2026#cycling+reg"}
+var fixtureEvents = []string{"spaskamenka2026#running+reg", "ultra-trail-2026#running+reg", "krylo-2027#swimming+reg", "odintsovomtb2026#cycling+reg", "bezpredela#swimming+reg"}
 
 func read(t *testing.T, name string) []byte {
 	t.Helper()
@@ -81,7 +81,7 @@ func TestEventFixture(t *testing.T) {
 	if st.Rejected != 0 || len(prep) != len(recs) || st.UnrecognizedRegion != 0 {
 		t.Fatalf("Prepare: %d из %d, отбраковано %d, нераспознанных областей %d (%v)", len(prep), len(recs), st.Rejected, st.UnrecognizedRegion, st.Unrecognized)
 	}
-	types := []event.Type{event.TypeTrail, event.TypeTrail, event.TypeOpenWater, event.TypeMTB}
+	types := []event.Type{event.TypeTrail, event.TypeTrail, event.TypeOpenWater, event.TypeMTB, event.TypeOther}
 	for i, p := range prep {
 		if p.Event.Type != types[i] {
 			t.Errorf("%s: тип %s, want %s", p.Source.ExternalID, p.Event.Type, types[i])
@@ -133,6 +133,27 @@ func TestParseEdge(t *testing.T) {
 	}
 	if r := parse("swimming", strings.Replace(eventHTML("08.11.2026", "Москва"), "Старт", "Swimcup Индор Москва", 1)); r.TypeLabel != "бассейн" || r.City != "Москва" || r.Address != "" {
 		t.Errorf("бассейн: %+v", r)
+	}
+	for in, want := range map[string][2]string{
+		"24.10.2026":            {"24.10.2026", ""},
+		"30.10–01.11.2026":      {"30.10.2026", "01.11.2026"},
+		"21–23.02.2027":         {"21.02.2027", "23.02.2027"},
+		"30.12.2026–02.01.2027": {"30.12.2026", "02.01.2027"},
+		"21.02":                 {"", ""},
+		"скоро":                 {"", ""},
+	} {
+		if s, e := pageDates(in); s != want[0] || e != want[1] {
+			t.Errorf("pageDates(%q) = %q, %q; want %q", in, s, e, want)
+		}
+	}
+	// Незнакомая дата не роняет прогон: запись с датой как есть Prepare
+	// отбраковывает.
+	odd := parse("running", eventHTML("весна 2027", "Тула", "5,0 км"))
+	if odd.Date != "весна 2027" {
+		t.Errorf("незнакомая дата: %+v", odd)
+	}
+	if prep, st := ingest.Prepare([]ingest.SourceEvent{odd}, fixtureNow, New(nil).Policy()); len(prep) != 0 || st.Rejected != 1 {
+		t.Errorf("незнакомая дата: Prepare %d, отбраковано %d", len(prep), st.Rejected)
 	}
 	if _, err := Parse(ingest.RawDoc{URL: Site + "/events/x#running", Body: []byte(`<h1>Старт</h1>`)}); !errors.Is(err, ingest.ErrStructureNotFound) {
 		t.Errorf("без даты: %v", err)

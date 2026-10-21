@@ -44,8 +44,10 @@ var sports = map[string]event.Sport{
 }
 
 var (
-	slugRe   = regexp.MustCompile(`^/events/([^/?#]+)$`)
-	dateRe   = regexp.MustCompile(`^(\d{2}\.\d{2})(?:\.(\d{4}))?(?:\s*[–—-]\s*(\d{2}\.\d{2}\.\d{4}))?$`)
+	slugRe = regexp.MustCompile(`^/events/([^/?#]+)$`)
+	// dateRe — «24.10.2026», «30.10–01.11.2026», «21–23.02.2027»,
+	// «30.12.2026–02.01.2027»: у начала диапазона месяц и год могут быть опущены.
+	dateRe   = regexp.MustCompile(`^(\d{2})(?:\.(\d{2}))?(?:\.(\d{4}))?(?:\s*[–—-]\s*(\d{2})\.(\d{2})\.(\d{4}))?$`)
 	distRe   = regexp.MustCompile(`^(\d+(?:,\d+)?)\s*(км|м)$`)
 	onlineRe = regexp.MustCompile(`(?i)онлайн|zwift`)
 	trailRe  = regexp.MustCompile(`(?i)трейл|trail`)
@@ -126,7 +128,8 @@ func (s *Source) Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) { return
 // Parse разбирает документ. Чистая функция.
 //   - Страница списка записей не даёт: проверяется только её структура.
 //   - Страница события — одна запись: дата из div.event-page__date
-//     («24.10.2026», «30.10–01.11.2026»), название из h1, место из
+//     (pageDates; незнакомый вид — дата как есть, запись отбракует Prepare),
+//     название из h1, место из
 //     p.event-page__location-text («Город. адрес, область»), дистанции из
 //     карточек race-card («21,0 км», «430,0 м»). Вид спорта и открытая
 //     регистрация — из фрагмента адреса, который ставит Fetch.
@@ -153,10 +156,11 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	}
 	var date, place string
 	var dists []string
+	hasDate := false
 	for n := range root.Descendants() {
 		switch {
 		case hasClass(n, "event-page__date"):
-			date = text(n)
+			date, hasDate = text(n), true
 		case n.DataAtom == atom.H1 && rec.Title == "":
 			rec.Title = text(n)
 		case hasClass(n, "event-page__location-text"):
@@ -167,21 +171,14 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 			}
 		}
 	}
-	dm := dateRe.FindStringSubmatch(date)
-	if dm == nil || rec.Title == "" {
-		return nil, fmt.Errorf("%w: событие %s: нет даты или названия", ingest.ErrStructureNotFound, m[1])
+	if !hasDate || rec.Title == "" {
+		return nil, fmt.Errorf("%w: событие %s: нет блока даты или названия", ingest.ErrStructureNotFound, m[1])
 	}
-	rec.Date = dm[1] + "." + dm[2]
-	if dm[3] != "" {
-		rec.EndDate = dm[3]
-		if dm[2] == "" {
-			// «31.12–02.01.2027»: месяц начала позже месяца конца — прошлый год.
-			year, _ := strconv.Atoi(dm[3][6:])
-			if dm[1][3:] > dm[3][3:5] {
-				year--
-			}
-			rec.Date = fmt.Sprintf("%s.%d", dm[1], year)
-		}
+	// Дата в незнакомом виде остаётся как есть: Prepare отбракует одну эту
+	// запись, остальные старты прогона сохранятся.
+	rec.Date, rec.EndDate = pageDates(date)
+	if rec.Date == "" {
+		rec.Date = date
 	}
 	rec.Distances = strings.Join(dists, ", ")
 	city, rest, _ := strings.Cut(place, ". ")
@@ -216,6 +213,34 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 		return nil, fmt.Errorf("событие %s: неизвестный вид спорта %q", m[1], sportCode)
 	}
 	return []ingest.SourceEvent{rec}, nil
+}
+
+// pageDates — даты страницы события в виде dd.mm.yyyy; "" — вид незнаком.
+// У диапазона без месяца или года начала они берутся из конца; месяц начала
+// позже месяца конца — год начала предыдущий («31.12–02.01.2027»).
+func pageDates(s string) (start, end string) {
+	m := dateRe.FindStringSubmatch(s)
+	if m == nil {
+		return "", ""
+	}
+	d1, m1, y1, d2, m2, y2 := m[1], m[2], m[3], m[4], m[5], m[6]
+	if d2 == "" {
+		if m1 == "" || y1 == "" {
+			return "", ""
+		}
+		return d1 + "." + m1 + "." + y1, ""
+	}
+	if m1 == "" {
+		m1 = m2
+	}
+	if y1 == "" {
+		y, _ := strconv.Atoi(y2)
+		if m1 > m2 {
+			y--
+		}
+		y1 = strconv.Itoa(y)
+	}
+	return d1 + "." + m1 + "." + y1, d2 + "." + m2 + "." + y2
 }
 
 // raceDistance — «Дистанция 21,0 км» → «21 км»; меньше 10 м — заглушка
