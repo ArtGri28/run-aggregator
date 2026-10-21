@@ -1,0 +1,57 @@
+[
+  {
+    "external_id": "spaskamenka2026",
+    "url": "https://reg.place/events/spaskamenka2026",
+    "title": "Spas-Kamenka Gryadka Trail 2026",
+    "date": "24.10.2026",
+    "distances": "430 м, 21 км, 11.5 км, 6.7 км, 2.8 км",
+    "city": "Спас-Каменка",
+    "region": "Московская обл",
+    "country": "RU",
+    "type": "трейл",
+    "registration_url": "https://reg.place/events/spaskamenka2026/registration",
+    "address": "Спас-Каменка. Московская обл, г Дмитров, деревня Спас-Каменка"
+  },
+  {
+    "external_id": "ultra-trail-2026",
+    "url": "https://reg.place/events/ultra-trail-2026",
+    "title": "Железноводск Ультра Трейл 2026",
+    "date": "30.10.2026",
+    "distances": "800 м, 800 м, 500 м, 2 км, 5 км, 10 км, 30 км, 50 км, 100 км",
+    "city": "Железноводск",
+    "region": "",
+    "country": "RU",
+    "type": "трейл",
+    "registration_url": "https://reg.place/events/ultra-trail-2026/registration",
+    "end_date": "01.11.2026",
+    "address": "Железноводск. Площадь Ferrum"
+  },
+  {
+    "external_id": "krylo-2027",
+    "url": "https://reg.place/events/krylo-2027",
+    "title": "Swimcup ОВ Крылатское 2027",
+    "date": "30.05.2027",
+    "distances": "500 м, 1 км, 1.9 км, 5 км",
+    "city": "Москва",
+    "region": "",
+    "country": "RU",
+    "type": "Swimcup ОВ Крылатское 2027",
+    "registration_url": "https://reg.place/events/krylo-2027/registration",
+    "address": "Москва. Крылатская ул., 2, Москва",
+    "sport": "swimming"
+  },
+  {
+    "external_id": "odintsovomtb2026",
+    "url": "https://reg.place/events/odintsovomtb2026",
+    "title": "Открытое первенство Одинцовского городского округа по кросс-кантри (маунтинбайк)",
+    "date": "01.11.2026",
+    "distances": "",
+    "city": "Одинцово",
+    "region": "Московская область",
+    "country": "RU",
+    "type": "Открытое первенство Одинцовского городского округа по кросс-кантри (маунтинбайк)",
+    "registration_url": "https://reg.place/events/odintsovomtb2026/registration",
+    "address": "Одинцово. река Саминка, Одинцовский городской округ, Московская область",
+    "sport": "cycling"
+  }
+]
