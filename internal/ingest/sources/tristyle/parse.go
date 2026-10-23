@@ -111,6 +111,7 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 		Country:    country,
 		Address:    address,
 		Timezone:   q.Get("timezone"),
+		StartTime:  startTime(q.Get("date")),
 	}
 	switch sp := event.Sport(u.Fragment); sp {
 	case event.SportSkiing, event.SportSwimming, event.SportCycling:
@@ -127,6 +128,9 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 		if !strings.Contains(lt, "дата уточняется") && !strings.Contains(lt, "предполагаемая дата") && datePlaceholder(rec.Date, root) {
 			rec.Title = dateMark + " " + title
 		}
+	}
+	if strings.Contains(strings.ToLower(rec.Title), "уточняется") || strings.Contains(strings.ToLower(rec.Title), "предполагаемая дата") {
+		rec.StartTime = ""
 	}
 	return []ingest.SourceEvent{rec}, nil
 }
@@ -276,6 +280,21 @@ func calendarQuery(root *html.Node) (url.Values, bool) {
 
 // localDate — дата старта yyyy-mm-dd: время в ссылке местное (зона идёт
 // отдельным параметром), пересчёт не нужен. Неразборчивое — как есть.
+// startTime — время из параметра date ссылки «в календарь»
+// («2026-10-24T11:30:00» → «11:30»); 00:00 и 12:00 — заглушки сайта
+// (22-CONTEXT.md, D-03), как и время без даты.
+func startTime(s string) string {
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			if hm := t.Format("15:04"); hm != "00:00" && hm != "12:00" {
+				return hm
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
 func localDate(s string) string {
 	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
 		if t, err := time.Parse(layout, s); err == nil {

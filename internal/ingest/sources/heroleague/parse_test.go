@@ -142,6 +142,28 @@ func TestParseLocalDate(t *testing.T) {
 	}
 }
 
+// Время старта — по зоне площадки (22-CONTEXT.md, D-02); скрытое
+// организатором (hide_start_time) — заглушка, времени нет.
+func TestParseStartTime(t *testing.T) {
+	recs := parseFixture(t)
+	for id, want := range map[string]string{
+		"urban2026_msk":          "10:00", // 07:00 UTC
+		"gonka2026_2013348_1707": "09:00", // 17.07 23:00 UTC, Владивосток
+		"gonka2026_1486209_1306": "09:00", // 04:00 UTC, Екатеринбург
+	} {
+		if got := recs[id].StartTime; got != want {
+			t.Errorf("%s: время %q, want %q", id, got, want)
+		}
+	}
+	body := `{"values":[{"public_id":"p","title":"Гонка","event_type":{"public_id":"gonka"},
+	 "event_city":[{"public_id":"hid","hide_start_time":true,"start_time":"2027-08-07T06:00:00","timezone":"Europe/Moscow","city":{"name_ru":"Истра"}},
+	 {"public_id":"bad","start_time":"2027-08-07","timezone":"Europe/Moscow","city":{"name_ru":"Истра"}}]}]}`
+	r, err := Parse(ingest.RawDoc{Body: []byte(body)})
+	if err != nil || len(r) != 2 || r[0].StartTime != "" || r[0].Date != "2027-08-07" || r[1].StartTime != "" {
+		t.Fatalf("скрытое и неразборчивое время: %+v, %v", r, err)
+	}
+}
+
 func TestParseFields(t *testing.T) {
 	recs := parseFixture(t)
 	r := recs["urban2026_msk"]
@@ -149,6 +171,7 @@ func TestParseFields(t *testing.T) {
 		ExternalID: "urban2026_msk", URL: "https://heroleague.ru/event/urban2026",
 		Title: "Городские препятствия", Date: "2026-10-17", City: "Москва", Country: "RU",
 		TypeLabel: "obstacle", Address: "Парк победы на Поклонной горе", Timezone: "Europe/Moscow",
+		StartTime: "10:00",
 	}
 	if !reflect.DeepEqual(r, want) {
 		t.Fatalf("urban2026_msk = %+v\nwant %+v", r, want)

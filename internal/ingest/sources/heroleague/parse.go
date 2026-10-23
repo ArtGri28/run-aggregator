@@ -48,6 +48,8 @@ type launch struct {
 	StartTime string `json:"start_time"`
 	Timezone  string `json:"timezone"`
 	Kind      string `json:"kind"`
+	// HideStartTime — организатор скрыл время: start_time — заглушка.
+	HideStartTime bool `json:"hide_start_time"`
 	// Public == false — запуск скрыт из публичного календаря сайта (его
 	// /api/event_city/filtered такие не отдаёт); отсутствие поля — не скрыт.
 	Public      *bool  `json:"public"`
@@ -91,6 +93,7 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 				RegistrationURL: httpURL(c.ExternalURL),
 				Address:         address(c.Address, city),
 				Timezone:        validZone(c.Timezone),
+				StartTime:       localTime(c.StartTime, c.Timezone, c.HideStartTime),
 			})
 		}
 	}
@@ -110,6 +113,20 @@ func localDate(start, zone string) string {
 		return ""
 	}
 	return t.In(loc).Format("2006-01-02")
+}
+
+// localTime — время старта «HH:MM» в зоне площадки; "" — время скрыто
+// организатором или не разобрано.
+func localTime(start, zone string, hidden bool) string {
+	loc, err := time.LoadLocation(zone)
+	if hidden || zone == "" || err != nil {
+		return ""
+	}
+	t, err := time.ParseInLocation("2006-01-02T15:04:05", strings.TrimSpace(start), time.UTC)
+	if err != nil {
+		return ""
+	}
+	return t.In(loc).Format("15:04")
 }
 
 func validZone(zone string) string {

@@ -39,7 +39,8 @@
     "type": "pool",
     "address": "Брест, Бассейн ДВВС, ул. Московская, 147",
     "timezone": "Europe/Minsk",
-    "sport": "swimming"
+    "sport": "swimming",
+    "start_time": "10:00"
   },
   {
     "external_id": "1099",
@@ -52,7 +53,8 @@
     "country": "BY",
     "type": "mtb",
     "timezone": "Europe/Minsk",
-    "sport": "cycling"
+    "sport": "cycling",
+    "start_time": "10:00"
   },
   {
     "external_id": "1214",
@@ -65,7 +67,8 @@
     "country": "BY",
     "type": "mtb",
     "timezone": "Europe/Minsk",
-    "sport": "cycling"
+    "sport": "cycling",
+    "start_time": "11:30"
   },
   {
     "external_id": "673",

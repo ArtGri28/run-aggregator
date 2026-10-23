@@ -58,6 +58,10 @@ type SourceEvent struct {
 	// Sport — код из справочника видов спорта (event.Sports); "" — бег.
 	// Стоит последним: payload и content_hash записей без него не меняются.
 	Sport string `json:"sport,omitempty"`
+	// StartTime — местное время старта «HH:MM», если источник его сообщает и
+	// это не заглушка; "" — нет. Стоит последним: payload и content_hash
+	// записей без него не меняются.
+	StartTime string `json:"start_time,omitempty"`
 }
 
 // RawDoc — один загруженный документ источника.

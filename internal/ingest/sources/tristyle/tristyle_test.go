@@ -101,6 +101,7 @@ func TestParseFixtures(t *testing.T) {
 		ExternalID: "1090", URL: "https://tristyle.club/competition/1090/", Title: "Гомельский полумарафон",
 		Date: "2026-10-10", City: "Гомель", Country: "BY",
 		Address: "г. Гомель, ул. Набережная, 27, гребная база", Timezone: "Europe/Minsk",
+		StartTime: "11:00",
 	}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("1090 = %+v, want %+v", got, want)
 	}
@@ -720,6 +721,23 @@ func TestSkiDatePlaceholder(t *testing.T) {
 		// Беговой документ пометку не получает никогда.
 		if got := parseOne(t, "7", body).Title; got != c.title {
 			t.Errorf("%s: беговое название %q, want %q", c.name, got, c.title)
+		}
+	}
+}
+
+// Время старта — из ссылки «в календарь»; 00:00 и 12:00 — заглушки сайта
+// (22-CONTEXT.md, D-03).
+func TestStartTime(t *testing.T) {
+	for in, want := range map[string]string{
+		"2026-10-24T11:30:00": "11:30",
+		"2026-12-01T07:00":    "07:00",
+		"2026-11-01T00:00:00": "",
+		"2026-10-25T12:00:00": "",
+		"2026-10-25":          "",
+		"":                    "",
+	} {
+		if got := startTime(in); got != want {
+			t.Errorf("startTime(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

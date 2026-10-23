@@ -222,6 +222,7 @@ func Prepare(recs []SourceEvent, now time.Time, pol Policy) ([]Prepared, Stats) 
 				TitleNorm:       normalize.TitleNorm(title),
 				StartDate:       date,
 				EndDate:         endDate,
+				StartTime:       startTime(rec.StartTime),
 				CountryCode:     code,
 				Region:          region,
 				City:            city,
@@ -255,6 +256,15 @@ func timezone(cityKey, region, source string) string {
 // check — проверки записи в Prepare, кроме дубля external_id: дата и
 // причина отбраковки ("" — запись валидна); expired — прошедшая дата
 // (вне каталога, но не отбраковка).
+// startTime — время старта «HH:MM»; неразборчивое отбрасывается, запись
+// остаётся.
+func startTime(s string) string {
+	if t, ok := normalize.Time(s); ok {
+		return t
+	}
+	return ""
+}
+
 func check(rec SourceEvent, now, minDate, maxDate time.Time) (date time.Time, reason string, expired bool) {
 	date, dateOK := normalize.Date(rec.Date, now)
 	// Запись источника — единственный вход кода вида спорта в систему:

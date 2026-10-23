@@ -464,3 +464,21 @@ func TestPrepareSki(t *testing.T) {
 		}
 	}
 }
+
+// Время старта переносится в событие; неразборчивое отбрасывается, запись
+// остаётся; payload записи без времени не содержит ключа start_time.
+func TestPrepareStartTime(t *testing.T) {
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	a, b, c := rec("1", "10/10/2026"), rec("2", "10/10/2026"), rec("3", "10/10/2026")
+	a.StartTime, b.StartTime = "9:05", "25:00"
+	out, st := Prepare([]SourceEvent{a, b, c}, now, ruOnly)
+	if len(out) != 3 || st.Rejected != 0 {
+		t.Fatalf("valid %d, rejected %d", len(out), st.Rejected)
+	}
+	if out[0].Event.StartTime != "09:05" || out[1].Event.StartTime != "" || out[2].Event.StartTime != "" {
+		t.Errorf("время: %q %q %q", out[0].Event.StartTime, out[1].Event.StartTime, out[2].Event.StartTime)
+	}
+	if strings.Contains(string(out[2].Payload), "start_time") {
+		t.Errorf("payload без времени содержит start_time: %s", out[2].Payload)
+	}
+}
