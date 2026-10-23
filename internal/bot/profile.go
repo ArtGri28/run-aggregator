@@ -235,6 +235,8 @@ func (b *Bot) onProfile(ctx context.Context, q *models.CallbackQuery, c callback
 		return b.profileShow(ctx, q)
 	case c.Kind == cbProfAsk:
 		return b.profileAsk(ctx, q, c)
+	case c.Kind == cbProfInvite:
+		return b.profileInvite(ctx, q, c)
 	}
 	return b.profileWrite(ctx, q, c)
 }
@@ -275,7 +277,7 @@ func profileScreen(p store.Profile, pv int) screen {
 	return screen{
 		text: "👤 <b>Мой профиль</b>\n\n🚻 Пол: " + gender + "\n🎂 Возраст: " + age + "\n🏠 Живу: " + home +
 			"\n🏅 Спорт: " + sports,
-		kb: keyboard(r1, r2, btn(calLabel, callback{Kind: cbCalOpen}), btn(backLabel, callback{Kind: cbMenu})),
+		kb: keyboard(r1, r2, btn(notifyLabel, callback{Kind: cbNotifyOpen}), btn(calLabel, callback{Kind: cbCalOpen}), btn(backLabel, callback{Kind: cbMenu})),
 	}
 }
 
@@ -387,6 +389,14 @@ func (b *Bot) profileWrite(ctx context.Context, q *models.CallbackQuery, c callb
 	case cbProfSkip:
 		return b.onMenu(ctx, q, callback{})
 	case cbProfDone:
+		// U-6: с городом каталога или видом спорта — вопрос о приглашениях, меню
+		// и благодарность — после ответа (profileInvite).
+		if p.CityKey != "" || len(p.Sports) > 0 {
+			if err := b.show(ctx, q, inviteQuestion(v)); err != nil {
+				b.logger().Warn("show profile", "err", err)
+			}
+			return ""
+		}
 		if n := b.onMenu(ctx, q, callback{}); n != "" {
 			return n
 		}

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,9 @@ type Bot struct {
 	supportChat int64  // группа поддержки; 0 — поддержка выключена целиком (D-03)
 	name        string // имя бота из getMe для ссылок «Поделиться»; "" — кнопки нет
 	domain      string // домен Mini App для ссылки календаря; "" — ссылки нет
+
+	draftMu sync.Mutex
+	drafts  map[int64]*draft // черновики рассылок администраторов (broadcast.go)
 
 	// lastErr — время последней ошибки библиотеки Telegram (UnixNano; 0 — не
 	// было); active — число выполняющихся обработчиков.
@@ -81,6 +85,7 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithMessageTextHandler("stats", tgbot.MatchTypeCommandStartOnly, b.onStats),
 		tgbot.WithMessageTextHandler("activity", tgbot.MatchTypeCommandStartOnly, b.onActivity),
 		tgbot.WithMessageTextHandler("quality", tgbot.MatchTypeCommandStartOnly, b.onQuality),
+		tgbot.WithMessageTextHandler("broadcast", tgbot.MatchTypeCommandStartOnly, b.onBroadcastCmd),
 		tgbot.WithCallbackQueryDataHandler("m", tgbot.MatchTypeExact, b.cb(b.onMenu)),
 		tgbot.WithCallbackQueryDataHandler("f:", tgbot.MatchTypePrefix, b.cb(b.onFilter)),
 		tgbot.WithCallbackQueryDataHandler("s:", tgbot.MatchTypePrefix, b.cb(b.onSettings)),
@@ -92,6 +97,8 @@ func New(cfg Config, s *store.Store, opts ...tgbot.Option) (*Bot, error) {
 		tgbot.WithCallbackQueryDataHandler("d:", tgbot.MatchTypePrefix, b.cb(b.onDupe)),
 		tgbot.WithCallbackQueryDataHandler("w:", tgbot.MatchTypePrefix, b.cb(b.onFav)),
 		tgbot.WithCallbackQueryDataHandler("k:", tgbot.MatchTypePrefix, b.cb(b.onCalendar)),
+		tgbot.WithCallbackQueryDataHandler("b:", tgbot.MatchTypePrefix, b.cb(b.onBroadcast)),
+		tgbot.WithCallbackQueryDataHandler("n:", tgbot.MatchTypePrefix, b.cb(b.onNotify)),
 	}
 	if b.supportChat != 0 {
 		// Без группы ничего не регистрируется: /support остаётся неизвестной командой,
@@ -369,7 +376,7 @@ func cbPrefix(data string) string {
 	if data == "m" {
 		return "m"
 	}
-	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h' || data[0] == 'w' || data[0] == 'q' || data[0] == 'k') {
+	if len(data) > 1 && data[1] == ':' && (data[0] == 'f' || data[0] == 's' || data[0] == 'p' || data[0] == 'e' || data[0] == 'g' || data[0] == 'r' || data[0] == 'd' || data[0] == 'u' || data[0] == 'h' || data[0] == 'w' || data[0] == 'q' || data[0] == 'k' || data[0] == 'b' || data[0] == 'n') {
 		return data[:1]
 	}
 	return "?"
@@ -384,8 +391,11 @@ func (b *Bot) onDefault(ctx context.Context, api *tgbot.Bot, u *models.Update) {
 	case u.Message != nil && u.Message.Text != "":
 		b.onText(ctx, api, u)
 	case u.Message != nil:
-		// Сообщение без текста: отказ только в режиме обращения либо ссылки; режимы
-		// взаимоисключающие, поэтому ответит не больше одного.
+		// Сообщение без текста: отказ только в режиме обращения, ссылки либо мастера
+		// рассылки; режимы взаимоисключающие, поэтому ответит не больше одного.
+		if b.broadcastNonText(ctx, u.Message) {
+			return
+		}
 		if b.supportChat != 0 {
 			b.supportNonText(ctx, u.Message)
 		}

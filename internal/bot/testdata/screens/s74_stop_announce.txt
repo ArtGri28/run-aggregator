@@ -1,0 +1,3 @@
+method: answerCallbackQuery
+text: 🔕 Объявления отключены. Включить снова — «👤 Мой профиль» → «🔔 Уведомления»
+show_alert: 

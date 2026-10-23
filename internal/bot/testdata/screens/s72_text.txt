@@ -1,0 +1,11 @@
+method: editMessageText
+parse_mode: HTML
+---
+✍️ <b>Текст приглашения</b>
+
+Отправьте текст одним сообщением — до 2000 символов. Ссылки и форматирование сохранятся.
+---
+[✖️ Отмена] → b:x
+method: answerCallbackQuery
+text: 
+show_alert: 

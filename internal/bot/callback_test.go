@@ -24,6 +24,9 @@ func TestCallbackRoundTrip(t *testing.T) {
 		"u:o", "u:b:v1", "u:n:v1", "u:z:v1", "u:b:v0", "u:z:v2147483647",
 		"u:s:c:minsk:w:v2147483647", "u:s:c:nizhniy-novgorod:e:v12",
 		"h:o", "h:r", "h:x",
+		"u:n:1:v2", "u:n:0:v2147483647",
+		"b:k:a", "b:k:i", "b:s:run", "b:s:row", "b:c", "b:n", "b:x", "b:p",
+		"n:o", "n:i:1", "n:i:0", "n:a:1", "n:a:0", "n:x:i", "n:x:a",
 	} {
 		c, err := parseCallback(s)
 		if err != nil {
@@ -127,6 +130,9 @@ func TestCallbackReject(t *testing.T) {
 		"u:a:g:w", "u:a:g:v1", "u:a:x:w:v1", "u:a:g:x:v1", "u:a:g:w:e:v1", "u:a::w:v1", "u:a:gg:w:v1",
 		// поддержка (h:): ровно три вида, без версии и лишних частей
 		"h", "h:", "h:q", "h:z", "h:o:v1", "h:o:", "h:x:1", "h:r:r", "h:oo", "h:O", "H:o", "h::o", "h:o:o",
+		// рассылки (b:, n:, u:n): значения вне справочников, лишние части
+		"u:n:2:v1", "u:n:1", "u:n:1:v1:v1", "b", "b:", "b:k", "b:k:x", "b:s:other", "b:s:Run", "b:c:1", "b:q",
+		"n", "n:", "n:o:1", "n:i", "n:i:2", "n:a:x", "n:x:b", "n:x", "n:q:1",
 	} {
 		if c, err := parseCallback(s); err == nil {
 			t.Errorf("parseCallback(%q) = %+v, want error", s, c)

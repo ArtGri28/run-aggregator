@@ -57,7 +57,7 @@ func testStore(t *testing.T) *Store {
 	const q = `TRUNCATE TABLE sources, ingest_runs, source_events, events,
 		event_distances, dedup_candidates, user_profiles, users, heartbeats, source_alerts,
 		support_messages, support_awaiting, error_reports, start_suggestions, suggest_awaiting,
-		user_days, usage_counters, subscriptions, app_settings, calendar_feeds
+		user_days, usage_counters, subscriptions, app_settings, calendar_feeds, broadcasts
 		RESTART IDENTITY CASCADE`
 	if _, err := testStorePkg.pool.Exec(context.Background(), q); err != nil {
 		t.Fatalf("truncate: %v", err)

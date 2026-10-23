@@ -1,0 +1,8 @@
+method: editMessageText
+parse_mode: HTML
+---
+📨 Рассылка отменена
+---
+method: answerCallbackQuery
+text: Рассылка отменена
+show_alert: 

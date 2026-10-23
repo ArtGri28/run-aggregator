@@ -58,7 +58,7 @@ func TestMigration00011(t *testing.T) {
 	const added = `SELECT count(*) FROM pg_tables WHERE schemaname = 'public'
 		AND tablename IN ('error_reports', 'start_suggestions', 'suggest_awaiting')`
 	const tables = `SELECT string_agg(tablename::text, ',' ORDER BY tablename) FROM pg_tables
-		WHERE schemaname = 'public' AND tablename NOT IN ('error_reports', 'start_suggestions', 'suggest_awaiting', 'user_days', 'usage_counters', 'subscriptions', 'app_settings', 'calendar_feeds')`
+		WHERE schemaname = 'public' AND tablename NOT IN ('error_reports', 'start_suggestions', 'suggest_awaiting', 'user_days', 'usage_counters', 'subscriptions', 'app_settings', 'calendar_feeds', 'broadcasts')`
 	others := scalar[string](t, tables)
 	if n := scalar[int64](t, added); n != 3 {
 		t.Fatalf("новых таблиц %d, want 3", n)

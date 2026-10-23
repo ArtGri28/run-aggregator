@@ -46,6 +46,13 @@ import (
 //	q:o:<id>                 заявка об ошибке: выбор причины новым сообщением (без версии)
 //	q:r:<id>:<причина>       заявка с причиной (буква из reportReasons)
 //	q:x                      отмена заявки
+//	u:n:<1|0>:v<P>           ответ на вопрос о приглашениях в конце анкеты (U-6)
+//	b:k:<a|i>                админ: вид рассылки — объявление / приглашение
+//	b:s:<вид спорта анкеты>  админ: отметить или снять вид спорта приглашения
+//	b:<c|n|x|p>              админ: город / дальше / отмена / кнопка предпросмотра
+//	n:o                      экран «Уведомления»
+//	n:<i|a>:<1|0>            включить / выключить приглашения или новости
+//	n:x:<i|a>                отказ из сообщения приглашения / объявления
 //
 // Версия — всегда последнее поле. f: без версии — формат до Phase 8 (кнопки
 // старых сообщений): разбирается с Legacy и считается устаревшим; encode его
@@ -117,7 +124,27 @@ const (
 	cbCalLink // k:l
 	cbCalNew  // k:r
 	cbCalOff  // k:x
+
+	cbProfInvite // u:n:<1|0>
+
+	cbBcKind    // b:k
+	cbBcSport   // b:s
+	cbBcCity    // b:c
+	cbBcNext    // b:n
+	cbBcCancel  // b:x
+	cbBcPreview // b:p
+
+	cbNotifyOpen   // n:o
+	cbNotifyInvite // n:i
+	cbNotifyNews   // n:a
+	cbNotifyStop   // n:x
 )
+
+// Кнопки мастера рассылки (b:) и уведомлений (n:) без версии: черновик
+// рассылки живёт в памяти бота, а переключатели уведомлений версию профиля не
+// меняют.
+var bKinds = map[string]cbKind{"c": cbBcCity, "n": cbBcNext, "x": cbBcCancel, "p": cbBcPreview}
+var bLetters = map[cbKind]string{cbBcCity: "c", cbBcNext: "n", cbBcCancel: "x", cbBcPreview: "p"}
 
 // Кнопки календаря (k:) без версии: фильтры не меняются.
 var kKinds = map[string]cbKind{"o": cbCalOpen, "f": cbCalAll, "l": cbCalLink, "r": cbCalNew, "x": cbCalOff}
@@ -468,6 +495,30 @@ func parseCallback(data string) (callback, error) {
 			}
 		}
 		return callback{}, errCallback
+	case "b":
+		switch {
+		case len(p) == 2:
+			if k, ok := bKinds[p[1]]; ok {
+				return callback{Kind: k}, nil
+			}
+		case len(p) == 3 && p[1] == "k" && (p[2] == "a" || p[2] == "i"):
+			return callback{Kind: cbBcKind, Value: p[2]}, nil
+		case len(p) == 3 && p[1] == "s" && hasOption(profileSports, p[2]):
+			return callback{Kind: cbBcSport, Value: p[2]}, nil
+		}
+		return callback{}, errCallback
+	case "n":
+		switch {
+		case len(p) == 2 && p[1] == "o":
+			return callback{Kind: cbNotifyOpen}, nil
+		case len(p) == 3 && p[1] == "i" && (p[2] == "1" || p[2] == "0"):
+			return callback{Kind: cbNotifyInvite, Value: p[2]}, nil
+		case len(p) == 3 && p[1] == "a" && (p[2] == "1" || p[2] == "0"):
+			return callback{Kind: cbNotifyNews, Value: p[2]}, nil
+		case len(p) == 3 && p[1] == "x" && (p[2] == "i" || p[2] == "a"):
+			return callback{Kind: cbNotifyStop, Value: p[2]}, nil
+		}
+		return callback{}, errCallback
 	case "q":
 		switch {
 		case len(p) == 2 && p[1] == "x":
@@ -511,6 +562,8 @@ func parseProfile(p []string) (callback, error) {
 		return callback{Kind: cbProfSkip, V: v}, nil
 	case len(p) == 3 && p[1] == "z":
 		return callback{Kind: cbProfDone, V: v}, nil
+	case len(p) == 4 && p[1] == "n" && (p[2] == "1" || p[2] == "0"):
+		return callback{Kind: cbProfInvite, Value: p[2], V: v}, nil
 	case len(p) == 5 && p[1] == "a" && validProfileField(p[2]) && validProfileMode(p[3]):
 		return callback{Kind: cbProfAsk, Field: p[2], Mode: p[3], V: v}, nil
 	case len(p) == 6 && p[1] == "s" && validProfileField(p[2]) && validProfileValue(p[2], p[3]) && validProfileMode(p[4]):
@@ -594,6 +647,22 @@ func (c callback) encode() (string, error) {
 		s = "q:s"
 	case cbSuggestCancel:
 		s = "q:c"
+	case cbProfInvite:
+		s = fmt.Sprintf("u:n:%s:v%d", c.Value, c.V)
+	case cbBcKind:
+		s = "b:k:" + c.Value
+	case cbBcSport:
+		s = "b:s:" + c.Value
+	case cbBcCity, cbBcNext, cbBcCancel, cbBcPreview:
+		s = "b:" + bLetters[c.Kind]
+	case cbNotifyOpen:
+		s = "n:o"
+	case cbNotifyInvite:
+		s = "n:i:" + c.Value
+	case cbNotifyNews:
+		s = "n:a:" + c.Value
+	case cbNotifyStop:
+		s = "n:x:" + c.Value
 	default:
 		return "", errCallback
 	}

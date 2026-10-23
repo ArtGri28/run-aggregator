@@ -106,7 +106,8 @@ func TestUserProfilesColumns(t *testing.T) {
 	}
 	want := []string{"tg_id", "status", "gender", "age_group", "residence_country_code", "residence_city",
 		"residence_city_key", "sports", "profile_v", "awaiting_city_until", "awaiting_city_mode",
-		"offered_at", "started_at", "completed_at", "updated_at"}
+		"offered_at", "started_at", "completed_at", "updated_at",
+		"notify_opt_in", "notify_changed_at", "announce_opt_out", "announce_changed_at"} // Phase 10, миграция 00015
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("user_profiles columns = %v, want %v", got, want)
 	}

@@ -1,0 +1,9 @@
+method: editMessageText
+parse_mode: HTML
+---
+Напишите город проживания получателей
+---
+[✖️ Отмена] → b:x
+method: answerCallbackQuery
+text: 
+show_alert: 

@@ -296,13 +296,16 @@ func TestS20Wizard(t *testing.T) {
 	if p = saved("вернуть бег"); strings.Join(p.Sports, ",") != "run,bike" {
 		t.Fatalf("порядок видов спорта %v", p.Sports)
 	}
-	// 7. «Готово» → главное меню и благодарность.
+	// 7. «Готово» → вопрос о приглашениях (U-6, Phase 10); меню — после ответа.
 	step(t, b, api, 42, uData(t, on, "✅ Готово"), "s20_done")
 	p, _ = profileOf(t, b, 42)
 	if p.Status != store.ProfileCompleted || dbScalar(t, `SELECT (completed_at IS NOT NULL)::text FROM user_profiles WHERE tg_id = 42`) != "true" {
 		t.Fatalf("после «Готово»: %+v", p)
 	}
 	saved("готово")
+	if menu, notice := tap(t, b, api, 42, "u:n:0:v11"); !isMainMenu(menu) || notice != thanksNotice {
+		t.Errorf("после ответа на вопрос о приглашениях: меню %v, уведомление %q", isMainMenu(menu), notice)
+	}
 	if after := userRow(t, 42); after != usersAtStart {
 		t.Errorf("анкета изменила users:\n%s\n%s", usersAtStart, after)
 	}
@@ -594,7 +597,7 @@ func TestS23Profile(t *testing.T) {
 	if userRow(t, 43) != usersBefore || profileRow(t, 43) != profileBefore {
 		t.Errorf("/profile изменил данные:\n%s\n%s", usersBefore, userRow(t, 43))
 	}
-	want := []string{"u:a:g:e:v2", "u:a:a:e:v2", "u:a:k:e:v2", "u:a:s:e:v2", "k:o", "m"}
+	want := []string{"u:a:g:e:v2", "u:a:a:e:v2", "u:a:k:e:v2", "u:a:s:e:v2", "n:o", "k:o", "m"}
 	if got := datas(t, empty); !reflect.DeepEqual(got, want) {
 		t.Errorf("кнопки P-1: %v, want %v", got, want)
 	}
@@ -617,7 +620,7 @@ func TestS23Profile(t *testing.T) {
 	if after := dbState(t); after != before || userRow(t, 77) != "" || profileRow(t, 77) != "" {
 		t.Errorf("/profile создал данные:\n%s\n%s", before, after)
 	}
-	if got := datas(t, none); !reflect.DeepEqual(got, []string{"u:a:g:e:v0", "u:a:a:e:v0", "u:a:k:e:v0", "u:a:s:e:v0", "k:o", "m"}) {
+	if got := datas(t, none); !reflect.DeepEqual(got, []string{"u:a:g:e:v0", "u:a:a:e:v0", "u:a:k:e:v0", "u:a:s:e:v0", "n:o", "k:o", "m"}) {
 		t.Errorf("кнопки P-1 без профиля: %v", got)
 	}
 	// 8. Просмотр с отметкой ожидания города снимает только её: версия и ответы целы.

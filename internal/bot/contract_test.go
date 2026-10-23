@@ -22,6 +22,7 @@ var uxContracts = []string{
 	"../../.planning/phases/18-swim-cycle/18-UX-CONTRACT.md",
 	"../../.planning/phases/20-subscription-sharing/20-UX-CONTRACT.md",
 	"../../.planning/phases/21-my-calendar/21-UX-CONTRACT.md",
+	"../../.planning/phases/10-opt-in-notifications/10-UX-CONTRACT.md",
 }
 
 var minScenarios = []int{17, 8, 10, 8, 10, 3, 5}

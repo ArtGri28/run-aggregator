@@ -211,9 +211,13 @@ func (n *Notifier) settle(ctx context.Context, row store.OutboxRow, err error, n
 			b.logger().Warn("notify", "kind", row.Kind, "outcome", "close_failed")
 			return
 		}
-		// Подписка заблокировавшего удаляется (N-5).
+		// Подписка заблокировавшего удаляется (N-5), согласие на приглашения
+		// выключается (D-08 Phase 10).
 		if b.Store.Unsubscribe(ctx, row.TgID) != nil {
 			b.logger().Warn("notify", "kind", row.Kind, "outcome", "unsubscribe_failed")
+		}
+		if _, err := b.Store.SetInvite(ctx, row.TgID, false, now); err != nil {
+			b.logger().Warn("notify", "kind", row.Kind, "outcome", "invite_off_failed")
 		}
 		b.logger().Info("notify", "kind", row.Kind, "outcome", store.OutboxBlocked, "closed", closed)
 	case kindRateLimited:
@@ -263,11 +267,12 @@ func (n *Notifier) chores(ctx context.Context, now time.Time) {
 	digests := do("digest", func() (int, error) { return n.digest(ctx, now) })
 	reports := do("reports", func() (int, error) { return b.Store.PruneReports(ctx, now.Add(-reportKeep)) })
 	days := do("days", func() (int, error) { return b.Store.PruneUserDays(ctx, n.dayOf(now).AddDate(0, 0, -dayKeep)) })
+	broadcasts := do("broadcasts", func() (int, error) { return b.Store.FinishBroadcasts(ctx, now) })
 	if len(failed) > 0 {
 		b.logger().Warn("notify chores failed", "steps", strings.Join(failed, ","))
 	}
-	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 || days > 0 || digests > 0 {
-		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports, "days", days, "digests", digests)
+	if expired > 0 || pruned > 0 || reminders > 0 || fuse > 0 || reports > 0 || days > 0 || digests > 0 || broadcasts > 0 {
+		b.logger().Info("notify chores", "expired", expired, "pruned", pruned, "reminders", reminders, "fuse", fuse, "reports", reports, "days", days, "digests", digests, "broadcasts", broadcasts)
 	}
 }
 
@@ -350,6 +355,10 @@ func (n *Notifier) prepare(ctx context.Context, row store.OutboxRow, now time.Ti
 		return n.prepareDigest(ctx, row, now)
 	case store.OutboxICS:
 		return n.prepareICS(ctx, row)
+	case store.OutboxBroadcast:
+		return n.prepareBroadcast(ctx, row)
+	case store.OutboxBroadcastDone:
+		return prepareBroadcastDone(row), nil
 	case store.OutboxCalLink:
 		if b.domain == "" {
 			return prepared{close: store.OutboxRejected}, nil
@@ -592,4 +601,39 @@ func (n *Notifier) prepareICS(ctx context.Context, row store.OutboxRow) (prepare
 		return prepared{close: miss}, nil
 	}
 	return prepared{doc: &d}, nil
+}
+
+// prepareBroadcast — подготовка сообщения рассылки (U-1, U-2): условие
+// проверяется заново — объявление без отказа, приглашение с согласием; иначе,
+// а также у завершённой рассылки, строка закрывается как «условие не
+// выполняется». Нечитаемое содержимое закрывает строку.
+func (n *Notifier) prepareBroadcast(ctx context.Context, row store.OutboxRow) (prepared, error) {
+	var p struct {
+		B int64 `json:"b"`
+	}
+	if json.Unmarshal(row.Payload, &p) != nil || p.B <= 0 {
+		return prepared{close: store.OutboxRejected}, nil
+	}
+	kind, text, allowed, err := n.b.Store.BroadcastSend(ctx, p.B, row.TgID)
+	if err != nil {
+		return prepared{}, err
+	}
+	if text == "" || !allowed {
+		return prepared{close: store.OutboxStale}, nil
+	}
+	return prepared{sc: broadcastMessage(kind, text, false)}, nil
+}
+
+// prepareBroadcastDone — итог рассылки администратору (B-6): у строки нет
+// условий, которые проверяются заново; нечитаемое содержимое закрывает строку.
+func prepareBroadcastDone(row store.OutboxRow) prepared {
+	var p struct {
+		Kind   string `json:"kind"`
+		Sent   int    `json:"sent"`
+		Failed int    `json:"failed"`
+	}
+	if json.Unmarshal(row.Payload, &p) != nil || (p.Kind != store.BroadcastAnnounce && p.Kind != store.BroadcastInvite) {
+		return prepared{close: store.OutboxRejected}
+	}
+	return prepared{sc: bcDoneScreen(p.Kind, p.Sent, p.Failed)}
 }

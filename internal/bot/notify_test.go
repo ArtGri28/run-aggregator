@@ -1265,7 +1265,7 @@ func TestNotifyPrivacy(t *testing.T) {
 	// Только известные ключи: вид, исход, счётчики, названия шагов.
 	keyRE := regexp.MustCompile(`([A-Za-z_]+)=`)
 	allowed := map[string]bool{"time": true, "level": true, "msg": true, "kind": true, "outcome": true, "closed": true,
-		"cause": true, "expired": true, "pruned": true, "reminders": true, "fuse": true, "reports": true, "days": true, "digests": true, "steps": true,
+		"cause": true, "expired": true, "pruned": true, "reminders": true, "fuse": true, "reports": true, "days": true, "digests": true, "broadcasts": true, "steps": true,
 		"method": true} // method — запись самого вызова Bot API о 403: только имя метода
 	for _, m := range keyRE.FindAllStringSubmatch(out, -1) {
 		if !allowed[m[1]] {

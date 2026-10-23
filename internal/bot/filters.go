@@ -1079,6 +1079,7 @@ func (b *Bot) onStart(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	if u.Message == nil || u.Message.From == nil {
 		return
 	}
+	b.dropDraft(u.Message.From.ID) // /start снимает все режимы ввода, и мастер рассылки тоже
 	switch id, source := startArg(u.Message.Text); {
 	case id > 0:
 		b.startCard(ctx, u.Message, id)
@@ -1265,6 +1266,9 @@ const maxCityInput = 64
 func (b *Bot) onText(ctx context.Context, _ *tgbot.Bot, u *models.Update) {
 	m := u.Message
 	if m == nil || m.From == nil {
+		return
+	}
+	if b.broadcastText(ctx, m) { // мастер рассылки администратора (Phase 10): дальше не идёт
 		return
 	}
 	if b.supportText(ctx, m) { // обращение в поддержку (Phase 11): в город и в поиск не идёт
