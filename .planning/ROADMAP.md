@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 20: New-Start Subscription & Sharing** - Подписка на новые старты по своим фильтрам (отдельное согласие, выключено по умолчанию) и «Поделиться стартом» ссылкой на карточку; добавлена 2026-10-20
 - [x] **Phase 21: My Calendar** - Вкладка «Мой календарь» в профиле Mini App, выгрузка в календарь телефона (.ics), подписка на новые старты и «Поделиться» в Mini App; добавлена 2026-10-20
 - [ ] **Phase 22: Extended Track Card** - Набор высоты, лимит времени, покрытие и другие сведения о трассе в карточке — только если их даёт источник; добавлена 2026-10-20; на паузе с 2026-10-20
-- [ ] **Phase 23: RussiaLoppet & Reg.place** - Источники russialoppet.ru и reg.place по полученному разрешению; добавлена 2026-10-20; обсуждение начато 2026-10-20
+- [x] **Phase 23: RussiaLoppet & Reg.place** - Источники russialoppet.ru и reg.place по полученному разрешению; добавлена 2026-10-20; закрыта 2026-10-23
 
 ## Phase Details
 
@@ -532,7 +532,7 @@ Plans:
 **Requirements**: будут определены в обсуждении фазы
 **Note**: добавлена 2026-10-20: владелец сообщил «russialoppet.ru и reg.place дали добро на использование, как в myrace» (`SOURCE-PERMISSION-LETTERS.md`). Способ доступа (API или публичные страницы) и условия уточняются до кода. Место в очереди — по решению владельца
 **Production**: deploy и любые изменения VPS — только по отдельному разрешению владельца на конкретный шаг
-**Plans**: не спланирована
+**Plans**: решения 2026-10-20 (`23-CONTEXT.md`, D-07 — TLS 1.2 с шифрами ECDSA для russialoppet). 23-01 — адаптер russialoppet; 23-02 — выкат 2026-10-21, образ `b714ab573646`, 50 лыжных гонок; 23-03 — адаптер reg.place по публичным страницам; 23-04 — выкат 2026-10-21: первая попытка (`d0747bac21b8`) — прогон failed на дате «21–23.02.2027», исправлено (`e479978`), образ `e479978480a0`, 44 старта, каталог 923, 32 пары в `/dupes`. PRODUCTION ACCEPTANCE владельцем 2026-10-21 (оба источника). Закрыта 2026-10-23 по команде владельца
 
 ## Progress
 
@@ -563,4 +563,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 20. New-Start Subscription & Sharing | 1/1 | Complete    | 2026-10-20 |
 | 21. My Calendar | 2/2 | Complete    | 2026-10-20 |
 | 22. Extended Track Card | 0/0 | Not planned | - |
-| 23. RussiaLoppet & Reg.place | 0/0 | Not planned | - |
+| 23. RussiaLoppet & Reg.place | 4/4 | Complete    | 2026-10-23 |
