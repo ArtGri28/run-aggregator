@@ -109,6 +109,17 @@ func TestParseFixtures(t *testing.T) {
 	if n != 39+11 {
 		t.Errorf("паркранов 05.12.2026: %d, want 50", n)
 	}
+	// Номер забега («№228») меняется каждую неделю и в ключ серии не входит:
+	// 203 паркрана четырёх суббот — 52 серии.
+	series := map[string]bool{}
+	for _, r := range all {
+		if r.GroupKey != "" {
+			series[r.GroupKey] = true
+		}
+	}
+	if len(series) != 52 {
+		t.Errorf("серий паркранов: %d, want 52", len(series))
+	}
 
 	prep, st := ingest.Prepare(all, fixtureNow, New(nil).Policy())
 	if st.Rejected != 0 || st.UnrecognizedRegion != 0 || st.OutOfScope != 0 || len(prep) == 0 {

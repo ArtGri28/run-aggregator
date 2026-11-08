@@ -49,6 +49,9 @@ var (
 	// itraRe — баллы ITRA перед дистанцией («ITRA 4 100 км»): иначе число баллов
 	// склеивается с дистанцией и даёт фиктивные 4 и 100 км.
 	itraRe = regexp.MustCompile(`(?i)^\s*ITRA\s+\d+\s+`)
+	// issueRe — номер забега в конце названия паркрана («5 вёрст Битца №228»):
+	// меняется каждую неделю и в ключ серии не входит.
+	issueRe = regexp.MustCompile(`\s*№\s*\d+\s*$`)
 	// timeRe — время старта в конце строки даты: «…, 10:30».
 	timeRe = regexp.MustCompile(`,\s*(\d{1,2}:\d{2})$`)
 	// dayRe — часть строки даты «d [месяц [год]]».
@@ -227,7 +230,7 @@ func parseWeekly(n *html.Node, last *time.Time) []ingest.SourceEvent {
 		}
 		ev := base
 		ev.Title, ev.ExternalID, ev.URL = eventLink(li)
-		ev.GroupKey = "series:" + normalize.TitleNorm(ev.Title)
+		ev.GroupKey = "series:" + normalize.TitleNorm(issueRe.ReplaceAllString(ev.Title, ""))
 		out = append(out, ev)
 	}
 	return out
