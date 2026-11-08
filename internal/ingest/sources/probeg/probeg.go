@@ -2,6 +2,7 @@ package probeg
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"aggregator/internal/ingest"
@@ -11,29 +12,30 @@ import (
 const (
 	// Code — код источника в sources.code.
 	Code = "probeg"
-	// CalendarURL — общий календарь на год вперёд: единственная страница
-	// прогона (D-13, горизонт D-02).
+	// CalendarURL — календарь на год вперёд, первая страница; следующие —
+	// по ссылке «Следующая страница» (?page=N).
 	CalendarURL = "https://probeg.org/races/year_ahead/"
+	// maxPages — предел страниц за прогон (в ноябре 2026 их 6).
+	maxPages = 12
 	// CrawlDelay — из robots.txt сайта (Crawl-delay: 30).
 	CrawlDelay = 30 * time.Second
-	// outOfScopeMax — порог доли out_of_scope этого источника: серии без
-	// города (D-14) и иностранные строки дают вне каталога по построению.
-	// На фикстуре 2026-09-30 доля 28,0 % (155 из 553 valid), с запасом
-	// 0,05 — 0,33, поэтому 0,40; TestPolicyGate держит значение в
-	// [доля + 0,05; 0,50]. 05-08 сверяет с первым реальным прогоном.
+	// outOfScopeMax — порог доли out_of_scope этого источника: старты в
+	// странах вне каталога. С ноября 2026 паркраны без города записей не
+	// дают, и на образцах доля 0; порог прежний, с запасом.
 	outOfScopeMax = 0.40
 )
 
-// Source — источник ПроБЕГ: один GET CalendarURL за прогон.
+// Source — источник ПроБЕГ: страницы календаря по ссылке «Следующая страница».
 type Source struct {
-	f   *ingest.Fetcher
-	url string
+	f     *ingest.Fetcher
+	url   string
+	delay time.Duration // пауза между страницами; в тестах короче CrawlDelay
 }
 
 var _ ingest.Source = (*Source)(nil)
 
 // New создаёт источник с загрузчиком f.
-func New(f *ingest.Fetcher) *Source { return &Source{f: f, url: CalendarURL} }
+func New(f *ingest.Fetcher) *Source { return &Source{f: f, url: CalendarURL, delay: CrawlDelay} }
 
 // Code — код источника.
 func (s *Source) Code() string { return Code }
@@ -44,14 +46,26 @@ func (s *Source) Policy() ingest.Policy {
 	return ingest.Policy{CountryFallback: normalize.NoFallback, CrawlDelay: CrawlDelay, OutOfScopeMax: outOfScopeMax}
 }
 
-// Fetch загружает календарь на год вперёд одним GET с соблюдением
-// Crawl-delay; страницы событий не запрашиваются (D-01, D-13).
+// Fetch загружает страницы календаря по ссылке «Следующая страница» с
+// соблюдением Crawl-delay; страницы событий не запрашиваются. Больше
+// maxPages страниц или ошибка любой страницы — ошибка прогона: неполный
+// список пометил бы старты пропавшими.
 func (s *Source) Fetch(ctx context.Context) ([]ingest.RawDoc, error) {
-	doc, err := s.f.Get(ctx, s.url, CrawlDelay)
-	if err != nil {
-		return nil, err
+	var docs []ingest.RawDoc
+	for next := s.url; next != ""; {
+		if len(docs) == maxPages {
+			return nil, fmt.Errorf("в календаре больше %d страниц", maxPages)
+		}
+		doc, err := s.f.Get(ctx, next, s.delay)
+		if err != nil {
+			return nil, fmt.Errorf("страница %d: %w", len(docs)+1, err)
+		}
+		docs = append(docs, doc)
+		if next, err = nextPage(doc.Body, doc.URL); err != nil {
+			return nil, err
+		}
 	}
-	return []ingest.RawDoc{doc}, nil
+	return docs, nil
 }
 
 // Parse разбирает страницу календаря (см. функцию Parse).

@@ -34,10 +34,17 @@ var calibSources = []struct {
 }{
 	{mcsrc.Code, "../ingest/sources/marathonec/testdata/calendar-beg.html", mcsrc.CalendarURL,
 		time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC), mcsrc.Parse, mcsrc.New(nil).Policy()},
-	{pbsrc.Code, "../ingest/sources/probeg/testdata/year_ahead-2026-09-30.html", pbsrc.CalendarURL,
-		time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC), pbsrc.Parse, pbsrc.New(nil).Policy()},
+	// ПроБЕГ сменил вёрстку 2026-11; записи прежнего снимка заморожены в JSON.
+	{pbsrc.Code, "testdata/probeg-2026-09-30.records.json", pbsrc.CalendarURL,
+		time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC), parseRecords, pbsrc.New(nil).Policy()},
 	{hlsrc.Code, "../ingest/sources/heroleague/testdata/event_list.json", hlsrc.ListURL,
 		time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC), hlsrc.Parse, hlsrc.New(nil).Policy()},
+}
+
+// parseRecords читает записи источника, сохранённые в JSON.
+func parseRecords(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
+	var recs []ingest.SourceEvent
+	return recs, json.Unmarshal(doc.Body, &recs)
 }
 
 type calibRef struct {

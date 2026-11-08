@@ -1,7 +1,8 @@
-// Package probeg — источник ПроБЕГ (probeg.org/races/year_ahead/): общий
-// календарь на год вперёд одной таблицей, все строки в HTML. Страну
-// определяет Parse по строке места и справочнику городов РФ, политика —
-// no_fallback (D-01). Структура страницы — testdata/README.md.
+// Package probeg — источник ПроБЕГ (probeg.org/races/year_ahead/): календарь
+// на год вперёд, разбитый на страницы ?page=N; старт — карточка
+// article.calendar-item, паркраны — блоки details.weekly. Страну определяет
+// Parse по строке места и справочнику городов РФ, политика — no_fallback
+// (D-01). Структура страницы — testdata/README.md.
 package probeg
 
 import (
@@ -27,56 +28,46 @@ const (
 	eventBase = "https://probeg.org/event/"
 	// maxURLLen — предел длины ссылки из источника (T-03-07).
 	maxURLLen = 2048
-	// rowStyle — признак строки данных; заголовок — <tr class="info">.
-	rowStyle   = "font-size: 11px"
-	headerCols = 6
-	cancelled  = "Забег отменён!"
-	regLink    = "Регистрация"
+	regLink   = "Регистрация"
+	nextLabel = "Следующая страница"
 	// country — страна записи, определённой как российская (CountryCode = RU).
 	country = "Россия"
-)
-
-// Столбцы строки данных: №, Дата, Название, Город, Дистанции, Ссылки.
-// У групповой строки без города ячейка названия занимает два столбца
-// (colspan="2"), ячеек пять.
-const (
-	colDate = 1 + iota
-	colTitle
-	colCity
-	colDistance
-	colLinks
+	// weeklyDistance — дистанция паркранов: на странице она только в
+	// подписи блока («еженедельных забегов на 5 км»).
+	weeklyDistance = "5 км"
 )
 
 var (
-	// participantsRe — ссылка-счётчик «N человек/человека» на страницу
-	// того же события: не название и не отдельное событие (Pitfall 2).
-	participantsRe = regexp.MustCompile(`^\s*\d+\s+человек`)
-	// eventHrefRe — ссылка на страницу события /event/<n>/; вложенные
-	// страницы (/event/<n>/reg/ — кнопка регистрации) — не события.
+	// eventHrefRe — ссылка на страницу события /event/<n>/.
 	eventHrefRe = regexp.MustCompile(`^/event/([^/]+)/$`)
-	// dateRe — dd.mm, dd–dd.mm, dd.mm–dd.mm; тире —, – или дефис.
-	dateRe = regexp.MustCompile(`^(\d{1,2})(?:\.(\d{1,2}))?(?:\s*[–—-]\s*(\d{1,2})\.(\d{1,2}))?$`)
-	// nonRunning — неходовые виды: фрагмент дистанций с таким словом
-	// отбрасывается целиком (Pitfall 3).
+	// nonRunning — неходовые виды: дистанция с таким словом отбрасывается.
 	nonRunning = []string{"ходьба", "триатлон", "прыжок", "толкание", "каникросс"}
-	// federalCities — субъекты-города: город групповой строки с таким
-	// первым компонентом места — сам этот город (Pitfall 4).
-	federalCities = map[string]bool{"Москва": true, "Санкт-Петербург": true, "Севастополь": true}
+	// weeklyCities — город паркранов по концу заголовка блока. Блок «в других
+	// городах» записей не даёт: без города они вне каталога (D-14), а сотни
+	// таких записей подняли бы долю out_of_scope выше порога.
+	weeklyCities = map[string]string{"в Москве": "Москва", "в Санкт-Петербурге": "Санкт-Петербург"}
+	// itraRe — баллы ITRA перед дистанцией («ITRA 4 100 км»): иначе число баллов
+	// склеивается с дистанцией и даёт фиктивные 4 и 100 км.
+	itraRe = regexp.MustCompile(`(?i)^\s*ITRA\s+\d+\s+`)
+	// timeRe — время старта в конце строки даты: «…, 10:30».
+	timeRe = regexp.MustCompile(`,\s*(\d{1,2}:\d{2})$`)
+	// dayRe — часть строки даты «d [месяц [год]]».
+	dayRe  = regexp.MustCompile(`^(\d{1,2})(?:\s+(\p{L}+))?(?:\s+(\d{4}))?$`)
+	months = map[string]time.Month{
+		"января": 1, "февраля": 2, "марта": 3, "апреля": 4, "мая": 5, "июня": 6,
+		"июля": 7, "августа": 8, "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+	}
 )
 
-// Parse разбирает календарь на год вперёд. Чистая функция: без сети,
-// файлов и часов, год берётся из doc.FetchedAt.
-//   - D-13: год даты dd.mm — первый, при котором дата не раньше
-//     FetchedAt − 1 день; Date/EndDate — dd.mm.yyyy.
-//   - D-15: строки «Забег отменён!» записей не дают.
-//   - D-03: групповая строка (≥ 2 ссылок на события) — запись на каждую
-//     ссылку с GroupKey серии; одиночная строка — одна запись без ключа.
-//   - D-01: страна — по первому компоненту места или справочнику городов
-//     РФ для голого города; иначе Country пусто (no_fallback).
-//   - D-14: серия без города — City, Region, Country пусты.
+// Parse разбирает одну страницу календаря. Чистая функция: без сети и
+// файлов; FetchedAt нужен только паркранам перед первой карточкой.
+//   - карточка article.calendar-item — запись; с классом cancelled записи
+//     не даёт (D-04);
+//   - блок details.weekly — запись на каждую ссылку с GroupKey серии; день
+//     из блока, месяц и год — от предыдущей карточки (D-05);
+//   - место — «Город · Регион» (D-06), год и время — из строки даты (D-03).
 //
-// Нет таблицы с заголовком из 6 столбцов или строк данных —
-// ingest.ErrStructureNotFound.
+// Нет ни карточек, ни блоков паркранов — ingest.ErrStructureNotFound.
 func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	if doc.FetchedAt.IsZero() {
 		return nil, errors.New("probeg: нет времени загрузки страницы (FetchedAt)")
@@ -85,256 +76,232 @@ func Parse(doc ingest.RawDoc) ([]ingest.SourceEvent, error) {
 	if err != nil {
 		return nil, fmt.Errorf("разбор HTML: %w", err)
 	}
-	table := findTable(root)
-	if table == nil {
-		return nil, fmt.Errorf("%w: нет таблицы с заголовком <tr class=\"info\"> из %d столбцов", ingest.ErrStructureNotFound, headerCols)
-	}
+	f := doc.FetchedAt.UTC()
+	last := time.Date(f.Year(), f.Month(), f.Day()-1, 0, 0, 0, 0, time.UTC)
 	var out []ingest.SourceEvent
-	rows := 0
-	for tr := range table.Descendants() {
-		if !isElem(tr, atom.Tr) || !strings.Contains(attr(tr, "style"), rowStyle) {
-			continue
+	blocks := 0
+	for n := range root.Descendants() {
+		switch {
+		case isElem(n, atom.Article) && hasClass(n, "calendar-item"):
+			blocks++
+			ev, start, ok := parseCard(n, doc.URL)
+			if !start.IsZero() {
+				last = start
+			}
+			if ok {
+				out = append(out, ev)
+			}
+		case isElem(n, atom.Details) && hasClass(n, "weekly"):
+			blocks++
+			out = append(out, parseWeekly(n, &last)...)
 		}
-		cells := rowCells(tr)
-		if cells == nil {
-			continue
-		}
-		rows++
-		out = append(out, parseRow(cells, doc)...)
 	}
-	if rows == 0 {
-		return nil, fmt.Errorf("%w: нет строк данных <tr style=\"%s\">", ingest.ErrStructureNotFound, rowStyle)
+	if blocks == 0 {
+		return nil, fmt.Errorf("%w: нет карточек article.calendar-item", ingest.ErrStructureNotFound)
 	}
 	return out, nil
 }
 
-// findTable — первая таблица со строкой заголовка <tr class="info">
-// ровно из headerCols ячеек <th>.
-func findTable(root *html.Node) *html.Node {
-	for t := range root.Descendants() {
-		if !isElem(t, atom.Table) {
+// parseCard — запись карточки и дата её начала (нулевая, если дата не
+// распознана). ok = false у отменённой карточки.
+func parseCard(n *html.Node, pageURL string) (ev ingest.SourceEvent, start time.Time, ok bool) {
+	var when, meta, planned, links *html.Node
+	for c := range n.Descendants() {
+		switch {
+		case isElem(c, atom.H3) && ev.Title == "":
+			ev.Title, ev.ExternalID, ev.URL = eventLink(c)
+		case isElem(c, atom.Div) && hasClass(c, "when-line"):
+			when = c
+		case isElem(c, atom.Div) && hasClass(c, "meta"):
+			meta = c
+		case isElem(c, atom.Div) && hasClass(c, "planned"):
+			planned = c
+		case isElem(c, atom.Div) && hasClass(c, "links"):
+			links = c
+		}
+	}
+	ev.Date, ev.EndDate, ev.StartTime, start = parseWhen(text(when))
+	if meta != nil {
+		ev.Region, ev.City, ev.Country = resolvePlace(meta)
+	}
+	ev.Distances = distances(planned)
+	ev.RegistrationURL = registrationURL(links, pageURL)
+	return ev, start, !hasClass(n, "cancelled")
+}
+
+// eventLink — название, id и URL по первой ссылке узла. id — <n> из цифр в
+// /event/<n>/, иначе пусто (запись отбракует Prepare).
+func eventLink(n *html.Node) (title, id, link string) {
+	for a := range n.Descendants() {
+		if !isElem(a, atom.A) {
 			continue
 		}
-		for tr := range t.Descendants() {
-			if !isElem(tr, atom.Tr) || !hasClass(tr, "info") {
-				continue
-			}
-			th := 0
-			for c := range tr.ChildNodes() {
-				if isElem(c, atom.Th) {
-					th++
-				}
-			}
-			if th == headerCols {
-				return t
-			}
+		if m := eventHrefRe.FindStringSubmatch(attr(a, "href")); m != nil && strings.Trim(m[1], "0123456789") == "" {
+			id, link = m[1], eventBase+m[1]+"/"
 		}
+		return text(a), id, link
 	}
-	return nil
+	return text(n), "", ""
 }
 
-// rowCells — ячейки строки по столбцам colDate…colLinks; у групповой
-// строки без города ячейка города — nil. Другое число ячеек — nil.
-func rowCells(tr *html.Node) []*html.Node {
-	var tds []*html.Node
-	for c := range tr.ChildNodes() {
-		if isElem(c, atom.Td) {
-			tds = append(tds, c)
-		}
+// parseWhen разбирает «8 ноября 2026, 10:30», «4–6 сентября 2027»,
+// «30 ноября – 2 декабря 2026», «30 декабря 2026 – 2 января 2027».
+// Нераспознанная строка — сырой текст в date (Prepare отбракует).
+func parseWhen(s string) (date, end, startTime string, start time.Time) {
+	raw := s
+	if m := timeRe.FindStringSubmatch(s); m != nil {
+		startTime = m[1]
+		s = strings.TrimSpace(s[:len(s)-len(m[0])])
 	}
-	switch {
-	case len(tds) == headerCols:
-		return tds
-	case len(tds) == headerCols-1 && attr(tds[colTitle], "colspan") == "2":
-		return []*html.Node{tds[0], tds[colDate], tds[colTitle], nil, tds[colDistance-1], tds[colLinks-1]}
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '–' || r == '—' || r == '-' })
+	if len(parts) == 0 || len(parts) > 2 {
+		return raw, "", "", time.Time{}
 	}
-	return nil
+	e, ok := dayMonthYear(parts[len(parts)-1], 0, 0)
+	if !ok {
+		return raw, "", "", time.Time{}
+	}
+	if len(parts) == 1 {
+		return e.Format("02.01.2006"), "", startTime, e
+	}
+	b, ok := dayMonthYear(parts[0], e.Month(), e.Year())
+	if !ok || b.After(e) {
+		return raw, "", "", time.Time{}
+	}
+	return b.Format("02.01.2006"), e.Format("02.01.2006"), startTime, b
 }
 
-type link struct{ id, title string }
-
-func parseRow(cells []*html.Node, doc ingest.RawDoc) []ingest.SourceEvent {
-	titleTD := cells[colTitle]
-	for n := range titleTD.Descendants() {
-		if isElem(n, atom.Strong) && text(n) == cancelled {
-			return nil // D-15
+// dayMonthYear — дата «d [месяц [год]]»; недостающие месяц и год берутся из
+// m и y (нулевые — обязательны в строке).
+func dayMonthYear(s string, m time.Month, y int) (time.Time, bool) {
+	p := dayRe.FindStringSubmatch(strings.TrimSpace(s))
+	if p == nil {
+		return time.Time{}, false
+	}
+	if p[2] != "" {
+		var ok bool
+		if m, ok = months[strings.ToLower(p[2])]; !ok {
+			return time.Time{}, false
 		}
 	}
-	links := titleLinks(titleTD)
-	group := len(links) > 1
-	if len(links) == 0 {
-		// Строка без ссылки на событие не теряется молча: Prepare
-		// отбракует её как запись без external_id.
-		links = []link{{title: text(titleTD)}}
+	if p[3] != "" {
+		y, _ = strconv.Atoi(p[3])
 	}
+	d, _ := strconv.Atoi(p[1])
+	if m == 0 || y == 0 {
+		return time.Time{}, false
+	}
+	t := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	return t, t.Day() == d && t.Month() == m
+}
 
-	date, end := parseDate(text(cells[colDate]), doc.FetchedAt)
-	var region, city, cntry, address string
-	if cells[colCity] != nil {
-		region, city, cntry, address = resolvePlace(text(cells[colCity]), group)
+// parseWeekly — записи блока паркранов Москвы или Петербурга. День — из span.num, дата — первая
+// с этим днём не раньше *last (тот же или следующий месяц); нераспознанный
+// день — сырой текст в Date (Prepare отбракует).
+func parseWeekly(n *html.Node, last *time.Time) []ingest.SourceEvent {
+	var title, date string
+	for c := range n.Descendants() {
+		switch {
+		case isElem(c, atom.Span) && hasClass(c, "num") && date == "":
+			date = text(c)
+			if t, ok := nextDay(date, *last); ok {
+				*last, date = t, t.Format("02.01.2006")
+			}
+		case isElem(c, atom.H3) && title == "":
+			title = text(c)
+		}
 	}
-	base := ingest.SourceEvent{
-		Date:            date,
-		EndDate:         end,
-		Distances:       distances(cells[colDistance]),
-		City:            city,
-		Region:          region,
-		Country:         cntry,
-		Address:         address,
-		RegistrationURL: registrationURL(cells[colLinks], doc.URL),
+	base := ingest.SourceEvent{Date: date, Distances: weeklyDistance}
+	for suffix, city := range weeklyCities {
+		if strings.HasSuffix(title, suffix) {
+			base.City, base.Region, base.Country = city, city, country
+		}
 	}
-	out := make([]ingest.SourceEvent, 0, len(links))
-	for _, l := range links {
+	if base.City == "" {
+		return nil
+	}
+	var out []ingest.SourceEvent
+	for li := range n.Descendants() {
+		if !isElem(li, atom.Li) {
+			continue
+		}
 		ev := base
-		ev.ExternalID, ev.Title = l.id, l.title
-		if l.id != "" {
-			ev.URL = eventBase + l.id + "/"
-		}
-		if group {
-			ev.GroupKey = "series:" + normalize.TitleNorm(l.title)
-		}
+		ev.Title, ev.ExternalID, ev.URL = eventLink(li)
+		ev.GroupKey = "series:" + normalize.TitleNorm(ev.Title)
 		out = append(out, ev)
 	}
 	return out
 }
 
-// titleLinks — ссылки /event/<n>/ ячейки названия, кроме счётчиков
-// участников. id — <n> из цифр, иначе "" (запись отбракует Prepare).
-func titleLinks(td *html.Node) []link {
-	var out []link
-	for a := range td.Descendants() {
-		m := eventHrefRe.FindStringSubmatch(attr(a, "href"))
-		if !isElem(a, atom.A) || m == nil {
-			continue
-		}
-		t := text(a)
-		if participantsRe.MatchString(t) {
-			continue
-		}
-		id := m[1]
-		if strings.Trim(id, "0123456789") != "" {
-			id = ""
-		}
-		out = append(out, link{id: id, title: t})
+// nextDay — первая дата с днём s не раньше from: в том же месяце или
+// следующем.
+func nextDay(s string, from time.Time) (time.Time, bool) {
+	d, err := strconv.Atoi(s)
+	if err != nil {
+		return time.Time{}, false
 	}
-	return out
-}
-
-// parseDate переводит дату ячейки в dd.mm.yyyy по fetched (D-13,
-// Pitfall 1). Конец диапазона — в году начала, а если он раньше начала —
-// в следующем. Нераспознанная форма — сырой текст в date (Prepare
-// отбракует); неверная дата конца — end пуст.
-func parseDate(s string, fetched time.Time) (date, end string) {
-	m := dateRe.FindStringSubmatch(s)
-	if m == nil || (m[2] == "" && m[3] == "") {
-		return s, ""
-	}
-	sd, sm := atoi(m[1]), atoi(m[2])
-	if m[2] == "" { // dd–dd.mm: месяц начала = месяц конца
-		sm = atoi(m[4])
-	}
-	start, ok := yearDate(sd, sm, fetched)
-	if !ok {
-		return s, ""
-	}
-	date = start.Format("02.01.2006")
-	if m[3] == "" {
-		return date, ""
-	}
-	ed, em := atoi(m[3]), atoi(m[4])
-	for _, y := range []int{start.Year(), start.Year() + 1} {
-		if e, ok := mkDate(y, em, ed); ok && !e.Before(start) {
-			return date, e.Format("02.01.2006")
-		}
-	}
-	return date, ""
-}
-
-// yearDate — первая из дат d.m в годах FetchedAt и следующем, которая не
-// раньше FetchedAt − 1 день (UTC).
-func yearDate(d, m int, fetched time.Time) (time.Time, bool) {
-	y, fm, fd := fetched.UTC().Date()
-	minDate := time.Date(y, fm, fd-1, 0, 0, 0, 0, time.UTC)
-	for _, year := range []int{y, y + 1} {
-		if t, ok := mkDate(year, m, d); ok && !t.Before(minDate) {
+	for _, m := range []time.Month{from.Month(), from.Month() + 1} {
+		t := time.Date(from.Year(), m, d, 0, 0, 0, 0, time.UTC)
+		if t.Day() == d && !t.Before(from) {
 			return t, true
 		}
 	}
 	return time.Time{}, false
 }
 
-// mkDate — дата без нормализации: 31.02 или месяц 13 → false.
-func mkDate(y, m, d int) (time.Time, bool) {
-	t := time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
-	return t, t.Month() == time.Month(m) && t.Day() == d
+// resolvePlace — область, город и страна по блоку места «Город · Регион»
+// (D-06). Город — первая ссылка (у «Старт → Финиш» — город старта).
+//   - регион — страна не РФ («Беларусь»): Country = она, Region пусто;
+//   - регион — субъект РФ: каноническое имя, Country «Россия»;
+//   - нераспознанный регион: Region = текст, Country пусто;
+//   - без региона: «Россия» для субъекта-города или по справочнику городов РФ.
+func resolvePlace(meta *html.Node) (region, city, cntry string) {
+	full := text(meta)
+	for a := range meta.Descendants() {
+		if isElem(a, atom.A) {
+			city = normalize.City(text(a))
+			break
+		}
+	}
+	reg, found := "", false
+	if i := strings.LastIndex(full, "·"); i >= 0 {
+		reg, found = strings.TrimSpace(full[i+len("·"):]), true
+	}
+	if city == "" {
+		before, _, _ := strings.Cut(full, "·")
+		city = normalize.City(strings.TrimSpace(before))
+	}
+	if !found {
+		if canon, kind := normalize.ClassifyRegion(city); kind == normalize.RegionRF {
+			return canon, city, country
+		}
+		if normalize.IsRFCity(city) {
+			return "", city, country
+		}
+		return "", city, ""
+	}
+	if code := normalize.CountryCode(reg); code != "" && code != "RU" {
+		return "", city, reg
+	}
+	if canon, kind := normalize.ClassifyRegion(reg); kind == normalize.RegionRF {
+		return canon, city, country
+	}
+	return reg, city, ""
 }
 
-func atoi(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
-}
-
-// resolvePlace — область, город, страна и уточнение места по строке места
-// «Страна или субъект, …, населённый пункт» (D-01, Pattern 1):
-//   - первый компонент — страна с ISO-кодом не РФ (справочник normalize):
-//     Country = компонент, Region = второй компонент (область) при трёх и
-//     более компонентах, address = компоненты между областью и населённым
-//     пунктом (район). Входит ли страна в каталог, решает Prepare;
-//   - иностранная страна без ISO-кода: Region = компонент, Country пусто;
-//   - субъект РФ: Region = каноническое имя, Country «Россия»; у групповой
-//     строки с городом федерального значения город — он сам (Pitfall 4);
-//   - один компонент (голый город): «Россия» только по normalize.IsRFCity;
-//   - несколько компонентов с нераспознанным первым: Region = компонент,
-//     Country пусто — страна не определена, запись видна как нераспознанная.
-func resolvePlace(raw string, group bool) (region, city, cntry, address string) {
-	var parts []string
-	for p := range strings.SplitSeq(raw, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			parts = append(parts, p)
-		}
-	}
-	if len(parts) == 0 {
-		return "", "", "", ""
-	}
-	city = normalize.City(parts[len(parts)-1])
-	canon, kind := normalize.ClassifyRegion(parts[0])
-	switch code := normalize.CountryCode(parts[0]); {
-	case code != "" && code != "RU":
-		if len(parts) > 2 {
-			region = parts[1]
-			address = strings.Join(parts[2:len(parts)-1], ", ")
-		}
-		return region, city, parts[0], address
-	case kind == normalize.RegionForeign:
-		return parts[0], city, "", ""
-	case kind == normalize.RegionRF:
-		if group && federalCities[canon] {
-			city = canon
-		}
-		return canon, city, country, ""
-	case len(parts) > 1:
-		return parts[0], city, "", ""
-	case normalize.IsRFCity(city):
-		return "", city, country, ""
-	}
-	return "", city, "", ""
-}
-
-// distances — фрагменты ячейки (span.nobr, а без них — текст между <br>),
-// каждый до первой «(», без неходовых видов, через ", " (Pitfall 3).
-func distances(td *html.Node) string {
-	var frags []string
-	for n := range td.Descendants() {
-		if isElem(n, atom.Span) && hasClass(n, "nobr") {
-			frags = append(frags, text(n))
-		}
-	}
-	if frags == nil {
-		frags = brLines(td)
+// distances — значки span.badge блока planned (кроме красных — «Забег
+// отменён»), каждый до первой «(», без ITRA и неходовых видов, через ", ".
+// Счётчик «Планируют N человек» — ссылка a.badge, не дистанция.
+func distances(planned *html.Node) string {
+	if planned == nil {
+		return ""
 	}
 	var out []string
-	for _, f := range frags {
-		f, _, _ = strings.Cut(f, "(")
+	for n := range planned.Descendants() {
+		if !isElem(n, atom.Span) || !hasClass(n, "badge") || hasClass(n, "red") {
+			continue
+		}
+		f, _, _ := strings.Cut(text(n), "(")
 		f = itraRe.ReplaceAllString(f, "")
 		if f = strings.TrimSpace(f); f != "" && !isNonRunning(f) {
 			out = append(out, namedToMeters(f))
@@ -342,10 +309,6 @@ func distances(td *html.Node) string {
 	}
 	return strings.Join(out, ", ")
 }
-
-// itraRe — баллы ITRA перед дистанцией («ITRA 4 100 км»): иначе число баллов
-// склеивается с дистанцией и даёт фиктивные 4 и 100 км.
-var itraRe = regexp.MustCompile(`(?i)^\s*ITRA\s+\d+\s+`)
 
 // namedToMeters переводит элемент списка без цифр («марафон», «полумарафон»)
 // в метры: normalize.Distances берёт слово, только если в строке нет числовых
@@ -370,32 +333,13 @@ func isNonRunning(s string) bool {
 	return false
 }
 
-// brLines — текст узла, разделённый на <br>; пустые части выброшены.
-func brLines(n *html.Node) []string {
-	var out []string
-	var b strings.Builder
-	flush := func() {
-		if s := clean(strings.Join(strings.Fields(b.String()), " ")); s != "" {
-			out = append(out, s)
-		}
-		b.Reset()
-	}
-	for c := range n.Descendants() {
-		switch {
-		case c.Type == html.TextNode:
-			b.WriteString(c.Data)
-		case isElem(c, atom.Br):
-			flush()
-		}
-	}
-	flush()
-	return out
-}
-
 // registrationURL — ссылка первой <a> с текстом «Регистрация»; «Сайт»,
 // «Положение» и соцсети не используются.
-func registrationURL(td *html.Node, pageURL string) string {
-	for a := range td.Descendants() {
+func registrationURL(links *html.Node, pageURL string) string {
+	if links == nil {
+		return ""
+	}
+	for a := range links.Descendants() {
 		if isElem(a, atom.A) && text(a) == regLink {
 			if u, ok := absURL(attr(a, "href"), pageURL); ok {
 				return u.String()
@@ -404,6 +348,24 @@ func registrationURL(td *html.Node, pageURL string) string {
 		}
 	}
 	return ""
+}
+
+// nextPage — адрес ссылки «Следующая страница» или "" на последней странице.
+func nextPage(body []byte, pageURL string) (string, error) {
+	root, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("разбор HTML: %w", err)
+	}
+	for a := range root.Descendants() {
+		if isElem(a, atom.A) && attr(a, "aria-label") == nextLabel {
+			u, ok := absURL(attr(a, "href"), pageURL)
+			if !ok {
+				return "", errors.New("probeg: неверная ссылка на следующую страницу")
+			}
+			return u.String(), nil
+		}
+	}
+	return "", nil
 }
 
 // absURL: относительная ссылка разрешается от страницы; только http/https

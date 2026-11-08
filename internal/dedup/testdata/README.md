@@ -15,7 +15,7 @@
 | Источник | Фикстура | SHA-256 | now |
 |---|---|---|---|
 | Марафонец | `internal/ingest/sources/marathonec/testdata/calendar-beg.html` | `dd4a58d34f431ff48eb2b8b86d9a5ced90cbaa06f665fccb7428e2dd53ee3ddf` | 2026-09-29 12:00 UTC |
-| ПроБЕГ | `internal/ingest/sources/probeg/testdata/year_ahead-2026-09-30.html` | `d0166c26f30c9928994dbf16e6ebe7f23e472e14d0d8b87450cd1bc58d443189` | 2026-09-30 12:00 UTC (и `FetchedAt`) |
+| ПроБЕГ | `probeg-2026-09-30.records.json` — записи `Parse` снимка `year_ahead-2026-09-30.html` (SHA-256 `d0166c26f30c9928994dbf16e6ebe7f23e472e14d0d8b87450cd1bc58d443189`); сайт сменил вёрстку в ноябре 2026, снимок и прежний разборщик удалены, записи заморожены | — | 2026-09-30 12:00 UTC (и `FetchedAt`) |
 | Лига Героев | `internal/ingest/sources/heroleague/testdata/event_list.json` | `d3b87514559b107107faa3b452561741f0e93e086347607b10f4c5ada1ad7083` | 2026-10-01 12:00 UTC |
 
 БД, сеть и сайты источников тест не использует.
