@@ -92,7 +92,7 @@
 9. `rm -f /home/runagg/agg-deploy/restore.dump`
 10. Ручной запуск бэкапа: отметки в восстановленной базе старые, алерты о просрочке до него верны.
 
-Потеря VPS целиком: новый хост по `deploy/README.md`, затем шаги 3–10.
+Потеря VPS целиком: новый хост по `deploy/README.md`, затем шаги 3–10. Выполнено 2026-11-16 (`.planning/phases/25-vps-restore/25-01-PLAN.md`). На новом хосте до `agg-install.sh` у `runagg` должно быть хотя бы одно правило sudo, иначе `sudo -l -U runagg` не печатает `Matching Defaults` и установка останавливается на «нет env_reset»: узкое правило `/etc/sudoers.d/run-agg` (`runagg ALL=(root) NOPASSWD: /usr/bin/ss -H -tulpn`) через `visudo -cqf`.
 
 Предупреждения:
 
@@ -135,3 +135,4 @@
 | Дата | Файл копии | Результат | migration | Примечание |
 |---|---|---|---|---|
 | 2026-10-04 | aggregator-2026-10-04.dump.age | RESTORE OK, подтверждено владельцем | 4 | копия из Telegram-канала |
+| 2026-11-16 | aggregator-2026-11-11.dump.age | RESTORE OK; восстановлена в production на новом хосте (потеря VPS), `pg_restore` exit=0, `users` и `events_merged` совпали с подписью | 15 | копия из Telegram-канала; первое аварийное восстановление в production |
