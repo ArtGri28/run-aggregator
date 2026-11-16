@@ -17,6 +17,12 @@ import (
 // remindEvery — как часто напоминать, пока плохое состояние держится.
 const remindEvery = 24 * time.Hour
 
+// staleAfter — плохой прогон старше этого срока не оповещается: источник
+// выключен в worker (например, без токена) и новых прогонов не будет. Самая
+// долгая пауза расписания после сбоев — четыре интервала (сутки при
+// интервале 6 ч), поэтому у работающего источника прогоны свежее.
+const staleAfter = 72 * time.Hour
+
 // Loop опрашивает последние завершённые прогоны источников и шлёт
 // администраторам сообщение при переходе в failed или suspect.
 type Loop struct {
@@ -55,6 +61,8 @@ func decide(run store.FinishedRun, st *store.AlertState, now time.Time) action {
 		return none
 	case run.Status == "failed" && run.Error == store.RunInterrupted:
 		return none // остановка процесса — не сбой источника
+	case now.Sub(run.FinishedAt) >= staleAfter:
+		return none // источник выключен: прогонов больше нет
 	case st == nil, st.State != run.Status:
 		return send
 	case run.Status == "suspect" && st.RunID != run.RunID:

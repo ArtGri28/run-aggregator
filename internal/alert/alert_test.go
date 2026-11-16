@@ -20,7 +20,7 @@ func TestDecide(t *testing.T) {
 		return &store.AlertState{State: s, RemindedAt: now.Add(-ago)}
 	}
 	run := func(status, errText string) store.FinishedRun {
-		return store.FinishedRun{Status: status, Error: errText}
+		return store.FinishedRun{Status: status, Error: errText, FinishedAt: now.Add(-time.Hour)}
 	}
 	tests := []struct {
 		name string
@@ -39,9 +39,12 @@ func TestDecide(t *testing.T) {
 		{"suspect держится 23:59", run("suspect", "x"), state("suspect", 24*time.Hour-time.Minute), none},
 		{"suspect держится 24 ч", run("suspect", "x"), state("suspect", 24*time.Hour), remind},
 		{"failed держится 30 ч", run("failed", "x"), state("failed", 30*time.Hour), remind},
-		{"новый suspect-прогон", store.FinishedRun{Status: "suspect", RunID: 2}, &store.AlertState{State: "suspect", RunID: 1, RemindedAt: now}, send},
-		{"тот же suspect-прогон", store.FinishedRun{Status: "suspect", RunID: 1}, &store.AlertState{State: "suspect", RunID: 1, RemindedAt: now}, none},
-		{"новый failed-прогон до суток", store.FinishedRun{Status: "failed", RunID: 2, Error: "x"}, &store.AlertState{State: "failed", RunID: 1, RemindedAt: now.Add(-time.Hour)}, none},
+		{"новый suspect-прогон", store.FinishedRun{Status: "suspect", RunID: 2, FinishedAt: now}, &store.AlertState{State: "suspect", RunID: 1, RemindedAt: now}, send},
+		{"тот же suspect-прогон", store.FinishedRun{Status: "suspect", RunID: 1, FinishedAt: now}, &store.AlertState{State: "suspect", RunID: 1, RemindedAt: now}, none},
+		{"выключенный источник: failed старше 72 ч", store.FinishedRun{Status: "failed", Error: "x", FinishedAt: now.Add(-72 * time.Hour)}, state("failed", 30*time.Hour), none},
+		{"выключенный источник без состояния", store.FinishedRun{Status: "failed", Error: "x", FinishedAt: now.Add(-100 * time.Hour)}, nil, none},
+		{"failed 71 ч назад ещё напоминается", store.FinishedRun{Status: "failed", Error: "x", FinishedAt: now.Add(-71 * time.Hour)}, state("failed", 30*time.Hour), remind},
+		{"новый failed-прогон до суток", store.FinishedRun{Status: "failed", RunID: 2, Error: "x", FinishedAt: now}, &store.AlertState{State: "failed", RunID: 1, RemindedAt: now.Add(-time.Hour)}, none},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
